@@ -5,7 +5,42 @@
 
 ---
 
-## 🌟 Portfolio Highlights
+## Executive Summary
+
+Claude Trading Skills is a modular research toolkit for turning repeatable investing and trading workflows into structured, reusable AI skills. The project organizes market regime checks, screening, risk planning, trade journaling, and review workflows into versioned skill folders with metadata, tests, and workflow manifests.
+
+For a portfolio review, the important part is not "trading signals." The engineering value is the system design: a large catalog of domain-specific workflows, a canonical metadata index, generated documentation, validation scripts, and operational manifests that make an AI-assisted process auditable and repeatable.
+
+### What This Demonstrates
+
+- **AI workflow architecture:** Reusable skill folders with instructions, references, scripts, tests, and metadata.
+- **Domain modeling:** Market regime, screening, trade planning, portfolio review, and post-trade memory are separated into clear capability areas.
+- **Operational design:** YAML workflow manifests define ordered routines such as daily market checks and monthly review loops.
+- **Quality control:** A canonical `skills-index.yaml` plus generated catalogs reduce drift between docs and implementation.
+- **Automation mindset:** Includes scripts for metadata validation, catalog generation, skill review, and future skill improvement loops.
+
+### Reviewer Path
+
+If you are reviewing this repository for hiring, start here:
+
+1. Read **Recommended Starting Path** to understand the product workflow.
+2. Open `skills-index.yaml` to see the canonical capability map.
+3. Review `workflows/` for machine-readable operating routines.
+4. Inspect a few skill folders under `skills/` to see the local pattern.
+5. Skim the automation sections near the bottom to understand maintenance tooling.
+
+### Tech Stack
+
+- Python
+- YAML workflow manifests
+- Markdown-based skill packages
+- pytest
+- GitHub Pages documentation
+- Optional API integrations for market data workflows
+
+---
+
+## Portfolio Highlights
 - **50+ Specialized AI Skills:** Automating everything from Market Breadth analysis to CANSLIM screening.
 - **Deep API Integration:** Seamlessly connects with Alpaca (Execution), Financial Modeling Prep (Data), and Finviz.
 - **Evidence-Based Logic:** Implements proven methodologies like Minervini's VCP and O'Neil's CANSLIM.
@@ -13,11 +48,11 @@
 
 ---
 
-📖 **Documentation site:** <https://tradermonty.github.io/claude-trading-skills/>
+**Documentation site:** <https://tradermonty.github.io/claude-trading-skills/>
 
 **Project vision:** [`PROJECT_VISION.md`](PROJECT_VISION.md)
 
-日本語版READMEは[`README.ja.md`](README.ja.md)をご覧ください。
+Japanese README: [`README.ja.md`](README.ja.md)
 
 ## Disclaimer
 
