@@ -1,0 +1,28 @@
+[
+  {
+    "data_date": "2026-06-25",
+    "composite_score": 52.8,
+    "component_scores": {
+      "breadth_level_trend": 62,
+      "ma_crossover": 50,
+      "cycle_position": 50,
+      "bearish_signal": 50,
+      "historical_percentile": 30,
+      "divergence": 68.0
+    },
+    "recorded_at": "2026-06-29 13:09:33"
+  },
+  {
+    "data_date": "2026-06-26",
+    "composite_score": 52.8,
+    "component_scores": {
+      "breadth_level_trend": 62,
+      "ma_crossover": 50,
+      "cycle_position": 50,
+      "bearish_signal": 50,
+      "historical_percentile": 30,
+      "divergence": 68.0
+    },
+    "recorded_at": "2026-06-30 13:21:14"
+  }
+]

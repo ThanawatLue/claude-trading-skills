@@ -1,0 +1,491 @@
+﻿diff --git a/dashboard/static/js/app.js b/dashboard/static/js/app.js
+index c707b3c..aedf0f9 100644
+--- a/dashboard/static/js/app.js
++++ b/dashboard/static/js/app.js
+@@ -69,6 +69,11 @@ const LEGENDS = {
+       <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-orange">Extended</span></div><div class="legend-desc">ขึ้นมาแล้ว (5-10%) — เสี่ยงถ้าจะไล่ราคา รอ Pullback</div></div>
+       <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-red">Overextended</span></div><div class="legend-desc">ราคาห่างจากเส้นค่าเฉลี่ยมากเกินไป (>50% จาก SMA200) — ห้ามซื้อเด็ดขาด</div></div>
+       <div class="legend-row"><div class="legend-symbol"><span class="state-pill bg-red">Damaged</span></div><div class="legend-desc">Pattern เสียหาย หรือหลุดแนวรับสำคัญ — หลีกเลี่ยง</div></div>
++      
++      <h3 style="margin-top:12px">Dynamic Pattern Stats</h3>
++      <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">Context-Aware</div><div class="legend-desc">สแกนแพทเทิร์นล่าสุด (Breakout, Volume Climax ฯลฯ) แล้วคำนวณ <strong>Win Rate</strong> ถ้ายอมถือข้ามวัน</div></div>
++      <div class="legend-row"><div class="legend-symbol" style="color:var(--green)">Win Rate &gt;60%</div><div class="legend-desc">โอกาสชนะสูง ให้ <strong>ถือข้ามวัน (Hold/Buy ATC)</strong></div></div>
++      <div class="legend-row"><div class="legend-symbol" style="color:var(--red)">Win Rate ต่ำ</div><div class="legend-desc">แนวโน้มไม่ดี ให้ <strong>ชิงขายทำกำไร หรือ ชะลอการซื้อ</strong></div></div>
+     </div>`
+   },
+   breakout: {
+@@ -109,6 +114,12 @@ const LEGENDS = {
+       <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">L — Leadership RS</div><div class="legend-desc">RS Percentile ≥80 — หุ้นต้องแข็งแกร่งกว่า S&P500 (น้ำหนัก 15%)</div></div>
+       <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">I — Institutional</div><div class="legend-desc">Institutional holders ≥30 คน หรือ ownership ≥20% (น้ำหนัก 10%)</div></div>
+       <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">M — Market Direction</div><div class="legend-desc">ตลาดต้องอยู่ใน uptrend — ห้ามซื้อในตลาดขาลง (น้ำหนัก 15%)</div></div>
++      
++      <h3 style="margin-top:12px">Dynamic Pattern Stats</h3>
++      <div class="legend-row"><div class="legend-symbol" style="color:var(--cyan)">Context-Aware</div><div class="legend-desc">สแกนแพทเทิร์นล่าสุด (Breakout, Volume Climax ฯลฯ) แล้วคำนวณ <strong>Win Rate</strong> ถ้ายอมถือข้ามวัน</div></div>
++      <div class="legend-row"><div class="legend-symbol" style="color:var(--green)">Win Rate &gt;60%</div><div class="legend-desc">โอกาสชนะสูง ให้ <strong>ถือข้ามวัน (Hold/Buy ATC)</strong></div></div>
++      <div class="legend-row"><div class="legend-symbol" style="color:var(--red)">Win Rate ต่ำ</div><div class="legend-desc">แนวโน้มไม่ดี ให้ <strong>ชิงขายทำกำไร หรือ ชะลอการซื้อ</strong></div></div>
++      
+       <h3 style="margin-top:12px">Score Interpretation</h3>
+       <div class="legend-row"><div class="legend-symbol" style="color:var(--green)">≥90 Exceptional+</div><div class="legend-desc">Multi-bagger setup — all components near-perfect</div></div>
+       <div class="legend-row"><div class="legend-symbol" style="color:var(--green)">70-89 Strong</div><div class="legend-desc">Solid CANSLIM candidate — consider buying</div></div>
+@@ -235,7 +246,6 @@ function findStockInRawData(sym) {
+     }
+   }
+ 
+-  // Check Thai Swing
+   if (RAW_DATA.thai_swing) {
+     const list = [...(RAW_DATA.thai_swing.dip_buy || []), ...(RAW_DATA.thai_swing.momentum || [])];
+     const found = list.find(r => r.symbol === sym);
+@@ -249,7 +259,6 @@ function findStockInRawData(sym) {
+     }
+   }
+ 
+-  // Check Thai Watchlist
+   if (RAW_DATA.thai_watchlists && RAW_DATA.thai_watchlists.buckets) {
+     for (const [bucket, rows] of Object.entries(RAW_DATA.thai_watchlists.buckets)) {
+       const found = rows.find(r => r.symbol === sym);
+@@ -264,7 +273,6 @@ function findStockInRawData(sym) {
+     }
+   }
+ 
+-  // Check Thai Dividends
+   if (RAW_DATA.thai_dividends && RAW_DATA.thai_dividends.candidates) {
+     const found = RAW_DATA.thai_dividends.candidates.find(r => r.symbol === sym);
+     if (found) {
+@@ -330,6 +338,330 @@ function toggleFavRowClick(event, i) {
+   toggleFavRow(i);
+ }
+ 
++function calculatePatternStats(bars, currentIndex) {
++  if (currentIndex < 1) return null;
++
++  let currentGapStreak = 0;
++  let currentGapDir = 0; 
++  let currentColorStreak = 0;
++  let currentColorDir = 0; 
++  
++  const sma50 = [];
++  const vol20 = [];
++  const high20 = [];
++  const range10 = [];
++  
++  for (let i = 0; i < bars.length; i++) {
++    if (i < 49) {
++      sma50.push(null);
++    } else {
++      let sum = 0;
++      for (let j = 0; j < 50; j++) sum += bars[i - j].close;
++      sma50.push(sum / 50);
++    }
++    
++    if (i < 19) {
++      vol20.push(null);
++      high20.push(null);
++    } else {
++      let vSum = 0;
++      let hMax = -Infinity;
++      for (let j = 0; j < 20; j++) {
++        vSum += (bars[i - j].volume || 0);
++        if (bars[i - j].high > hMax) hMax = bars[i - j].high;
++      }
++      vol20.push(vSum / 20);
++      high20.push(hMax);
++    }
++    
++    if (i < 9) {
++      range10.push(null);
++    } else {
++      let rSum = 0;
++      for (let j = 0; j < 10; j++) rSum += (bars[i - j].high - bars[i - j].low);
++      range10.push(rSum / 10);
++    }
++  }
++  
++  const findRecentStats = (conditionFn) => {
++    const occurrences = [];
++    for (let i = 1; i <= currentIndex - 1; i++) {
++      if (i + 1 >= bars.length) continue; 
++      if (conditionFn(i)) {
++        const b = bars[i];
++        const next_b = bars[i+1];
++        const ret = (next_b.close - b.close) / b.close * 100;
++        occurrences.push(ret);
++      }
++    }
++    occurrences.reverse();
++    return occurrences;
++  };
++
++  const findForwardStats = (conditionFn, periods) => {
++    const results = {};
++    periods.forEach(p => results[p] = []);
++    for (let i = 1; i <= currentIndex - 1; i++) {
++      if (conditionFn(i)) {
++        periods.forEach(p => {
++          if (i + p < bars.length) {
++            const ret = (bars[i+p].close - bars[i].close) / bars[i].close * 100;
++            results[p].push(ret);
++          }
++        });
++      }
++    }
++    return results;
++  };
++
++  const gapCondition = (i) => {
++    if (currentGapStreak === 0) return false;
++    if (i - currentGapStreak + 1 < 1) return false;
++    for (let j = 0; j < currentGapStreak; j++) {
++      const idx = i - j;
++      const gap = bars[idx].open - bars[idx-1].close;
++      const gDir = gap > 0 ? 1 : (gap < 0 ? -1 : 0);
++      if (gDir !== currentGapDir) return false;
++    }
++    return true;
++  };
++
++  const colorCondition = (i) => {
++    if (currentColorStreak === 0) return false;
++    if (i - currentColorStreak + 1 < 0) return false;
++    for (let j = 0; j < currentColorStreak; j++) {
++      const idx = i - j;
++      const cDir = bars[idx].close > bars[idx].open ? 1 : (bars[idx].close < bars[idx].open ? -1 : 0);
++      if (cDir !== currentColorDir) return false;
++    }
++    return true;
++  };
++  
++  const pullbackCondition = (i) => {
++    return sma50[i] && bars[i].low <= sma50[i] && bars[i].close >= sma50[i] * 0.99;
++  };
++  
++  const breakoutCondition = (i) => {
++    return i > 0 && high20[i-1] && bars[i].close > high20[i-1];
++  };
++
++  const volumeSpikeCondition = (i) => {
++    return vol20[i] && (bars[i].volume || 0) >= vol20[i] * 2.0;
++  };
++
++  const insideBarCondition = (i) => {
++    return i > 0 && bars[i].high < bars[i-1].high && bars[i].low > bars[i-1].low;
++  };
++
++  const gapReturns = findRecentStats(gapCondition);
++  const colorReturns = findRecentStats(colorCondition);
++  const pullbackReturns = isPullback ? findForwardStats(pullbackCondition, [3, 5, 10, 20]) : null;
++  const breakoutReturns = isBreakout ? findForwardStats(breakoutCondition, [3, 5, 10, 20]) : null;
++  const volumeSpikeReturns = isVolumeSpike ? findForwardStats(volumeSpikeCondition, [3, 5, 10, 20]) : null;
++  const insideBarReturns = isInsideBar ? findForwardStats(insideBarCondition, [3, 5, 10]) : null;
++
++  const hammerCondition = (i) => {
++    const body = Math.abs(bars[i].close - bars[i].open);
++    const lowerWick = Math.min(bars[i].close, bars[i].open) - bars[i].low;
++    return lowerWick >= body * 2 && lowerWick > 0;
++  };
++
++  const strongCloseCondition = (i) => {
++    const range = bars[i].high - bars[i].low;
++    if (range <= 0) return false;
++    const closePos = (bars[i].close - bars[i].low) / range;
++    return closePos >= 0.8 && bars[i].close > bars[i].open;
++  };
++
++  const wideRangeCondition = (i) => {
++    const range = bars[i].high - bars[i].low;
++    return range10[i] && range >= range10[i] * 1.5;
++  };
++
++  const fridayCondition = (i) => {
++    const d = new Date(bars[i].time);
++    return d.getDay() === 5;
++  };
++
++  const isHammer = hammerCondition(currentIndex);
++  const isStrongClose = strongCloseCondition(currentIndex);
++  const isWideRange = wideRangeCondition(currentIndex);
++  const isFriday = fridayCondition(currentIndex);
++
++  const hammerReturns = isHammer ? findForwardStats(hammerCondition, [3, 5, 10]) : null;
++  const strongCloseReturns = isStrongClose ? findForwardStats(strongCloseCondition, [3, 5, 10]) : null;
++  const wideRangeReturns = isWideRange ? findForwardStats(wideRangeCondition, [3, 5, 10]) : null;
++  const fridayReturns = isFriday ? findRecentStats(fridayCondition) : [];
++
++  const calcRet = (rets, n) => {
++    const slice = n === 'all' ? rets : rets.slice(0, n);
++    if (slice.length === 0) return null;
++    const wins = slice.filter(r => r > 0).length;
++    const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
++    return { winRate: (wins / slice.length * 100).toFixed(1), avg: avg.toFixed(2), total: slice.length };
++  };
++
++  const buildStatsObj = (rets, periods) => {
++    const obj = {};
++    periods.forEach(p => {
++      obj[p] = calcRet(rets, p);
++    });
++    return obj;
++  };
++
++  const buildForwardStatsObj = (forwardStats) => {
++    const obj = {};
++    for (const p in forwardStats) {
++      obj[p] = calcRet(forwardStats[p], 'all');
++    }
++    return obj;
++  };
++
++  return {
++    gap: {
++      streak: currentGapStreak,
++      dir: currentGapDir,
++      stats: buildStatsObj(gapReturns, [5, 10, 20, 'all'])
++    },
++    color: {
++      streak: currentColorStreak,
++      dir: currentColorDir,
++      stats: buildStatsObj(colorReturns, [3, 5, 10, 'all'])
++    },
++    pullback: isPullback ? { stats: buildForwardStatsObj(pullbackReturns) } : null,
++    breakout: isBreakout ? { stats: buildForwardStatsObj(breakoutReturns) } : null,
++    volumeSpike: isVolumeSpike ? { stats: buildForwardStatsObj(volumeSpikeReturns) } : null,
++    insideBar: isInsideBar ? { stats: buildForwardStatsObj(insideBarReturns) } : null,
++    hammer: isHammer ? { stats: buildForwardStatsObj(hammerReturns) } : null,
++    strongClose: isStrongClose ? { stats: buildForwardStatsObj(strongCloseReturns) } : null,
++    wideRange: isWideRange ? { stats: buildForwardStatsObj(wideRangeReturns) } : null,
++    friday: isFriday ? { stats: buildStatsObj(fridayReturns, [4, 12, 24, 'all']) } : null
++  };
++}
++
++function setupChartLegend(chart, container, symbol, prices, candleSeries) {
++  container.style.position = 'relative';
++  const legend = document.createElement('div');
++  legend.style.position = 'absolute';
++  legend.style.left = '12px';
++  legend.style.top = '12px';
++  legend.style.zIndex = 10;
++  legend.style.fontFamily = "'JetBrains Mono', monospace";
++  legend.style.fontSize = '12px';
++  legend.style.color = 'var(--text)';
++  legend.style.background = 'rgba(13, 17, 23, 0.85)';
++  legend.style.padding = '8px 12px';
++  legend.style.borderRadius = '6px';
++  legend.style.pointerEvents = 'none';
++  legend.style.border = '1px solid var(--border)';
++  legend.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
++  legend.style.minWidth = '240px';
++  
++  container.appendChild(legend);
++
++  const formatStat = (s, n) => {
++    if (!s || !s[n]) return `<span style="color:var(--muted)">N/A</span>`;
++    const col = s[n].avg > 0 ? 'var(--green)' : 'var(--red)';
++    return `<span style="color:${col}">${s[n].winRate}% (${s[n].avg}%)</span>`;
++  };
++
++  const setLegendContent = (priceData) => {
++    if (!priceData) {
++      legend.innerHTML = `<strong>${symbol}</strong><br>Hover over chart for details`;
++      return;
++    }
++    
++    const currentIndex = prices.findIndex(p => p.time === priceData.time);
++    const stats = currentIndex >= 0 ? calculatePatternStats(prices, currentIndex) : null;
++    
++    const color = priceData.close >= priceData.open ? 'var(--green)' : 'var(--red)';
++    let statsHtml = `<div style="font-size:11px; color:var(--muted); line-height:1.4">`;
++    statsHtml += `<div style="color:#c9d1d9;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:2px">📊 <strong>Dynamic Pattern Stats (Next Day)</strong></div>`;
++    
++    if (stats) {
++      const renderRecent = (label, icon, statsObj, periods, color='var(--text)') => {
++        let html = `<div style="margin-bottom:6px"><div style="color:${color}">${icon} ${label}</div>`;
++        periods.forEach(p => {
++          html += `<div style="display:flex;justify-content:space-between"><span>${p === 'all' ? 'All Time' : 'Last ' + p + ' times'}:</span> ${formatStat(statsObj, p)}</div>`;
++        });
++        html += `</div>`;
++        return html;
++      };
++
++      const renderForward = (label, icon, statsObj, color='var(--text)') => {
++        let html = `<div style="margin-bottom:6px"><div style="color:${color}">${icon} ${label}</div>`;
++        const periods = Object.keys(statsObj).sort((a,b) => parseInt(a) - parseInt(b));
++        periods.forEach(p => {
++          html += `<div style="display:flex;justify-content:space-between"><span>Hold ${p} Days:</span> ${formatStat(statsObj, p)}</div>`;
++        });
++        html += `</div>`;
++        return html;
++      };
++
++      if (stats.gap.streak > 0) {
++        const gName = stats.gap.dir === 1 ? 'Gap Up' : 'Gap Down';
++        const gCol = stats.gap.dir === 1 ? 'var(--green)' : 'var(--red)';
++        statsHtml += renderRecent(`${gName} (${stats.gap.streak} days)`, stats.gap.dir === 1 ? '📈' : '📉', stats.gap.stats, [5, 10, 20, 'all'], gCol);
++      }
++      if (stats.color.streak > 0) {
++        const cName = stats.color.dir === 1 ? 'Green Bar' : 'Red Bar';
++        const cCol = stats.color.dir === 1 ? 'var(--green)' : 'var(--red)';
++        statsHtml += renderRecent(`${cName} (${stats.color.streak} days)`, stats.color.dir === 1 ? '🟩' : '🟥', stats.color.stats, [3, 5, 10, 'all'], cCol);
++      }
++      if (stats.pullback) {
++        statsHtml += renderForward(`SMA50 Pullback Bounce`, '↩️', stats.pullback.stats, '#ff9800');
++      }
++      if (stats.breakout) {
++        statsHtml += renderForward(`20-Day Breakout`, '🚀', stats.breakout.stats, 'var(--green)');
++      }
++      if (stats.volumeSpike) {
++        statsHtml += renderForward(`Volume Climax (>2x)`, '📊', stats.volumeSpike.stats, '#58a6ff');
++      }
++      if (stats.insideBar) {
++        statsHtml += renderForward(`Inside Bar`, '🗜️', stats.insideBar.stats, '#f0e68c');
++      }
++      if (stats.hammer) {
++        statsHtml += renderForward(`Rejection Tail (Pin Bar)`, '🔨', stats.hammer.stats, '#ffeb3b');
++      }
++      if (stats.strongClose) {
++        statsHtml += renderForward(`Strong Close (Top 10%)`, '💪', stats.strongClose.stats, 'var(--green)');
++      }
++      if (stats.wideRange) {
++        statsHtml += renderForward(`Wide Range Bar (>1.5x)`, '📏', stats.wideRange.stats, '#d2a8ff');
++      }
++      if (stats.friday) {
++        statsHtml += renderRecent(`Friday Effect`, '📅', stats.friday.stats, [4, 12, 24, 'all'], '#ff7b72');
++      }
++    } else {
++      statsHtml += `<div style="margin-top:4px">Not enough data</div>`;
++    }
++    statsHtml += `</div>`;
++
++    legend.innerHTML = `
++      <div style="font-weight:bold;font-size:14px;margin-bottom:6px;">${symbol} <span style="font-size:11px;color:var(--muted);font-weight:normal;margin-left:4px">${priceData.time}</span></div>
++      <div style="display:flex;gap:8px;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:6px">
++        <span>O: <span style="color:${color}">${priceData.open.toFixed(2)}</span></span>
++        <span>H: <span style="color:${color}">${priceData.high.toFixed(2)}</span></span>
++        <span>L: <span style="color:${color}">${priceData.low.toFixed(2)}</span></span>
++        <span>C: <span style="color:${color}">${priceData.close.toFixed(2)}</span></span>
++      </div>
++      ${statsHtml}
++    `;
++  };
++
++  setLegendContent(prices[prices.length-1]);
++  chart.subscribeCrosshairMove((param) => {
++    if (param.point === undefined || !param.time || param.point.x < 0 || param.point.x > container.clientWidth || param.point.y < 0 || param.point.y > container.clientHeight) {
++      setLegendContent(prices[prices.length-1]);
++    } else {
++      const priceData = param.seriesData.get(candleSeries);
++      if (priceData) {
++        setLegendContent(priceData);
++      }
++    }
++  });
++}
++
+ async function initFavChart(symbol) {
+   const container = document.getElementById(`fav-chart-${symbol}`);
+   if (!container) return;
+@@ -402,6 +734,7 @@ async function initFavChart(symbol) {
+     addLine(calcSMA(closes, 150), '#2196f3', 'SMA150');
+     addLine(calcSMA(closes, 200), '#9c27b0', 'SMA200');
+ 
++    setupChartLegend(chart, container, symbol, prices, candleSeries);
+     chart.timeScale().fitContent();
+   } catch (err) {
+     container.innerHTML = `<span style="color:var(--red)">❌ โหลดกราฟไม่สำเร็จสำหรับ ${symbol}</span>`;
+@@ -1231,6 +1564,7 @@ async function initSwingChart(symbol, plan) {
+       if (plan.target) addLevel(plan.target, '#ffd700', 'Target', 1); // dashed gold
+     }
+ 
++    setupChartLegend(chart, container, symbol, data, candleSeries);
+     chart.timeScale().fitContent();
+   } catch(e) {
+     container.innerHTML = '❌ โหลดกราฟไม่สำเร็จ — ' + e.message;
+@@ -1472,6 +1806,7 @@ async function initCANSLIMChart(symbol) {
+     addSMALine(calcSMA(closes, 150), '#a855f7', 'SMA150');
+     addSMALine(calcSMA(closes, 200), '#00d4ff', 'SMA200');
+ 
++    setupChartLegend(chart, container, symbol, data, candleSeries);
+     chart.timeScale().fitContent();
+   } catch(e) {
+     container.innerHTML = '❌ โหลดกราฟไม่สำเร็จ — ' + e.message;
+@@ -1769,6 +2104,7 @@ async function initChart(symbol) {
+       if (targetPrice) addHLine(targetPrice, '#ff80ab', `Target(${targetR}R)`,1); // pink dashed
+     }
+ 
++    setupChartLegend(chart, container, symbol, data, candleSeries);
+     chart.timeScale().fitContent();
+   } catch(e) {
+     container.innerHTML = '❌ โหลดกราฟไม่สำเร็จ — ' + e.message;
+@@ -2357,6 +2693,7 @@ async function initPaperChart(el) {
+     if (mfe && Math.abs(mfe - entry) > 0.01) {
+       candle.createPriceLine({ price: mfe, color: theme.green + '88', lineWidth: 1, lineStyle: 1, axisLabelVisible: false, title: `MFE ${mfe.toFixed(2)}` });
+     }
++    setupChartLegend(chart, el, symbol, data, candle);
+     chart.timeScale().fitContent();
+     // Responsive resize
+     new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth })).observe(el);
+@@ -2670,3 +3007,66 @@ window.onload = async () => {
+   await paperRefresh();
+ };
+ 
++async function openPatternScreener() {
++  document.getElementById('patternScreenerModal').classList.add('open');
++  const content = document.getElementById('patternScreenerContent');
++  content.innerHTML = 'กำลังโหลดและวิเคราะห์สถิติจาก /api/patterns...';
++  try {
++    const res = await fetch('/api/patterns');
++    const data = await res.json();
++    if (data.error) {
++      content.innerHTML = `<span style="color:var(--red)">Error: ${data.error}</span>`;
++      return;
++    }
++    
++    let html = '<div style="max-height:70vh; overflow-y:auto; padding-right:8px;">';
++    const categories = [
++      { key: 'Oversold', title: '🟢 Oversold (ลุ้นเด้งหลังราคาลงติดกัน)', color: 'var(--green)' },
++      { key: 'Overbought', title: '🔴 Overbought (ระวังย่อหลังราคาพุ่งติดกัน)', color: 'var(--red)' }
++    ];
++    
++    categories.forEach(c => {
++      const items = data[c.key] || [];
++      // Sort by consecutive days descending, then win_rate descending
++      items.sort((a, b) => b.consecutive - a.consecutive || b.win_rate - a.win_rate);
++      
++      html += `<h3 style="color:${c.color};margin-top:16px;margin-bottom:8px">${c.title} (${items.length} หุ้น)</h3>`;
++      if (items.length === 0) {
++        html += '<div style="color:var(--muted)">ไม่มีหุ้นที่เข้าเงื่อนไข (Win Rate > 50%)</div>';
++      } else {
++        html += `<table class="table" style="width:100%; font-size:0.9em; text-align:right;">
++          <thead>
++            <tr>
++              <th style="text-align:left">Symbol</th>
++              <th title="จำนวนวันที่เกิดรูปแบบติดกัน">Days</th>
++              <th title="ราคาล่าสุด">Close</th>
++              <th title="ความน่าจะเป็นที่จะเด้ง/ย่อ ในวันพรุ่งนี้">Win Rate</th>
++              <th title="ผลตอบแทนเฉลี่ย">Avg Return</th>
++              <th title="จำนวนครั้งในอดีตที่เกิดรูปแบบนี้">Occurrences</th>
++            </tr>
++          </thead>
++          <tbody>`;
++        items.forEach(item => {
++          html += `<tr>
++            <td style="text-align:left; font-weight:bold">${item.symbol}</td>
++            <td>${item.consecutive}</td>
++            <td title="O: ${item.latest.open} H: ${item.latest.high} L: ${item.latest.low}">${item.latest.close.toFixed(2)}</td>
++            <td style="color:${item.win_rate >= 60 ? 'var(--green)' : 'inherit'}">${item.win_rate.toFixed(1)}%</td>
++            <td style="color:${item.avg_return >= 0 ? 'var(--green)' : 'var(--red)'}">${item.avg_return > 0 ? '+' : ''}${item.avg_return.toFixed(2)}%</td>
++            <td>${item.occurrences}</td>
++          </tr>`;
++        });
++        html += `</tbody></table>`;
++      }
++    });
++    
++    html += '</div>';
++    content.innerHTML = html;
++  } catch (err) {
++    content.innerHTML = `<span style="color:var(--red)">Failed to load data: ${err.message}</span>`;
++  }
++}
++
++function closePatternScreener() {
++  document.getElementById('patternScreenerModal').classList.remove('open');
++}

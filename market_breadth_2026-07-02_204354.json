@@ -1,0 +1,199 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-02T13:43:54.885178Z",
+    "data_source": "Yahoo Finance (Live SET50 Calculation)",
+    "market": "TH",
+    "total_stocks": 50
+  },
+  "composite": {
+    "composite_score": 32.4,
+    "zone": "Weakening",
+    "zone_color": "orange",
+    "exposure_guidance": "40-60%",
+    "guidance": "Breadth deteriorating. Begin profit-taking and raise cash allocation.",
+    "actions": [
+      "Take profits on weakest 25-40% of positions",
+      "No new momentum entries",
+      "Raise cash allocation significantly",
+      "Consider defensive sector rotation (XLU, XLP, XLV)",
+      "Watch for cycle trough signal for re-entry"
+    ],
+    "strongest_health": {
+      "component": "divergence",
+      "label": "S&P 500 vs Breadth Divergence",
+      "score": 54.0
+    },
+    "weakest_health": {
+      "component": "ma_crossover",
+      "label": "8MA vs 200MA Crossover",
+      "score": 5
+    },
+    "excluded_components": [],
+    "data_quality": {
+      "available_count": 6,
+      "total_components": 6,
+      "label": "Complete (6/6 components)",
+      "missing_components": []
+    },
+    "component_scores": {
+      "breadth_level_trend": {
+        "score": 52,
+        "weight": 0.25,
+        "effective_weight": 0.25,
+        "weighted_contribution": 13.0,
+        "data_available": true,
+        "label": "Current Breadth Level & Trend"
+      },
+      "ma_crossover": {
+        "score": 5,
+        "weight": 0.2,
+        "effective_weight": 0.2,
+        "weighted_contribution": 1.0,
+        "data_available": true,
+        "label": "8MA vs 200MA Crossover"
+      },
+      "cycle_position": {
+        "score": 20,
+        "weight": 0.2,
+        "effective_weight": 0.2,
+        "weighted_contribution": 4.0,
+        "data_available": true,
+        "label": "Peak/Trough Cycle Position"
+      },
+      "bearish_signal": {
+        "score": 40,
+        "weight": 0.15,
+        "effective_weight": 0.15,
+        "weighted_contribution": 6.0,
+        "data_available": true,
+        "label": "Bearish Signal Status"
+      },
+      "historical_percentile": {
+        "score": 30,
+        "weight": 0.1,
+        "effective_weight": 0.1,
+        "weighted_contribution": 3.0,
+        "data_available": true,
+        "label": "Historical Percentile"
+      },
+      "divergence": {
+        "score": 54.0,
+        "weight": 0.1,
+        "effective_weight": 0.1,
+        "weighted_contribution": 5.4,
+        "data_available": true,
+        "label": "S&P 500 vs Breadth Divergence"
+      }
+    }
+  },
+  "components": {
+    "breadth_level_trend": {
+      "score": 52,
+      "signal": "NEUTRAL: 8MA=0.544 in downtrend - mixed signals",
+      "data_available": true,
+      "current_8ma": 0.5442346938775511,
+      "current_200ma": 0.6556632653061224,
+      "trend": -1,
+      "level_score": 65,
+      "trend_score": 20,
+      "date": "2026-07-02",
+      "ma8_direction": "falling",
+      "direction_modifier": 0
+    },
+    "ma_crossover": {
+      "score": 5,
+      "signal": "BEARISH: 8MA far below 200MA (gap=-0.111, 8MA falling)",
+      "data_available": true,
+      "gap": -0.11142857142857132,
+      "gap_score": 5,
+      "current_8ma": 0.5442346938775511,
+      "current_200ma": 0.6556632653061224,
+      "ma8_5d_ago": 0.6096938775510204,
+      "ma8_direction": "falling",
+      "direction_modifier": 0,
+      "date": "2026-07-02"
+    },
+    "cycle_position": {
+      "score": 20,
+      "signal": "PEAK (16d ago): post-peak decline, 8MA falling",
+      "data_available": true,
+      "latest_marker_type": "PEAK",
+      "days_since_marker": 16,
+      "ma8_trend": "falling",
+      "current_8ma": 0.5442346938775511,
+      "extreme_trough": false,
+      "date": "2026-07-02"
+    },
+    "bearish_signal": {
+      "score": 40,
+      "signal": "CAUTION: No bearish signal but in Pink Zone (downtrend + 8MA < 200MA) [PINK ZONE]",
+      "data_available": true,
+      "signal_active": false,
+      "trend": -1,
+      "current_8ma": 0.5442346938775511,
+      "current_200ma": 0.6556632653061224,
+      "in_pink_zone": true,
+      "pink_zone_days": 1,
+      "base_score": 50,
+      "context_adjustment": 0,
+      "pink_zone_adjustment": -10,
+      "date": "2026-07-02"
+    },
+    "historical_percentile": {
+      "score": 30,
+      "signal": "LOW: 36th percentile - below average breadth",
+      "data_available": true,
+      "current_8ma": 0.5442346938775511,
+      "percentile_rank": 36.134453781512605,
+      "base_score": 30,
+      "adjustment": 0,
+      "avg_peak": 0.75,
+      "avg_trough": 0.25,
+      "total_observations": 238,
+      "date": "2026-07-02"
+    },
+    "divergence": {
+      "score": 54.0,
+      "signal": "Healthy alignment (both rising): S&P +9.9%, Breadth 8MA +0.177 over 60d",
+      "data_available": true,
+      "sp500_pct_change": 9.93,
+      "breadth_change": 0.1774,
+      "sp500_latest": 1593.56005859375,
+      "sp500_past": 1449.6199951171875,
+      "ma8_latest": 0.5442346938775511,
+      "ma8_past": 0.3668478260869565,
+      "lookback_days": 60,
+      "divergence_type": "Healthy alignment (both rising)",
+      "date": "2026-07-02",
+      "window_60d": {
+        "score": 70,
+        "divergence_type": "Healthy alignment (both rising)",
+        "sp500_pct_change": 9.93,
+        "breadth_change": 0.1774,
+        "lookback_days": 60
+      },
+      "window_20d": {
+        "score": 30,
+        "divergence_type": "Consistent decline (both falling)",
+        "sp500_pct_change": -0.08,
+        "breadth_change": -0.1393,
+        "lookback_days": 20
+      },
+      "early_warning": false
+    }
+  },
+  "key_levels": {
+    "SET Index": {
+      "value": "1593.56",
+      "significance": "Current SET Index Level"
+    },
+    "SMA8 (50)": {
+      "value": "0.5442",
+      "significance": "Smooth 8-day MA of % stocks above SMA50"
+    },
+    "SMA8 (200)": {
+      "value": "0.6557",
+      "significance": "Smooth 8-day MA of % stocks above SMA200"
+    }
+  }
+}
