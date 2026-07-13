@@ -36,6 +36,7 @@ import yfinance as yf
 from flask import Flask, Response, jsonify, render_template, request
 
 from scripts import auto_paper, run_daily_signal_pipeline, signal_ledger
+from scripts.fee_model import effective_transaction_cost_bps
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE_DIR, "skills", "paper-trade-simulator", "scripts"))
@@ -1832,6 +1833,8 @@ def api_signal_results():
                 Path(BASE_DIR) / "state" / "automation_config.yaml"
             )
             paper_config = pipeline_config.get("auto_paper") or {}
+            fee_model = paper_config.get("fee_model") or {}
+            transaction_cost_bps = effective_transaction_cost_bps(fee_model)
             auto_enabled = bool(paper_config.get("enabled", True))
             auto_execute = bool(paper_config.get("execute", False))
             auto_config = auto_paper.AutoPaperConfig(
@@ -1858,7 +1861,7 @@ def api_signal_results():
                 derive_missing_risk=bool(paper_config.get("derive_missing_risk", True)),
                 default_stop_pct=float(paper_config.get("default_stop_pct", 8.0)),
                 target_r=float(paper_config.get("target_r", 2.0)),
-                transaction_cost_bps=float(paper_config.get("transaction_cost_bps", 0.0)),
+                transaction_cost_bps=transaction_cost_bps,
                 account_size=(
                     float(paper_config["account_size"])
                     if paper_config.get("account_size")
@@ -1899,6 +1902,7 @@ def api_signal_results():
                     "high_score_override_min": auto_config.high_score_override_min,
                     "max_open_positions_with_override": auto_config.max_open_positions_with_override,
                     "transaction_cost_bps": auto_config.transaction_cost_bps,
+                    "fee_model": fee_model,
                     "account_size": auto_config.account_size,
                     "risk_per_trade_pct": auto_config.risk_per_trade_pct,
                     "max_position_pct": auto_config.max_position_pct,
