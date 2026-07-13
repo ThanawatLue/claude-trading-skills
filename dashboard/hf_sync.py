@@ -85,3 +85,8 @@ def upload_db():
     thread = threading.Thread(target=_async_upload)
     thread.daemon = True
     thread.start()
+
+
+def upload_db_now():
+    """Upload the SQLite database synchronously for maintenance operations."""
+    _async_upload()

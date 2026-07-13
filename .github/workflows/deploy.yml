@@ -6,6 +6,12 @@ on:
       - main
   # Allow manual trigger
   workflow_dispatch:
+    inputs:
+      reset_paper:
+        description: "Archive old paper trades and start a new paper session"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -73,6 +79,7 @@ jobs:
             LOCAL_DASHBOARD_URL="http://127.0.0.1:${DASHBOARD_PORT}"
             EXPECTED_SHA='${{ github.sha }}'
             EXPECTED_SHORT="$(printf '%s' "$EXPECTED_SHA" | cut -c1-7)"
+            RESET_PAPER="${{ inputs.reset_paper || 'false' }}"
 
             DASHBOARD_LOCAL_URL="$LOCAL_DASHBOARD_URL" bash scripts/setup_gcp_cron.sh
 
@@ -248,3 +255,14 @@ jobs:
             done
 
             curl -fsS "$LOCAL_DASHBOARD_URL/api/signal-results?market=TH" >/dev/null
+
+            if [ "$RESET_PAPER" = "true" ]; then
+              echo "Resetting paper portfolio after the fresh database sync."
+              "$PROJECT_DIR/.venv/bin/python" scripts/reset_paper_portfolio.py \
+                --db-path "$PROJECT_DIR/state/market_cache.db" \
+                --archive-label "paper-reset-$(date -u +%Y-%m-%d)"
+              "$PROJECT_DIR/.venv/bin/python" -c \
+                "from dashboard import hf_sync; hf_sync.upload_db_now()"
+              curl -fsS "$LOCAL_DASHBOARD_URL/api/paper/stats?market=TH"
+              echo
+            fi
