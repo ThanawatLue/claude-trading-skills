@@ -1599,10 +1599,13 @@ def _freshness_snapshot(market: str | None) -> dict:
             "CANSLIM screener",
             latest_file(os.path.join(REPORTS_DIR, "canslim_screener_*.json"), market),
         ),
-        _report_item(
-            "Market-top risk", latest_file_any(os.path.join(REPORTS_DIR, "market_top_*.json"))
-        ),
     ]
+    if market == "US":
+        reports.append(
+            _report_item(
+                "Market-top risk", latest_file_any(os.path.join(REPORTS_DIR, "market_top_*.json"))
+            )
+        )
     if market == "TH":
         reports.append(
             _report_item(
