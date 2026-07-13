@@ -1,0 +1,53 @@
+name: Restart dashboard service
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart dashboard on GCP
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+            PROJECT_DIR="${{ secrets.GCP_PROJECT_DIR }}"
+            if [ -z "$PROJECT_DIR" ]; then
+              for candidate in "$HOME/tong_trading" "$HOME/claude-trading-skills-1" "$HOME/claude-trading-skills"; do
+                if [ -d "$candidate/.git" ]; then
+                  PROJECT_DIR="$candidate"
+                  break
+                fi
+              done
+            fi
+            PROJECT_DIR="${PROJECT_DIR:-$HOME/claude-trading-skills-1}"
+            cd "$PROJECT_DIR"
+
+            if command -v systemctl >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              sudo systemctl restart dashboard.service
+            else
+              pkill -f 'dashboard/app.py' || true
+              DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT=80 FLASK_DEBUG=0 \
+                nohup "$PROJECT_DIR/.venv/bin/python" dashboard/app.py > logs/dashboard.log 2>&1 &
+            fi
+
+            for attempt in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:80/api/health >/dev/null 2>&1; then
+                echo "Dashboard restart health check passed."
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Dashboard restart health check failed."
+            exit 1
