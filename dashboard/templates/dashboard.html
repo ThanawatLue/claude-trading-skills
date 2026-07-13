@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trading Intelligence Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="modalContent">
+      <h2 id="modalTitle" style="margin-bottom:20px">📖 คู่มือ</h2>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAPER TRADE MODAL — open / close / journal -->
+<div class="modal-overlay" id="paperModal" onclick="if(event.target===this)paperModalClose()">
+  <div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="paperModalClose()">✕</button>
+    <div id="paperModalContent"></div>
+  </div>
+</div>
+
+<!-- PATTERN SCREENER MODAL -->
+<div class="modal-overlay" id="patternScreenerModal" onclick="if(event.target===this)closePatternScreener()">
+  <div class="modal" style="max-width:800px">
+    <button class="modal-close" onclick="closePatternScreener()">✕</button>
+    <h2 style="margin-bottom:20px;color:var(--purple);display:flex;align-items:center;gap:8px">📊 Pattern Screener Results</h2>
+    <div id="patternScreenerContent" style="color:var(--text);font-size:.9rem;line-height:1.5;max-height:60vh;overflow-y:auto">
+      กำลังโหลดข้อมูล...
+    </div>
+  </div>
+</div>
+
+
+
+<div class="dashboard-header" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:12px">
+  <div>
+    <h1>Trading Intelligence Dashboard</h1>
+    <p class="subtitle" id="ts">กำลังโหลดข้อมูลระบบ...</p>
+  </div>
+  <div class="dashboard-actions" style="display:flex;gap:8px;align-items:center">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme" aria-label="Toggle theme">☾</button>
+    <button class="btn-secondary" id="exportBtn" onclick="exportToHTML()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">📥 Export HTML</button>
+    <button class="btn-secondary" id="patternScreenerBtn" onclick="openPatternScreener()" style="background:var(--bg3);border:1px solid var(--purple);color:var(--purple);padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">📊 Pattern Screener</button>
+    <button class="btn-primary" id="runBtn" onclick="runAnalysis()">🚀 Run Fresh Analysis</button>
+  </div>
+</div>
+
+<!-- SETTINGS PANEL -->
+<div class="settings-panel">
+  <div style="font-size:.8rem;color:var(--cyan);font-weight:700;white-space:nowrap">⚙️ ตั้งค่า Trade Plan</div>
+  <div class="settings-label-group">
+    <label id="labelAccountSize">Account Size ($)</label>
+    <input class="settings-input" type="number" id="settingAccount" value="50000" min="1000" step="1000" onchange="saveSettings(); recalculateAndRenderBreakout()">
+  </div>
+  <div class="settings-label-group" style="min-width: 140px">
+    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+      <label style="margin-bottom:0">Risk / Trade</label>
+      <span id="valRisk" style="color:var(--cyan); font-weight:bold; font-family:'JetBrains Mono',monospace; font-size:.85rem">0.5%</span>
+    </div>
+    <input class="settings-slider" type="range" id="settingRisk" value="0.5" min="0.1" max="8" step="0.1" oninput="onSliderInput()" onchange="saveSettings()">
+  </div>
+  <div class="settings-label-group" style="min-width: 140px">
+    <div style="display:flex; justify-content:space-between; align-items:center; width:100%">
+      <label style="margin-bottom:0">Target</label>
+      <span id="valTarget" style="color:var(--cyan); font-weight:bold; font-family:'JetBrains Mono',monospace; font-size:.85rem">2.0R</span>
+    </div>
+    <input class="settings-slider" type="range" id="settingTarget" value="2.0" min="1" max="10" step="0.5" oninput="onSliderInput()" onchange="saveSettings()">
+  </div>
+  <div style="font-size:.72rem;color:var(--muted);max-width:280px">
+    ใช้คำนวณ <strong style="color:var(--text)">ราคาซื้อ / Stop Loss / เป้ากำไร / จำนวนหุ้น</strong> ใน Step 5 โดยอัตโนมัติ
+  </div>
+</div>
+
+<div class="market-selector" style="flex-wrap:wrap;gap:12px;align-items:center">
+  <button class="mkt-btn" id="mkt-US" onclick="setMarket('US')">🇺🇸 S&P 500 (USA)</button>
+  <button class="mkt-btn active" id="mkt-TH" onclick="setMarket('TH')">🇹🇭 SET100 (Thailand)</button>
+  <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+    <span style="font-size:.75rem;color:var(--muted);white-space:nowrap">📅 ดูย้อนหลัง:</span>
+    <select id="historySelect" onchange="onHistoryChange()"
+      style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:.78rem;cursor:pointer;min-width:200px">
+      <option value="">⚡ ล่าสุด (Live)</option>
+    </select>
+    <span id="historyBadge" style="display:none;background:rgba(255,152,0,.15);color:var(--orange);border-radius:4px;padding:3px 8px;font-size:.72rem;font-weight:700">HISTORY</span>
+  </div>
+</div>
+
+<nav class="dashboard-tabs" aria-label="Dashboard views">
+  <button class="dashboard-tab active" id="tab-main" type="button" onclick="setDashboardTab('main')" aria-selected="true">Dashboard</button>
+  <button class="dashboard-tab" id="tab-decisions" type="button" onclick="setDashboardTab('decisions')" aria-selected="false">Trade Decisions</button>
+  <button class="dashboard-tab" id="tab-edge" type="button" onclick="setDashboardTab('edge')" aria-selected="false">Edge Lab</button>
+  <button class="dashboard-tab" id="tab-results" type="button" onclick="setDashboardTab('results')" aria-selected="false">Signal Results</button>
+</nav>
+
+<div id="mainDashboard">
+
+  <!-- Trading Decision Guide & Glossary -->
+  <div class="guide-card">
+    <div class="guide-header">
+      <h3 class="guide-title">
+        💡 คู่มือการตัดสินใจซื้อขาย & คำศัพท์ฉบับเข้าใจง่าย (Trading Decision Guide & Glossary)
+      </h3>
+      <button class="guide-toggle-btn" id="guideToggleIcon" type="button" onclick="toggleGuide()" aria-controls="guideContent" aria-expanded="false">แสดงคู่มือ</button>
+    </div>
+
+    <div id="guideContent" style="display: none; margin-top: 20px; border-top: 1px solid rgba(30, 58, 95, 0.4); padding-top: 20px;">
+      <!-- Step-by-Step Flowchart -->
+      <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--purple); margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+        🎯 4 ขั้นตอนการตัดสินใจซื้อขายจริง (4-Step Action Flow)
+      </h4>
+
+      <div class="step-grid">
+        <!-- Step 1 -->
+        <div class="step-item" style="border-top: 3px solid var(--cyan);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong style="color: var(--cyan); font-size: 0.85rem;">ขั้นที่ 1: เช็คสุขภาพตลาด</strong>
+            <span style="font-size: 0.7rem; background: rgba(0, 212, 255, 0.15); color: var(--cyan); padding: 2px 6px; border-radius: 4px; font-weight: 700;">ดูสเต็ป 1 & 2</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text); margin-bottom: 8px; font-weight: 600;">
+            <strong>เป้าหมาย:</strong> ประเมินความเสี่ยงตลาดโดยรวม
+          </p>
+          <ul style="font-size: 0.75rem; color: var(--muted); padding-left: 14px; line-height: 1.5; margin: 0;">
+            <li>ดู <strong style="color: var(--text)">Market Breadth Score</strong>: คะแนนควร ≥ 50%</li>
+            <li>ดู <strong style="color: var(--text)">Uptrend Ratio</strong>: ควรอยู่ในโซน Neutral, Bull หรือ Strong Bull</li>
+            <li>ดู <strong style="color: var(--text)">Distribution Days</strong>: หากดัชนีมีวันที่รายใหญ่เทขายสะสมกัน ≥ 5-6 วันในช่วงสั้นๆ ตลาดมีความเสี่ยงปรับฐานรุนแรง</li>
+          </ul>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step-item" style="border-top: 3px solid var(--purple);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong style="color: var(--purple); font-size: 0.85rem;">ขั้นที่ 2: กำหนดสัดส่วนเงินลงทุน</strong>
+            <span style="font-size: 0.7rem; background: rgba(168, 85, 247, 0.15); color: var(--purple); padding: 2px 6px; border-radius: 4px; font-weight: 700;">ดูสเต็ป 3</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text); margin-bottom: 8px; font-weight: 600;">
+            <strong>เป้าหมาย:</strong> ปรับพอร์ตตามความยากง่ายของตลาด
+          </p>
+          <ul style="font-size: 0.75rem; color: var(--muted); padding-left: 14px; line-height: 1.5; margin: 0;">
+            <li><strong style="color: var(--red)">CASH_PRIORITY</strong>: ถือเงินสด 100% ⛔ ห้ามเข้าซื้อเด็ดขาด</li>
+            <li><strong style="color: var(--orange)">REDUCE_ONLY</strong>: ตลาดเริ่มอ่อนแอ ให้ขายหุ้นที่เริ่มเสียทรง และหยุดเปิด position ใหม่</li>
+            <li><strong style="color: var(--green)">NEW_ENTRY_ALLOWED</strong>: ตลาดดี ซื้อหุ้นใหม่ได้ตามโควตา Exposure Ceiling</li>
+          </ul>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step-item" style="border-top: 3px solid var(--green);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong style="color: var(--green); font-size: 0.85rem;">ขั้นที่ 3: คัดเลือกหุ้นโมเมนตัมสูง</strong>
+            <span style="font-size: 0.7rem; background: rgba(0, 230, 118, 0.15); color: var(--green); padding: 2px 6px; border-radius: 4px; font-weight: 700;">ดูสเต็ป 4 & 4b</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text); margin-bottom: 8px; font-weight: 600;">
+            <strong>เป้าหมาย:</strong> หาหุ้นนำตลาดที่มีความเสี่ยงต่ำที่สุด
+          </p>
+          <ul style="font-size: 0.75rem; color: var(--muted); padding-left: 14px; line-height: 1.5; margin: 0;">
+            <li>เลือกหุ้นที่มี <strong style="color: var(--text)">Score ≥ 70</strong> (VCP / CANSLIM)</li>
+            <li>โฟกัสหุ้นสถานะ <span class="state-pill bg-green" style="padding: 1px 6px; font-size: 0.65rem;">Pre-breakout</span> (กำลังบีบตัวพร้อมพุ่ง) หรือ <span class="state-pill bg-green" style="padding: 1px 6px; font-size: 0.65rem;">Breakout</span> (พุ่งแล้วแต่ยังไม่เกิน 5% จาก Pivot)</li>
+            <li>เลือกหุ้นนำตลาดที่มี <strong style="color: var(--text)">RS Rank ≥ 80</strong> เพื่อสร้างผลตอบแทนสูงสุด</li>
+          </ul>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step-item" style="border-top: 3px solid var(--gold);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong style="color: var(--gold); font-size: 0.85rem;">ขั้นที่ 4: หาจังหวะเข้าทำ (Execution Timing)</strong>
+            <span style="font-size: 0.7rem; background: rgba(255, 215, 0, 0.15); color: var(--gold); padding: 2px 6px; border-radius: 4px; font-weight: 700;">ดูสเต็ป 5 & กราฟ</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text); margin-bottom: 8px; font-weight: 600;">
+            <strong>เป้าหมาย:</strong> ใช้สถิติช่วยตัดสินใจซื้อขายตอนใกล้ตลาดปิด (ATC)
+          </p>
+          <ul style="font-size: 0.75rem; color: var(--muted); padding-left: 14px; line-height: 1.5; margin: 0;">
+            <li><strong style="color: var(--text)">เช็คช่วง 16.00 น.</strong>: เอาเมาส์ชี้ที่แท่งเทียนวันล่าสุดเพื่อดู Dynamic Pattern Stats</li>
+            <li><strong style="color: var(--green)">สัญญาณลุย (Buy ATC)</strong>: ค่า Last 3 หรือ Last 5 มี Win Rate สูง (80-100%) และ Average (สีเขียว)</li>
+            <li><strong style="color: var(--red)">สัญญาณชะลอ (Wait/Sell)</strong>: ค่าเฉลี่ยติดลบหนัก (สีแดง) ➡️ ถ้ามีของ ให้ขายตอนเด้ง, ถ้ายังไม่มี ให้รอก่อน</li>
+            <li><strong style="color: var(--cyan)">Position Size</strong>: หากจะเทรด ให้ซื้อตามจำนวนหุ้นที่ระบบคำนวณให้ในสเต็ป 5 เสมอ</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Glossary Table -->
+      <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--cyan); margin-top: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+        📖 พจนานุกรมศัพท์และการนำไปใช้ในตลาดจริง (Dashboard Indicator Glossary)
+      </h4>
+
+      <div class="guide-glossary-wrap">
+        <table class="guide-glossary-table">
+          <thead>
+            <tr>
+              <th style="width: 25%; font-size: 0.75rem;">ค่า / ตัวชี้วัด</th>
+              <th style="width: 35%; font-size: 0.75rem;">ความหมายทางทฤษฎี</th>
+              <th style="width: 40%; font-size: 0.75rem;">💡 วิธีนำไปใช้ตัดสินใจจริง</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong style="color: var(--cyan);">Market Breadth Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">เปอร์เซ็นต์ของหุ้นในตลาดทั้งหมดที่ยืนอยู่เหนือเส้นค่าเฉลี่ย SMA สะท้อนความแข็งแรงของภาพรวมตลาด</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">≥50% (ตลาดปกติ/ปลอดภัย)</strong>: เล่นหุ้นใหญ่/กลางได้มั่นใจ<br>
+                <strong style="color: var(--red);">&lt;40% (ตลาดเปราะบาง)</strong>: ควรถือเงินสดเป็นหลัก หลีกเลี่ยงการเปิดไม้ใหญ่
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--purple);">Uptrend Ratio Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ตัวชี้วัดความต่อเนื่องของแนวโน้มขาขึ้น วัดสัดส่วนหุ้นที่อยู่ในขาขึ้นระดับกลาง-ยาวที่แท้จริง</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                ใช้ยืนยัน "สเตจขาขึ้น" ของตลาด ช่วยบอกความกว้างของขาขึ้น ถ้าคะแนนสูง แปลว่าหุ้นขึ้นเยอะทุกหมวดหมู่ เหมาะแก่การเปิดไม้ใหม่
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--orange);">Distribution Days (DD)</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">วันที่ดัชนีหลักปิดลบ ≥0.2% ด้วยปริมาณการซื้อขายที่สูงกว่าวันก่อน สะท้อนการขายทิ้งของรายใหญ่หรือสถาบัน</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">0-3 วัน (ปกติ)</strong>: ตลาดปลอดภัย<br>
+                <strong style="color: var(--orange);">4-5 วัน (เฝ้าระวัง)</strong>: รายใหญ่เริ่มระบายของออก ให้กระชับ Stop Loss<br>
+                <strong style="color: var(--red);">≥6 วัน (อันตรายมาก)</strong>: โอกาสปรับฐานสูงมาก ⛔ ห้ามซื้อเพิ่ม
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--cyan);">VCP / CANSLIM Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">คะแนนวัดความพร้อมของราคาร่วมกับปัจจัยพื้นฐาน (การเติบโตกำไร, งบการเงิน และทรงกราฟขาขึ้น)</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">≥70 (คะแนนเต็ม 100)</strong>: หุ้นมีความเสี่ยงต่ำและมีพลังแฝงสูงสุดที่จะเบรกเอาท์เพื่อวิ่งแรง<br>
+                <strong style="color: var(--gold);">50-70</strong>: หุ้นน่าจับตาแต่กำลังฟอร์มตัวอยู่
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--purple);">RS (Relative Strength vs. Market)</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">คะแนนเปรียบเทียบความแข็งแกร่งของราคาหุ้นตัวนั้นกับดัชนีอ้างอิงของตลาด (SPY / SET Index) โดยคำนวณแบบ Minervini Weighted (3m, 6m, 9m, 12m) แปลงเป็นเปอร์เซ็นไทล์ 1-99</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">Percentile ≥80 (ผู้นำตลาด/Market Leader)</strong>: หุ้นแข็งกว่าดัชนีตลาดชัดเจน เหมาะซื้อช่วงตลาดปรับตัวลง เพราะจะฟื้นตัวได้เร็วกว่าหุ้นทั่วไป
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--cyan);">Confluence Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">คะแนนรวมสัญญาณเชิงเทคนิคทุกตัวที่แอคทีฟอยู่ (เช่น แท่งเขียวติดกัน, ย่อเส้น 50 วัน, เบรกเอาท์, RSI Divergence) โดยหาทิศทางสุทธิ (Bullish vs Bearish)</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">Net ≥ +4 (Strong Bullish 🐂)</strong>: สัญญาณกระทิงหนาแน่นมาก มีโอกาสเข้าซื้อสำเร็จสูง<br>
+                <strong style="color: var(--red);">Net ≤ -4 (Strong Bearish 🐻)</strong>: สัญญาณหมีหนาแน่นมาก หลีกเลี่ยงหรือชะลอการซื้อ
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--orange);">ATR & Position Sizer</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ค่าผันผวน Average True Range (14 วัน) แสดงเป็นสัดส่วน % เทียบราคาปิด พร้อมระบบคำนวณขนาดไม้เทรด (Stop Loss 2 ATR) อิงตามความเสี่ยงที่ระบุในแผนการเงิน</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                ใช้คุมความเสี่ยงรายตัวโดยซื้อหุ้นจำนวนตามที่แนะนำ (เช่น *127 หุ้น*) เพื่อให้ขาดทุนสูงสุดไม่เกินค่าจำกัดความเสี่ยง (เช่น 0.5% ของพอร์ต)
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--cyan);">RSI & Divergence</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ดัชนีความแข็งแกร่งสัมพัทธ์ (RSI 14 วัน) และระบบสแกนความขัดแย้งของราคาเทียบ RSI ในรอบ 30 วันเพื่อระบุจุดกลับตัว</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">BULL DIV</strong>: ราคาทำจุดต่ำสุดใหม่ แต่ RSI ยกโลว์ (โอกาสเด้งกลับสูง)<br>
+                <strong style="color: var(--red);">BEAR DIV</strong>: ราคาทำจุดสูงสุดใหม่ แต่ RSI ลดไฮ (โอกาสกลับตัวเป็นขาลงสูง)
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--cyan);">Sector RS / Heatmap Score</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;">ระดับความแข็งแกร่งของกลุ่มอุตสาหกรรม (US: RS Percentile ของ Sector ETF เทียบตลาด, TH: คะแนนโมเมนตัมจาก Heatmap เซกเตอร์)</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                ช่วยตรวจสอบว่าหุ้นอยู่ในกลุ่มอุตสาหกรรมที่เงินทุนกำลังไหลเข้าหรือไม่ หลีกเลี่ยงอุตสาหกรรมที่เป็น Laggard (คะแนนหรือ RS ต่ำ)
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--purple);">Weekly Trend & Day Bias</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;"><strong>Weekly Trend</strong>: แนวโน้มราคารายสัปดาห์เทียบกับเส้น 10-week SMA<br><strong>Day Bias</strong>: สถิติอัตราการชนะและผลตอบแทนย้อนหลังเฉพาะวันนั้นในสัปดาห์ (เช่น วันศุกร์)</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                ใช้คัดกรองทิศทางใหญ่ (ควรซื้อเฉพาะหุ้นที่ Weekly Trend เป็น Bullish 📈) และใช้วางแผนการห่อหุ้นข้ามวันตามพฤติกรรมแต่ละวันของหุ้นตัวนั้น
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--gold);">Pivot & Stop Loss Price (🔴/🏆)</strong></td>
+              <td style="color: var(--text); font-size: 0.78rem;"><strong>Pivot Price</strong>: แนวต้านสุดท้ายจุดเริ่มแรงเบรกเอาท์ของราคา<br><strong>Stop Loss</strong>: แนวรับสำคัญเพื่อจำกัดการขาดทุนและปกป้องเงินต้น</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                เข้าซื้อเมื่อราคาวิ่งผ่านจุด Pivot ขึ้นไป และตัดขาดทุนทันทีหากผิดทางแล้วราคาตกลงมาชน Stop Loss อย่างไม่มีข้อยกเว้น
+              </td>
+            </tr>
+            <tr>
+              <td><strong style="color: var(--cyan);">Context-Aware Pattern Stats</strong><br><span style="font-size:0.65rem; color:var(--muted);">(Gap, Color, Breakout, etc.)</span></td>
+              <td style="color: var(--text); font-size: 0.78rem;">สถิติแบบระบุเงื่อนไขแท่งเทียนปัจจุบันว่าอยู่ในทรงใด (เช่น เบรคเอาท์ ย่อแตะเส้น 50 วัน หรือเกิด Pin Bar) แล้ววิเคราะห์ประวัติในอดีตเพื่อหา Win Rate และเฉลี่ยกำไรขาดทุน</td>
+              <td style="color: var(--muted); font-size: 0.78rem;">
+                <strong style="color: var(--green);">Win Rate สูง (&gt;60%) + Average กำไร</strong>: โอกาสชนะสูง ให้ <strong>ถือข้ามวัน (Hold/Buy ATC)</strong><br>
+                <strong style="color: var(--red);">Win Rate ต่ำ หรือ Average ขาดทุน</strong>: แนวโน้มไม่ดี ให้ <strong>ชิงขายทำกำไรตอนตลาดปิด หรือ ชะลอการซื้อ</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAVORITES SECTION (รายการหุ้นที่ติดตาม) -->
+  <div id="favoritesSection" class="section-title" style="display:none; align-items: center; justify-content: space-between;">
+    <span style="display: flex; align-items: center; gap: 8px;">⭐ รายการหุ้นที่ติดตาม (Favorites & Watchlist)</span>
+    <span style="font-size:0.75rem; color:var(--muted); font-weight:normal;">ติดตามราคาและผลตอบแทนรายวันอย่างใกล้ชิด</span>
+  </div>
+  <div id="favoritesCard" class="card" style="display:none; margin-bottom:20px; border-left: 4px solid var(--gold);">
+    <div id="favoritesContent">
+      <!-- Dynamic list of starred stocks rendered here -->
+    </div>
+  </div>
+
+  <!-- STEP 1: MARKET BREADTH ANALYSIS -->
+<div class="section-title">📊 สเต็ป 1 — สุขภาพตลาด (Market Breadth + Uptrend Ratio) <button class="guide-btn" onclick="showLegend('breadth')">📖 คู่มือ</button></div>
+<div class="grid3">
+  <div class="card">
+    <div class="card-title">Market Breadth Score</div>
+    <div class="score-hero" id="mbScore">—</div>
+    <div class="score-badge" id="mbBadge">—</div>
+    <div class="progress-container"><div class="progress-bar" id="mbBar"></div></div>
+    <div id="mbExposure" style="font-weight:700;color:var(--gold);font-size:.9rem">—</div>
+  </div>
+  <div class="card" id="uptrendCard">
+    <div class="card-title">Uptrend Ratio Score <button class="guide-btn" onclick="showLegend('uptrend')">📖</button>
+      <small id="uptrendUsNote" style="display:none;font-size:.6rem;color:var(--orange);margin-left:6px">⚠️ US data only</small>
+    </div>
+    <div id="uptrendScore" class="score-hero" style="color:var(--purple)">—</div>
+    <div id="uptrendZone" class="score-badge">—</div>
+    <div class="progress-container"><div class="progress-bar" id="uptrendBar"></div></div>
+    <div id="uptrendGuidance" style="font-weight:700;color:var(--gold);font-size:.85rem">—</div>
+    <div id="uptrendWarnings" style="margin-top:8px"></div>
+  </div>
+  <div class="card" style="grid-column: span 1">
+    <div class="card-title">Breadth Components (6)</div>
+    <div id="mbComponents" style="display:grid;grid-template-columns:1fr;gap:8px"></div>
+  </div>
+</div>
+
+<!-- STEP 2: IBD DISTRIBUTION DAY MONITOR -->
+<div class="section-title" id="ibdSection">📉 สเต็ป 2 — Distribution Day Monitor (IBD Method) <button class="guide-btn" onclick="showLegend('ibd')">📖 คู่มือ</button></div>
+<div class="card" id="ibdCard" style="margin-bottom:32px">
+  <div id="ibdContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล IBD — กรุณากด Run Fresh Analysis</div>
+</div>
+
+<!-- STEP 3: EXPOSURE COACH -->
+<div class="section-title">🛡️ สเต็ป 3 — กลยุทธ์การลงเงิน (Exposure Coach) <button class="guide-btn" onclick="showLegend('exposure')">📖 คู่มือ</button></div>
+<div class="card" style="margin-bottom:32px">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;padding:10px 0">
+    <div><div id="expRec" style="font-size:1.3rem;font-weight:800">—</div><div style="font-size:.65rem;color:var(--muted)">RECOMMENDATION</div></div>
+    <div><div id="expCeiling" style="font-size:1.3rem;color:var(--cyan)">—</div><div style="font-size:.65rem;color:var(--muted)">MAX EXPOSURE</div></div>
+    <div><div id="expBias" style="font-size:1.3rem">—</div><div style="font-size:.65rem;color:var(--muted)">MARKET BIAS</div></div>
+    <div><div id="expConf" style="font-size:1.3rem">—</div><div style="font-size:.65rem;color:var(--muted)">CONFIDENCE</div></div>
+  </div>
+  <div class="logic-box" id="expRationale" style="margin-top:16px"></div>
+</div>
+
+<!-- STEP 4: VCP SCREENER -->
+<div class="section-title">🔍 สเต็ป 4 — สแกนหุ้น VCP (Mark Minervini Method)
+  <button class="guide-btn" onclick="showLegend('vcp')">📖 คู่มือ</button>
+  <button class="guide-btn" style="background:var(--purple)22;color:var(--purple);border-color:var(--purple)55" onclick="showLegend('tools')">🛠️ เครื่องมือ</button>
+</div>
+<div class="card" style="margin-bottom:24px">
+  <div class="card-title">Screening Funnel</div>
+  <div class="funnel" id="funnel"></div>
+</div>
+<div class="card">
+  <div class="card-title">ผลสแกนหุ้น</div>
+  <div style="display:flex;justify-content:space-between;margin-bottom:16px;gap:12px">
+    <input type="text" id="vcpSearch" placeholder="🔍 ค้นหา Ticker / ชื่อหุ้น / Sector..." oninput="updateVCP()" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 15px;border-radius:10px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <select id="vcpStateFilter" onchange="updateVCP()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px">
+        <option value="">ทุก State</option>
+        <option value="Pre-breakout">🟢 Pre-breakout</option>
+        <option value="Breakout">🟢 Breakout</option>
+        <option value="Extended">🟠 Extended</option>
+        <option value="Overextended">🔴 Overextended</option>
+        <option value="Damaged">🔴 Damaged</option>
+      </select>
+      <input type="number" id="vcpMinScore" value="0" min="0" max="100" step="5" oninput="updateVCP()"
+        placeholder="Min Score" title="Score ขั้นต่ำ (0 = ทั้งหมด)"
+        style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px;width:90px;font-family:'JetBrains Mono',monospace">
+      <select id="vcpLimit" onchange="updateVCP()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px">
+        <option value="10" selected>10 ตัวแรก</option>
+        <option value="999">ทั้งหมด</option>
+      </select>
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+    <table id="vcpTable">
+      <thead>
+        <tr>
+          <th class="sortable" onclick="setSort('symbol')">Ticker</th>
+          <th class="sortable" onclick="setSort('composite_score')">Score</th>
+          <th class="sortable" onclick="setSort('price')">Price</th>
+          <th class="sortable" onclick="setSort('pivot_price')">Pivot 🏆</th>
+          <th>Stop Loss 🔴</th>
+          <th>Target 🎯</th>
+          <th class="sortable" onclick="setSort('execution_state')">State</th>
+          <th class="sortable" onclick="setSort('trend_score')">Trend</th>
+          <th class="sortable" onclick="setSort('rs_rank_estimate')" title="RS Percentile vs S&P500 (O'Neil method) — ≥80 = Market Leader">RS% 📈</th>
+          <th class="sortable" onclick="setSort('atr_value')" title="Average True Range — ความกว้าง daily range ปกติของหุ้น">ATR 📊</th>
+          <th class="sortable" onclick="setSort('distance_pct')" title="% ห่างจาก Pivot ยิ่งน้อยยิ่งดี — ≤2% = ใกล้มาก">Dist% 🎯</th>
+          <th title="จำนวน Contractions — Ideal: 2-4">Con</th>
+          <th>Quality</th>
+        </tr>
+      </thead>
+      <tbody id="vcpTbody"></tbody>
+    </table>
+  </div>
+  <div class="logic-box" style="margin-top:12px">
+    <strong>วิธีอ่าน:</strong>
+    <span style="color:var(--green)">Score ≥70</span> = Strong VCP Setup |
+    <span style="color:var(--gold)">Score 50-70</span> = Setup กำลังฟอร์มตัว |
+    <span style="color:var(--cyan)">RS Rank ≥80</span> = หุ้นนำตลาด |
+    <span style="color:var(--orange)">ATR (%)</span> = ความผันผวน (ควรน้อยกว่า 4-5% เพื่อความปลอดภัย)
+  </div>
+</div>
+
+<!-- STEP 4b: CANSLIM SCREENER (US + TH) -->
+<div class="section-title" id="canslimSection">🏆 สเต็ป 4b — CANSLIM Screener (William O'Neil Method) <button class="guide-btn" onclick="showLegend('canslim')">📖 คู่มือ</button></div>
+<div class="card" id="canslimCard">
+  <div id="canslimContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล CANSLIM — กรุณากด Run Fresh Analysis</div>
+</div>
+
+<!-- STEP 4c: THAI SWING SCREENER -->
+<div class="section-title" id="thaiSwingSection">⚡ สเต็ป 4c — Swing Trade ไทย (3–5 วัน)</div>
+<div class="card" id="thaiSwingCard">
+  <div id="thaiSwingContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Swing — กรุณากด Run Fresh Analysis หรือรัน screen_thai_swing.py ก่อน</div>
+</div>
+
+<!-- TH-ONLY: TradingView-powered Thai market suite -->
+<div class="section-title" id="thaiSuiteSection">🇹🇭 ตลาดไทย — TradingView Suite (TV-powered, ไม่ต้องใช้ API key)</div>
+
+<div class="section-title" id="thBreadthSection" style="font-size:1rem;margin-top:8px">📊 4d.1 — TH Market Breadth (TV)</div>
+<div class="card" id="thBreadthCard">
+  <div id="thBreadthContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล TH Breadth — กรุณากด Run Fresh Analysis</div>
+</div>
+
+<div class="section-title" id="thSectorSection" style="font-size:1rem;margin-top:8px">🔥 4d.2 — TH Sector Heatmap (TV)</div>
+<div class="card" id="thSectorCard">
+  <div id="thSectorContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Sector Heatmap</div>
+</div>
+
+<div class="section-title" id="thWatchlistsSection" style="font-size:1rem;margin-top:8px">📋 4d.3 — TH Auto Watchlists: Growth / Value / Momentum / Mean-Reversion (TV)</div>
+<div class="card" id="thWatchlistsCard">
+  <div id="thWatchlistsContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Watchlists</div>
+</div>
+
+<div class="section-title" id="thDividendsSection" style="font-size:1rem;margin-top:8px">💰 4d.4 — TH Dividend Screener (TV)</div>
+<div class="card" id="thDividendsCard">
+  <div id="thDividendsContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Dividend Screener</div>
+</div>
+
+<!-- PAPER TRADE SIMULATOR -->
+<div class="section-title" id="paperSection">📝 Paper Portfolio — ทดสอบความอดทน (ไม่ใช้เงินจริง)
+  <button class="guide-btn" onclick="paperUpdateMarks(event)" title="ดึงราคาล่าสุดจาก yfinance + auto-close ถ้าชน stop/target">💲 ดึงราคาใหม่ (Live)</button>
+</div>
+<div class="card" id="paperCard" style="margin-bottom:32px">
+  <div id="paperStatsBar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+  <div id="paperOpenContent">⚠️ ยังไม่มี open positions</div>
+  <div id="paperClosedContent" style="margin-top:16px"></div>
+</div>
+
+<!-- STEP 5: BREAKOUT TRADE PLANNER -->
+<div class="section-title" id="breakoutSection">🎯 สเต็ป 5 — Breakout Trade Plan (ซื้อ/ขาย ราคาเท่าไหร่?) <button class="guide-btn" onclick="showLegend('breakout')">📖 คู่มือ</button></div>
+<div class="card" id="breakoutCard">
+  <div id="breakoutContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีแผนการซื้อขาย — กรุณากด Run Fresh Analysis (ต้องรัน VCP ก่อน)</div>
+</div>
+
+<!-- STEP 6: DOWNTREND CONTEXT (US only) -->
+<div class="section-title" id="downtrendSection">⏱️ สเต็ป 6 — บริบท: Correction Duration ปกติกี่วัน? <button class="guide-btn" onclick="showLegend('downtrend')">📖 คู่มือ</button></div>
+<div class="card" id="downtrendCard" style="margin-bottom:32px">
+  <div id="downtrendContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล — กรุณากด Run Fresh Analysis</div>
+</div>
+
+<!-- STEP 7: EARNINGS TRADE ANALYZER (US only) -->
+<div class="section-title" id="earnSection">📈 สเต็ป 7 — Earnings Trade Analyzer (Post-Earnings Momentum) <button class="guide-btn" onclick="showLegend('earnings')">📖 คู่มือ</button></div>
+<div class="card" id="earnCard">
+  <div id="earnContent" style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Earnings — กรุณากด Run Fresh Analysis</div>
+</div>
+
+</div> <!-- mainDashboard end -->
+
+<div id="tradeDecisionsDashboard" class="tab-panel" style="display:none">
+  <div class="section-title signal-results-title">
+    <span>Trade Decisions</span>
+    <button class="guide-btn" type="button" onclick="loadTradeDecisions()">Refresh</button>
+  </div>
+
+  <div class="card signal-brief-card">
+    <div>
+      <div class="card-title" style="margin-bottom:8px">Open / Close Decision Log</div>
+      <div class="signal-brief-text">Every paper trade with source technique, entry plan, risk, target, timing, result, and exit reason.</div>
+      <div class="trade-data-note">Market volume at entry is not recorded yet; this page shows shares/position size from the paper trade record.</div>
+    </div>
+    <div id="tradeDecisionAsOf" class="signal-asof">--</div>
+  </div>
+
+  <div class="signal-kpi-grid trade-decision-kpis">
+    <div class="metric signal-kpi"><b>Total Tickets</b><span id="tdTotal">--</span></div>
+    <div class="metric signal-kpi"><b>Open</b><span id="tdOpen">--</span></div>
+    <div class="metric signal-kpi"><b>Closed</b><span id="tdClosed">--</span></div>
+    <div class="metric signal-kpi"><b>Realized P/L</b><span id="tdRealized">--</span></div>
+    <div class="metric signal-kpi"><b>Unrealized P/L</b><span id="tdUnrealized">--</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="margin-bottom:10px">All Paper Decisions</div>
+    <div id="tradeDecisionContent" class="signal-panel-body">Loading trade decisions...</div>
+  </div>
+</div>
+
+<div id="edgeLabDashboard" class="tab-panel" style="display:none">
+  <div class="section-title signal-results-title">
+    <span>Edge Lab</span>
+    <button class="guide-btn" type="button" onclick="loadEdgeLab()">Refresh</button>
+  </div>
+
+  <div class="card signal-brief-card edge-brief-card">
+    <div>
+      <div class="card-title" style="margin-bottom:8px">Strategy Calibration & Rule Tuning</div>
+      <div id="edgeReadinessText" class="signal-brief-text">Loading edge diagnostics...</div>
+    </div>
+    <div id="edgeAsOf" class="signal-asof">--</div>
+  </div>
+
+  <div class="signal-kpi-grid edge-kpi-grid">
+    <div class="metric signal-kpi"><b>Sources With Paper</b><span id="edgeSourcesWithPaper">--</span></div>
+    <div class="metric signal-kpi"><b>Open Risk</b><span id="edgeOpenRisk">--</span></div>
+    <div class="metric signal-kpi"><b>Closed Sample</b><span id="edgeClosedSample">--</span></div>
+    <div class="metric signal-kpi"><b>Best Source</b><span id="edgeBestSource">--</span></div>
+    <div class="metric signal-kpi"><b>Top VCP Score</b><span id="edgeVcpTop">--</span></div>
+    <div class="metric signal-kpi"><b>Gate Progress</b><span id="edgeGateProgress">--</span></div>
+  </div>
+
+  <div class="grid3 edge-grid">
+    <div class="card">
+      <div class="card-title">VCP Gate Lab</div>
+      <div id="edgeVcpGateContent" class="signal-panel-body">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Risk Budget</div>
+      <div id="edgeRiskBudgetContent" class="signal-panel-body">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Next Rule Tests</div>
+      <div id="edgeRuleTestsContent" class="signal-panel-body">--</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Source Calibration</div>
+    <div style="overflow-x:auto">
+      <table class="signal-table edge-table edge-source-table">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Signals</th>
+            <th>Paper</th>
+            <th>Closed</th>
+            <th>Win Rate</th>
+            <th>Expectancy</th>
+            <th>Confidence</th>
+            <th>Suggested Action</th>
+          </tr>
+        </thead>
+        <tbody id="edgeSourceRows">
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Score Bucket Calibration</div>
+    <div style="overflow-x:auto">
+      <table class="signal-table edge-table edge-bucket-table">
+        <thead>
+          <tr>
+            <th>Score Band</th>
+            <th>Total</th>
+            <th>Open</th>
+            <th>Closed</th>
+            <th>Avg Score</th>
+            <th>Win Rate</th>
+            <th>Expectancy</th>
+            <th>Read</th>
+          </tr>
+        </thead>
+        <tbody id="edgeScoreBucketRows">
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="signalResultsDashboard" class="tab-panel" style="display:none">
+  <div class="section-title signal-results-title">
+    <span>Signal Results & Calibration</span>
+    <button class="guide-btn" type="button" onclick="loadSignalResults()">Refresh</button>
+  </div>
+
+  <div class="card signal-brief-card">
+    <div>
+      <div class="card-title" style="margin-bottom:8px">Readiness Snapshot</div>
+      <div id="signalReadinessText" class="signal-brief-text">Loading signal outcome status...</div>
+    </div>
+    <div id="signalAsOf" class="signal-asof">--</div>
+  </div>
+
+  <div class="signal-kpi-grid">
+    <div class="metric signal-kpi"><b>Total Signals</b><span id="srSignals">--</span></div>
+    <div class="metric signal-kpi"><b>Open Paper</b><span id="srOpenPaper">--</span></div>
+    <div class="metric signal-kpi"><b>Closed Outcomes</b><span id="srClosed">--</span></div>
+    <div class="metric signal-kpi"><b>Expectancy</b><span id="srExpectancy">--</span></div>
+    <div class="metric signal-kpi"><b>Postmortems</b><span id="srPostmortems">--</span></div>
+  </div>
+
+  <div class="grid3 signal-results-grid">
+    <div class="card">
+      <div class="card-title">Outcome Maturity</div>
+      <div id="signalMaturityContent" class="signal-panel-body">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Improvement Queue</div>
+      <div id="signalRecommendations" class="signal-panel-body">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Data Coverage</div>
+      <div id="signalCoverageContent" class="signal-panel-body">--</div>
+    </div>
+  </div>
+
+  <div class="grid3 signal-results-grid">
+    <div class="card">
+      <div class="card-title">Freshness Monitor</div>
+      <div id="signalFreshnessContent" class="signal-panel-body">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">VCP Near Miss</div>
+      <div id="vcpNearMissContent" class="signal-panel-body">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Auto-paper Gate</div>
+      <div id="autoPaperGateContent" class="signal-panel-body">--</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Source Reliability</div>
+    <div style="overflow-x:auto">
+      <table class="signal-table signal-source-table">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Signals</th>
+            <th>Paper</th>
+            <th>Closed</th>
+            <th>Win Rate</th>
+            <th>Expectancy</th>
+            <th>Stage</th>
+            <th>Next Action</th>
+          </tr>
+        </thead>
+        <tbody id="signalSourceRows">
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:28px">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Recent Thesis Candidates</div>
+    <div style="overflow-x:auto">
+      <table class="signal-table signal-thesis-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Source</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th>Grade</th>
+            <th>Next Review</th>
+          </tr>
+        </thead>
+        <tbody id="signalThesisRows">
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:28px">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<div id="toast"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
