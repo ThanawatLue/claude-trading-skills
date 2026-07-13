@@ -1,0 +1,103 @@
+{
+    "economic-calendar-fetcher": {
+        "output_format": "json+md",
+        "output_pattern": "economic_calendar_*.{json,md}",
+        "output_fields": ["date", "event", "impact", "country"],
+        "api_keys": ["FMP_API_KEY"]
+    },
+    "earnings-calendar": {
+        "output_format": "json+md",
+        "output_pattern": "earnings_calendar_*.{json,md}",
+        "output_fields": ["symbol", "date", "eps_estimate", "revenue_estimate"],
+        "api_keys": ["FMP_API_KEY"]
+    },
+    "earnings-trade-analyzer": {
+        "output_format": "json+md",
+        "output_pattern": "earnings_trade_*.{json,md}",
+        "output_fields": [
+            "symbol",
+            "grade",
+            "gap_pct",
+            "volume_ratio",
+            "trend_score"
+        ],
+        "api_keys": ["FMP_API_KEY"]
+    },
+    "pead-screener": {
+        "output_format": "json+md",
+        "output_pattern": "pead_*.{json,md}",
+        "output_fields": ["symbol", "status", "entry_price", "stop_loss"],
+        "api_keys": ["FMP_API_KEY"]
+    },
+    "edge-candidate-agent": {
+        "output_format": "json",
+        "output_pattern": "market_summary.json",
+        "output_fields": ["date", "market_summary", "anomalies"],
+        "api_keys": []
+    },
+    "edge-hint-extractor": {
+        "output_format": "yaml",
+        "output_pattern": "hints.yaml",
+        "output_fields": ["hints"],
+        "api_keys": []
+    },
+    "edge-concept-synthesizer": {
+        "output_format": "yaml",
+        "output_pattern": "edge_concepts.yaml",
+        "output_fields": ["concepts"],
+        "api_keys": []
+    },
+    "edge-strategy-designer": {
+        "output_format": "yaml",
+        "output_pattern": "strategy_drafts/*.yaml",
+        "output_fields": ["strategy_name", "entry", "exit", "risk"],
+        "api_keys": []
+    },
+    "edge-strategy-reviewer": {
+        "output_format": "yaml",
+        "output_pattern": "review.yaml",
+        "output_fields": ["verdict", "score", "feedback"],
+        "api_keys": []
+    },
+    "value-dividend-screener": {
+        "output_format": "json",
+        "output_pattern": "dividend_screen_*.json",
+        "output_fields": ["symbol", "dividend_yield", "payout_ratio", "score"],
+        "api_keys": ["FMP_API_KEY"]
+    },
+    "dividend-growth-pullback-screener": {
+        "output_format": "json",
+        "output_pattern": "dividend_growth_*.json",
+        "output_fields": ["symbol", "div_growth_rate", "rsi", "score"],
+        "api_keys": ["FMP_API_KEY"]
+    },
+    "position-sizer": {
+        "output_format": "json+md",
+        "output_pattern": "position_size_*.{json,md}",
+        "output_fields": ["shares", "position_value", "risk_amount"],
+        "api_keys": []
+    },
+    "data-quality-checker": {
+        "output_format": "json+md",
+        "output_pattern": "data_quality_*.{json,md}",
+        "output_fields": ["file", "checks", "pass_count", "fail_count"],
+        "api_keys": []
+    },
+    "theme-detector": {
+        "output_format": "json+md",
+        "output_pattern": "theme_*.{json,md}",
+        "output_fields": ["themes", "sector_correlation"],
+        "api_keys": []
+    },
+    "pair-trade-screener": {
+        "output_format": "json",
+        "output_pattern": "pair_trade_*.json",
+        "output_fields": [
+            "pair",
+            "correlation",
+            "cointegration_pvalue",
+            "z_score"
+        ],
+        "api_keys": ["FMP_API_KEY"]
+    }
+}

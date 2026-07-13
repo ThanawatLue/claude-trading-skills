@@ -1,0 +1,250 @@
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches:
+      - main
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute deployment commands via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script_stop: true
+          script: | # pragma: allowlist secret
+            set -euo pipefail
+
+            export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+            PROJECT_DIR_INPUT='${{ secrets.GCP_PROJECT_DIR }}'
+            DASHBOARD_SERVICE_INPUT='${{ secrets.GCP_DASHBOARD_SERVICE }}'
+            REPO_URL_PUBLIC='https://github.com/${{ github.repository }}.git'
+            REPO_URL_AUTH='https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git'
+
+            PROJECT_DIR="${PROJECT_DIR_INPUT:-}"
+            if [ -z "$PROJECT_DIR" ]; then
+              for candidate in "$HOME/tong_trading" "$HOME/claude-trading-skills-1" "$HOME/claude-trading-skills"; do
+                if [ -d "$candidate/.git" ]; then
+                  PROJECT_DIR="$candidate"
+                  break
+                fi
+              done
+            fi
+            if [ -z "$PROJECT_DIR" ]; then
+              PROJECT_DIR="$HOME/claude-trading-skills-1"
+            fi
+
+            if [ -e "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/.git" ]; then
+              echo "Deployment path exists but is not a git repository: $PROJECT_DIR"
+              exit 1
+            fi
+
+            if [ ! -d "$PROJECT_DIR/.git" ]; then
+              mkdir -p "$(dirname "$PROJECT_DIR")"
+              git clone "$REPO_URL_AUTH" "$PROJECT_DIR"
+              git -C "$PROJECT_DIR" remote set-url origin "$REPO_URL_PUBLIC"
+            fi
+
+            cd "$PROJECT_DIR"
+
+            git fetch "$REPO_URL_AUTH" main
+            git checkout -B main FETCH_HEAD
+            git reset --hard FETCH_HEAD
+
+            if ! command -v uv >/dev/null 2>&1; then
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+            fi
+
+            uv sync
+
+            mkdir -p logs reports/daily-signal-pipeline state
+            chmod +x scripts/run_gcp_daily_pipeline.sh scripts/setup_gcp_cron.sh
+
+            SERVICE_NAME="${DASHBOARD_SERVICE_INPUT:-dashboard.service}"
+            DASHBOARD_PORT=80
+            LOCAL_DASHBOARD_URL="http://127.0.0.1:${DASHBOARD_PORT}"
+            EXPECTED_SHA='${{ github.sha }}'
+            EXPECTED_SHORT="$(printf '%s' "$EXPECTED_SHA" | cut -c1-7)"
+
+            DASHBOARD_LOCAL_URL="$LOCAL_DASHBOARD_URL" bash scripts/setup_gcp_cron.sh
+
+            kill_port_listeners() {
+              port="$1"
+              for attempt in $(seq 1 8); do
+                pids=""
+                if command -v ss >/dev/null 2>&1; then
+                  pids="$(sudo ss -ltnp "sport = :$port" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u || true)"
+                fi
+                if [ -z "$pids" ] && command -v fuser >/dev/null 2>&1; then
+                  pids="$(sudo fuser "${port}/tcp" 2>/dev/null | tr ' ' '\n' | sed '/^$/d' | sort -u || true)"
+                fi
+                if [ -z "$pids" ]; then
+                  return 0
+                fi
+
+                echo "Stopping stale listener(s) on port $port (attempt $attempt): $pids"
+                if command -v systemctl >/dev/null 2>&1; then
+                  for pid in $pids; do
+                    unit="$(sudo systemctl status "$pid" --no-pager 2>/dev/null | sed -n 's/^● \([^ ]*\).*/\1/p' | head -n 1 || true)"
+                    if [ -n "$unit" ]; then
+                      echo "Stopping owner unit for pid $pid: $unit"
+                      sudo systemctl disable --now "$unit" || sudo systemctl stop "$unit" || true
+                      sudo systemctl kill --kill-who=all --signal=KILL "$unit" || true
+                      sudo systemctl reset-failed "$unit" || true
+                    fi
+                  done
+                fi
+                ps -o pid,ppid,pgid,sid,stat,cmd -p $pids || true
+                for pid in $pids; do
+                  sudo kill -TERM "$pid" || true
+                done
+                sleep 1
+                for pid in $pids; do
+                  if sudo kill -0 "$pid" 2>/dev/null; then
+                    sudo kill -KILL "$pid" || true
+                  fi
+                done
+                sleep 1
+              done
+
+              echo "Could not free port $port. Current listeners:"
+              if command -v ss >/dev/null 2>&1; then
+                sudo ss -ltnp "sport = :$port" || true
+              fi
+              exit 1
+            }
+
+            kill_dashboard_processes() {
+              if ! command -v pgrep >/dev/null 2>&1; then
+                return 0
+              fi
+              pids="$(pgrep -f "dashboard/app.py" || true)"
+              if [ -z "$pids" ]; then
+                return 0
+              fi
+              echo "Stopping stale dashboard process(es): $pids"
+              for pid in $pids; do
+                cmd="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+                exe="$(printf '%s\n' "$cmd" | awk '{print $1}')"
+                exe_base="$(basename "$exe" 2>/dev/null || true)"
+                if { [ "$exe_base" = "python" ] || [ "$exe_base" = "python3" ]; } \
+                  && printf '%s\n' "$cmd" | grep -Eq 'dashboard/app[.]py'; then
+                  sudo kill -TERM "$pid" || true
+                fi
+              done
+              sleep 2
+              pids="$(pgrep -f "dashboard/app.py" || true)"
+              for pid in $pids; do
+                cmd="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+                exe="$(printf '%s\n' "$cmd" | awk '{print $1}')"
+                exe_base="$(basename "$exe" 2>/dev/null || true)"
+                if { [ "$exe_base" = "python" ] || [ "$exe_base" = "python3" ]; } \
+                  && printf '%s\n' "$cmd" | grep -Eq 'dashboard/app[.]py'; then
+                  sudo kill -KILL "$pid" || true
+                fi
+              done
+            }
+
+            if command -v systemctl >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              sudo systemctl disable --now "$SERVICE_NAME" || true
+              sudo systemctl kill --kill-who=all --signal=KILL "$SERVICE_NAME" || true
+              sudo systemctl reset-failed "$SERVICE_NAME" || true
+              sudo systemctl mask --runtime "$SERVICE_NAME" || true
+              sleep 2
+
+              SERVICE_FILE="$(mktemp)"
+              {
+                printf '%s\n' '[Unit]'
+                printf '%s\n' 'Description=Tong Trading Dashboard'
+                printf '%s\n' 'After=network-online.target'
+                printf '%s\n' 'Wants=network-online.target'
+                printf '%s\n' ''
+                printf '%s\n' '[Service]'
+                printf '%s\n' 'Type=simple'
+                printf '%s\n' "User=$USER"
+                printf '%s\n' "WorkingDirectory=$PROJECT_DIR"
+                printf '%s\n' 'Environment=PYTHONUNBUFFERED=1'
+                printf '%s\n' 'Environment=FLASK_DEBUG=0'
+                printf '%s\n' 'Environment=DASHBOARD_HOST=0.0.0.0'
+                printf '%s\n' "Environment=DASHBOARD_PORT=$DASHBOARD_PORT"
+                printf '%s\n' "EnvironmentFile=-$PROJECT_DIR/.env"
+                printf '%s\n' "ExecStart=$PROJECT_DIR/.venv/bin/python dashboard/app.py"
+                printf '%s\n' 'Restart=always'
+                printf '%s\n' 'RestartSec=10'
+                printf '%s\n' 'AmbientCapabilities=CAP_NET_BIND_SERVICE'
+                printf '%s\n' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'
+                printf '%s\n' 'NoNewPrivileges=true'
+                printf '%s\n' ''
+                printf '%s\n' '[Install]'
+                printf '%s\n' 'WantedBy=multi-user.target'
+              } > "$SERVICE_FILE"
+              sudo install -m 0644 "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME"
+              rm -f "$SERVICE_FILE"
+              sudo systemctl daemon-reload
+              sudo systemctl stop "$SERVICE_NAME" || true
+              sudo systemctl kill --kill-who=all --signal=KILL "$SERVICE_NAME" || true
+              sudo systemctl reset-failed "$SERVICE_NAME" || true
+              kill_dashboard_processes
+              kill_port_listeners "$DASHBOARD_PORT"
+              kill_port_listeners 5050
+              sudo systemctl unmask --runtime "$SERVICE_NAME" || true
+              sudo systemctl daemon-reload
+              sudo systemctl enable "$SERVICE_NAME"
+              sudo systemctl start "$SERVICE_NAME"
+            else
+              echo "systemd or passwordless sudo is unavailable; using direct dashboard start."
+              kill_dashboard_processes
+              kill_port_listeners "$DASHBOARD_PORT"
+              kill_port_listeners 5050
+              DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$DASHBOARD_PORT" FLASK_DEBUG=0 \
+                nohup "$PROJECT_DIR/.venv/bin/python" dashboard/app.py > logs/dashboard.log 2>&1 &
+            fi
+
+            for attempt in $(seq 1 90); do
+              HEALTH="$(curl -fsS "$LOCAL_DASHBOARD_URL/api/health" 2>/dev/null || true)"
+              if printf '%s' "$HEALTH" | grep -q "$EXPECTED_SHORT"; then
+                echo "Dashboard health check passed for commit $EXPECTED_SHORT."
+                break
+              fi
+              if [ "$attempt" = "8" ]; then
+                echo "Dashboard health check has not matched commit $EXPECTED_SHORT; recycling stale listeners."
+                printf '%s\n' "$HEALTH"
+                if command -v systemctl >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                  sudo systemctl stop "$SERVICE_NAME" || true
+                  sudo systemctl kill --kill-who=all --signal=KILL "$SERVICE_NAME" || true
+                  sudo systemctl reset-failed "$SERVICE_NAME" || true
+                fi
+                kill_dashboard_processes
+                kill_port_listeners "$DASHBOARD_PORT"
+                kill_port_listeners 5050
+                if command -v systemctl >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+                  sudo systemctl start "$SERVICE_NAME"
+                else
+                  DASHBOARD_HOST=0.0.0.0 DASHBOARD_PORT="$DASHBOARD_PORT" FLASK_DEBUG=0 \
+                    nohup "$PROJECT_DIR/.venv/bin/python" dashboard/app.py > logs/dashboard.log 2>&1 &
+                fi
+              fi
+              if [ "$attempt" = "90" ]; then
+                echo "Dashboard health check failed. Last health response:"
+                printf '%s\n' "$HEALTH"
+                if command -v systemctl >/dev/null 2>&1; then
+                  sudo systemctl status "$SERVICE_NAME" --no-pager || true
+                  sudo journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
+                fi
+                if command -v ss >/dev/null 2>&1; then
+                  sudo ss -ltnp || true
+                fi
+                exit 1
+              fi
+              sleep 2
+            done
+
+            curl -fsS "$LOCAL_DASHBOARD_URL/api/signal-results?market=TH" >/dev/null
