@@ -3750,11 +3750,19 @@ function renderTradeDecisions(rows, stats, signalSummary) {
   const scanMessage = scanEligible > 0
     ? `${scanEligible} eligible new paper entries`
     : 'No eligible new paper entry in this scan';
+  const currentSkipped = (scanConfig.diagnostics?.skipped || [])
+    .filter(item => Number(item.age_days) === 0)
+    .slice(0, 4);
+  const currentWatch = currentSkipped.length
+    ? `<div style="margin-top:5px">Current candidates: ${currentSkipped.map(item =>
+        `<b>${_tdEscape((item.symbol || '').replace('.BK', ''))}</b> ${_tdEscape(item.raw_score)} (${_tdEscape((item.reasons || [])[0] || 'not selected')})`
+      ).join(' · ')}</div>`
+    : '';
 
   content.innerHTML = `
     <div class="trade-data-note" style="margin-bottom:12px;border-color:${scanEligible > 0 ? 'var(--gold)' : 'var(--cyan)'}">
       Latest scan: <b>${_tdEscape(scanAsOf)}</b> · Freshness: <b>${scanStatus}</b> · <b>${_tdEscape(scanMessage)}</b>.
-      Existing rows below are historical paper trades and are not new signals.
+      Existing rows below are historical paper trades and are not new signals.${currentWatch}
     </div>
     <div style="overflow-x:auto">
       <table class="signal-table trade-decision-table">
