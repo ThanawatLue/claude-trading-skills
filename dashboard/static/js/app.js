@@ -3151,16 +3151,17 @@ const VALID_EMOTIONS = ['calm','fearful','greedy','frustrated','fomo','confident
 async function paperRefresh() {
   try {
     const marketParam = currentMarket ? `&market=${encodeURIComponent(currentMarket)}` : '';
-    const [openRes, closedRes, statsRes] = await Promise.all([
+    const [openRes, closedRes, statsRes, signalSummary] = await Promise.all([
       fetch(`/api/paper/list?status=open${marketParam}`).then(r=>r.json()),
       fetch(`/api/paper/list?status=closed${marketParam}`).then(r=>r.json()),
       fetch(`/api/paper/stats?market=${encodeURIComponent(currentMarket || '')}`).then(r=>r.json()),
+      fetch(`/api/signal-results?market=${encodeURIComponent(currentMarket || '')}`).then(r=>r.json()),
     ]);
     renderPaperStats(statsRes);
     renderPaperOpen(openRes);
     renderPaperClosed(closedRes);
     if (CURRENT_DASHBOARD_TAB === 'decisions') {
-      renderTradeDecisions([...(openRes || []), ...(closedRes || [])], statsRes);
+      renderTradeDecisions([...(openRes || []), ...(closedRes || [])], statsRes, signalSummary);
     }
   } catch (e) {
     console.error('paperRefresh failed:', e);
@@ -3481,11 +3482,12 @@ async function loadTradeDecisions() {
   if (content) content.innerHTML = 'Loading trade decisions...';
   try {
     const market = encodeURIComponent(currentMarket || '');
-    const [rows, stats] = await Promise.all([
+    const [rows, stats, signalSummary] = await Promise.all([
       fetch(`/api/paper/list?status=all&market=${market}`).then(r => r.json()),
       fetch(`/api/paper/stats?market=${market}`).then(r => r.json()),
+      fetch(`/api/signal-results?market=${market}`).then(r => r.json()),
     ]);
-    renderTradeDecisions(rows, stats);
+    renderTradeDecisions(rows, stats, signalSummary);
   } catch (e) {
     console.error('loadTradeDecisions failed:', e);
     if (content) content.innerHTML = `<span style="color:var(--red)">Could not load trade decisions: ${_tdEscape(e.message)}</span>`;
@@ -3610,7 +3612,7 @@ function _tdOpenRule(r) {
   return 'Manual paper trade opened from the dashboard.';
 }
 
-function renderTradeDecisions(rows, stats) {
+function renderTradeDecisions(rows, stats, signalSummary) {
   const content = document.getElementById('tradeDecisionContent');
   if (!content) return;
 
@@ -3739,7 +3741,21 @@ function renderTradeDecisions(rows, stats) {
     `;
   }).join('');
 
+  const scan = signalSummary || {};
+  const scanFreshness = scan.freshness || {};
+  const scanConfig = scan.auto_paper || {};
+  const scanEligible = Number(scanConfig.eligible) || 0;
+  const scanAsOf = scan.as_of ? _tdTime(scan.as_of) : '--';
+  const scanStatus = _tdEscape(scanFreshness.overall_status || 'unknown');
+  const scanMessage = scanEligible > 0
+    ? `${scanEligible} eligible new paper entries`
+    : 'No eligible new paper entry in this scan';
+
   content.innerHTML = `
+    <div class="trade-data-note" style="margin-bottom:12px;border-color:${scanEligible > 0 ? 'var(--gold)' : 'var(--cyan)'}">
+      Latest scan: <b>${_tdEscape(scanAsOf)}</b> · Freshness: <b>${scanStatus}</b> · <b>${_tdEscape(scanMessage)}</b>.
+      Existing rows below are historical paper trades and are not new signals.
+    </div>
     <div style="overflow-x:auto">
       <table class="signal-table trade-decision-table">
         <thead>
