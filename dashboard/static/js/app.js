@@ -1513,25 +1513,32 @@ function onSliderInput() {
 
 function loadSettings() {
   const s = localStorage.getItem('tradingSettings');
-  if (!s) return;
+  let saved = null;
   try {
-    const p = JSON.parse(s);
-    if (p.account) document.getElementById('settingAccount').value = p.account;
-    if (p.risk) {
-      document.getElementById('settingRisk').value = p.risk;
-      const valRiskEl = document.getElementById('valRisk');
-      if (valRiskEl) valRiskEl.textContent = parseFloat(p.risk).toFixed(1) + '%';
-    }
-    if (p.target) {
-      document.getElementById('settingTarget').value = p.target;
-      const valTargetEl = document.getElementById('valTarget');
-      if (valTargetEl) valTargetEl.textContent = parseFloat(p.target).toFixed(1) + 'R';
-    }
-    // Restore market preference if previously selected
-    if (p.market && (p.market === 'TH' || p.market === 'US')) {
-      currentMarket = p.market;
-    }
-  } catch(e) {}
+    saved = s ? JSON.parse(s) : null;
+  } catch(e) { saved = null; }
+
+  // Restore market preference if previously selected.
+  if (saved?.market === 'TH' || saved?.market === 'US') currentMarket = saved.market;
+
+  const defaults = currentMarket === 'TH'
+    ? { account: '30000', risk: '1.0', target: '2.0' }
+    : { account: '50000', risk: '0.5', target: '2.0' };
+  const values = saved || defaults;
+  if (values.account) document.getElementById('settingAccount').value = values.account;
+  if (values.risk) {
+    document.getElementById('settingRisk').value = values.risk;
+    const valRiskEl = document.getElementById('valRisk');
+    if (valRiskEl) valRiskEl.textContent = parseFloat(values.risk).toFixed(1) + '%';
+  }
+  if (values.target) {
+    document.getElementById('settingTarget').value = values.target;
+    const valTargetEl = document.getElementById('valTarget');
+    if (valTargetEl) valTargetEl.textContent = parseFloat(values.target).toFixed(1) + 'R';
+  }
+
+  const accountLabel = document.getElementById('labelAccountSize');
+  if (accountLabel) accountLabel.textContent = currentMarket === 'TH' ? 'Account Size (฿)' : 'Account Size ($)';
 }
 
 // ─── THEME TOGGLE ────────────────────────────────────────────────────────────
@@ -1568,10 +1575,13 @@ function getChartTheme() {
 }
 
 function getSettings() {
+  const defaults = currentMarket === 'TH'
+    ? { account: '30000', risk: '1.0', target: '2.0' }
+    : { account: '50000', risk: '0.5', target: '2.0' };
   return {
-    account_size: document.getElementById('settingAccount').value || '50000',
-    risk_pct: document.getElementById('settingRisk').value || '0.5',
-    target_r: document.getElementById('settingTarget').value || '2.0',
+    account_size: document.getElementById('settingAccount').value || defaults.account,
+    risk_pct: document.getElementById('settingRisk').value || defaults.risk,
+    target_r: document.getElementById('settingTarget').value || defaults.target,
   };
 }
 
