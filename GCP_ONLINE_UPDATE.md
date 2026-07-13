@@ -1,6 +1,6 @@
 # GCP Online Automation Update
 
-Last updated: 2026-07-01
+Last updated: 2026-07-13
 
 ## What Changed
 
@@ -11,6 +11,9 @@ Changed files:
 - `.github/workflows/deploy.yml`
 - `scripts/setup_gcp_cron.sh`
 - `scripts/run_gcp_daily_pipeline.sh`
+- `scripts/fee_model.py`
+- `dashboard/app.py`
+- `state/automation_config.yaml`
 
 ## Deployment Flow
 
@@ -66,18 +69,43 @@ It performs:
 1. Ingest thesis files.
 2. Ingest signal files from configured report patterns.
 3. Update forward outcomes.
-4. Run auto-paper in dry-run mode by default.
+4. Run the configured auto-paper validation profile.
 5. Write daily reports.
 
-Default config is still safe:
+Current online validation config is:
 
 ```yaml
 auto_paper:
   enabled: true
-  execute: false
+  execute: true
+  account_size: 30000
+  risk_per_trade_pct: 1
+  max_position_pct: 20
+  max_portfolio_heat_pct: 3
+  max_new_positions: 4
+  max_open_positions: 4
+  fee_model:
+    broker: innovestx
+    commission_pct: 0.15
+    trading_fee_pct: 0.005
+    clearing_fee_pct: 0.001
+    vat_pct: 7
+    slippage_bps: 5
 ```
 
-So the VM will not open new paper positions unless `execute` is explicitly enabled.
+The effective estimated transaction cost is `21.692 bps` per side. The slippage value is an explicit paper-trading assumption, not a broker quote.
+
+`execute: true` only enables simulated paper entries. The VM has no InnovestX order-submission path, so this deployment cannot place real orders.
+
+## Current Online Verification
+
+The dashboard is available at:
+
+```text
+http://35.212.209.201/
+```
+
+The `/api/health` endpoint reports service status `ok` and deployed commit `a622f45`. `/api/signal-results?market=TH` reports the 30,000 THB account profile and InnovestX fee model.
 
 ## Logs And Reports
 

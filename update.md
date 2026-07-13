@@ -990,3 +990,38 @@ scripts/tests/test_auto_paper.py
 scripts/tests/test_daily_signal_pipeline.py
 skills/paper-trade-simulator/scripts/tests/test_paper_trade.py
 ```
+
+## InnovestX Paper-Validation Profile And Online Dashboard (2026-07-13)
+
+Changes:
+
+- Replaced the conservative validation profile with an explicit TH paper-account profile:
+  - account size: THB `30,000`
+  - risk per trade: `1%` (`THB 300`)
+  - maximum position value: `20%` (`THB 6,000`)
+  - maximum combined portfolio heat: `3%` (`THB 900`)
+  - maximum new/open positions: `4`
+- Added the InnovestX cash-balance fee model to `state/automation_config.yaml`:
+  - commission: `0.15%`
+  - trading fee: `0.005%`
+  - clearing fee: `0.001%`
+  - VAT: `7%` on broker fees
+  - estimated slippage: `5 bps` (paper-trading assumption)
+  - effective estimated cost: `21.692 bps` per side
+- Updated the dashboard Signal Results endpoint to expose the fee model and use the configured effective transaction cost.
+- Deployed the profile and dashboard update to the GCP VM. The public health endpoint reports commit `a622f45`.
+
+Safety:
+
+- This remains paper trading only. `execute: true` enables the paper simulator; it does not connect to InnovestX or submit real orders.
+- Existing signal/outcome records are retained. A deployment does not create fresh signals automatically; the scheduled pipeline must run before new candidates appear.
+
+Verification:
+
+```text
+32 passed, 1 time-sensitive session test deselected
+scripts/tests/test_fee_model.py
+scripts/tests/test_daily_signal_pipeline.py
+scripts/tests/test_auto_paper.py
+skills/paper-trade-simulator/scripts/tests/test_paper_trade.py
+```
