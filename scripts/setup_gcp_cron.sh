@@ -14,8 +14,10 @@ echo "================================================"
 
 # Dashboard scan jobs. GCP exposes the managed dashboard on localhost:80 by default.
 DASHBOARD_LOCAL_URL="${DASHBOARD_LOCAL_URL:-http://127.0.0.1:80}"
-SCAN_TH_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs && flock -n /tmp/tong_trading_scan_TH.lock timeout 45m curl -fsS --max-time 2640 \"$DASHBOARD_LOCAL_URL/api/run?market=TH\" >> \"$PROJECT_ROOT/logs/gcp_scan_TH.log\" 2>&1"
-SCAN_US_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs && flock -n /tmp/tong_trading_scan_US.lock timeout 45m curl -fsS --max-time 2640 \"$DASHBOARD_LOCAL_URL/api/run?market=US\" >> \"$PROJECT_ROOT/logs/gcp_scan_US.log\" 2>&1"
+LOCK_DIR="$PROJECT_ROOT/state/locks"
+mkdir -p "$LOCK_DIR"
+SCAN_TH_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs \"$LOCK_DIR\" && flock -n \"$LOCK_DIR/tong_trading_scan_TH.lock\" timeout 45m curl -fsS --max-time 2640 \"$DASHBOARD_LOCAL_URL/api/run?market=TH\" >> \"$PROJECT_ROOT/logs/gcp_scan_TH.log\" 2>&1"
+SCAN_US_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs \"$LOCK_DIR\" && flock -n \"$LOCK_DIR/tong_trading_scan_US.lock\" timeout 45m curl -fsS --max-time 2640 \"$DASHBOARD_LOCAL_URL/api/run?market=US\" >> \"$PROJECT_ROOT/logs/gcp_scan_US.log\" 2>&1"
 CRON_TH_MORN="15 10 * * 1-5 $SCAN_TH_CMD"
 CRON_TH_EVE="15 16 * * 1-5 $SCAN_TH_CMD"
 CRON_US_SCAN="30 20 * * 1-5 $SCAN_US_CMD"

@@ -12,11 +12,6 @@ on:
         required: false
         type: boolean
         default: false
-      diagnose_schedule:
-        description: "Print cron and daily-pipeline diagnostics from the VM"
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   deploy:
@@ -85,7 +80,6 @@ jobs:
             EXPECTED_SHA='${{ github.sha }}'
             EXPECTED_SHORT="$(printf '%s' "$EXPECTED_SHA" | cut -c1-7)"
             RESET_PAPER="${{ inputs.reset_paper || 'false' }}"
-            DIAGNOSE_SCHEDULE="${{ inputs.diagnose_schedule || 'false' }}"
 
             DASHBOARD_LOCAL_URL="$LOCAL_DASHBOARD_URL" bash scripts/setup_gcp_cron.sh
 
@@ -261,30 +255,6 @@ jobs:
             done
 
             curl -fsS "$LOCAL_DASHBOARD_URL/api/signal-results?market=TH" >/dev/null
-
-            if [ "$DIAGNOSE_SCHEDULE" = "true" ]; then
-              echo "=== SCHEDULE DIAGNOSTICS ==="
-              date -Is || true
-              echo "--- crontab ---"
-              crontab -l || true
-              echo "--- cron service ---"
-              if command -v systemctl >/dev/null 2>&1; then
-                sudo systemctl status cron --no-pager || sudo systemctl status crond --no-pager || true
-              fi
-              echo "--- recent scan/pipeline logs ---"
-              for log_file in \
-                "$PROJECT_DIR/logs/gcp_scan_TH.log" \
-                "$PROJECT_DIR/logs/daily_signal_pipeline_TH.log" \
-                "$PROJECT_DIR/logs/gcp_paper_marks.log"; do
-                echo "### $log_file"
-                if [ -f "$log_file" ]; then
-                  tail -n 80 "$log_file"
-                else
-                  echo "MISSING"
-                fi
-              done
-              echo "=== END SCHEDULE DIAGNOSTICS ==="
-            fi
 
             if [ "$RESET_PAPER" = "true" ]; then
               echo "Resetting paper portfolio after the fresh database sync."

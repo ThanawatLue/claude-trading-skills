@@ -7,12 +7,13 @@ MARKET="${1:-TH}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 LOG_DIR="$PROJECT_ROOT/logs"
-LOCK_FILE="/tmp/tong_trading_daily_pipeline_${MARKET}.lock"
+LOCK_DIR="$PROJECT_ROOT/state/locks"
+LOCK_FILE="$LOCK_DIR/daily_signal_pipeline_${MARKET}.lock"
 DASHBOARD_LOCAL_URL="${DASHBOARD_LOCAL_URL:-http://127.0.0.1:80}"
 
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" "$LOCK_DIR"
 cd "$PROJECT_ROOT"
 
 refresh_paper_marks() {
