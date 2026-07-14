@@ -61,6 +61,10 @@ jobs:
             cd "$PROJECT_DIR"
 
             git fetch "$REPO_URL_AUTH" main
+            # The legacy minute updater may leave tracked files modified. The
+            # deployment source of truth is the fetched main revision; keep
+            # runtime state files outside git untouched.
+            git reset --hard
             git checkout -B main FETCH_HEAD
             git reset --hard FETCH_HEAD
 
