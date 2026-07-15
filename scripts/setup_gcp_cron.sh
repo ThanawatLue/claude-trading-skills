@@ -37,6 +37,28 @@ cleanup() {
 }
 trap cleanup EXIT
 
+ensure_cron_service() {
+    # Installing a crontab does not start the cron daemon.  Keep the
+    # scheduler self-healing after VM reboots or service interruptions.
+    if ! command -v systemctl >/dev/null 2>&1 || ! sudo -n true 2>/dev/null; then
+        echo "WARNING: systemd/passwordless sudo unavailable; cannot verify cron daemon."
+        return 0
+    fi
+
+    for service in cron.service crond.service; do
+        if sudo systemctl cat "$service" >/dev/null 2>&1; then
+            sudo systemctl enable --now "$service"
+            if sudo systemctl is-active --quiet "$service"; then
+                echo "Cron service is active: $service"
+                return 0
+            fi
+        fi
+    done
+
+    echo "ERROR: no active cron service found after installing crontab." >&2
+    return 1
+}
+
 crontab -l > "$CURRENT_CRON" 2>/dev/null || true
 
 # Replace the managed block and remove older unmanaged versions of these jobs.
@@ -72,6 +94,7 @@ awk '
 } >> "$CLEAN_CRON"
 
 crontab "$CLEAN_CRON"
+ensure_cron_service
 echo "Cron jobs successfully installed or updated."
 echo "Current crontab configuration:"
 crontab -l
