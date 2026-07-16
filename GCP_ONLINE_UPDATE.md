@@ -37,23 +37,21 @@ This means the VM should receive both dashboard updates and cron automation upda
 ## Cron Jobs Installed On GCP
 
 The cron setup script now keeps the original dashboard scans and adds follow-up daily signal pipeline jobs.
-The managed cron block is installed with `CRON_TZ=Asia/Bangkok`, so the times below are Bangkok time regardless of the VM's system timezone.
+The GCP VM runs UTC, so the managed cron block uses `CRON_TZ=UTC` and encodes Bangkok times explicitly. This avoids the VM interpreting a Bangkok-looking schedule as UTC.
 Each deploy replaces the managed block to prevent stale or duplicate automation jobs.
 
 TH market:
 
 ```text
-10:15 Mon-Fri  scan dashboard: /api/run?market=TH
-10:45 Mon-Fri  run signal pipeline: scripts/run_gcp_daily_pipeline.sh TH
-16:15 Mon-Fri  scan dashboard: /api/run?market=TH
-16:45 Mon-Fri  run signal pipeline: scripts/run_gcp_daily_pipeline.sh TH
+10:00-17:00 Bangkok Mon-Fri  scan dashboard hourly (03:00-10:00 UTC): /api/run?market=TH
+10:30-17:30 Bangkok Mon-Fri  refresh paper marks hourly (03:30-10:30 UTC)
 ```
 
 US market:
 
 ```text
-20:30 Mon-Fri  scan dashboard: /api/run?market=US
-21:00 Mon-Fri  run signal pipeline: scripts/run_gcp_daily_pipeline.sh US
+20:30 Bangkok Mon-Fri  scan dashboard (13:30 UTC): /api/run?market=US
+21:00 Bangkok Mon-Fri  run signal pipeline (14:00 UTC): scripts/run_gcp_daily_pipeline.sh US
 ```
 
 ## What The Pipeline Does

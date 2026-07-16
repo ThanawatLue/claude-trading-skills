@@ -9,7 +9,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 echo "=== TRADING INTELLIGENCE AUTOMATION SETUP ==="
 echo "This script configures crontab jobs on this GCP VM."
 echo "It runs hourly dashboard scans and paper mark updates. The scan endpoint also runs the signal ledger / auto-paper follow-up."
-echo "Cron timezone is fixed to Asia/Bangkok."
+echo "Cron timezone is fixed to UTC; Bangkok times are encoded explicitly below."
 echo "================================================"
 
 # Dashboard scan jobs. GCP exposes the managed dashboard on localhost:80 by default.
@@ -18,16 +18,19 @@ LOCK_DIR="$PROJECT_ROOT/state/locks"
 mkdir -p "$LOCK_DIR"
 SCAN_TH_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs \"$LOCK_DIR\" && flock -n \"$LOCK_DIR/tong_trading_scan_TH.lock\" timeout 45m curl -fsS --max-time 2640 \"$DASHBOARD_LOCAL_URL/api/run?market=TH\" >> \"$PROJECT_ROOT/logs/gcp_scan_TH.log\" 2>&1"
 SCAN_US_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs \"$LOCK_DIR\" && flock -n \"$LOCK_DIR/tong_trading_scan_US.lock\" timeout 45m curl -fsS --max-time 2640 \"$DASHBOARD_LOCAL_URL/api/run?market=US\" >> \"$PROJECT_ROOT/logs/gcp_scan_US.log\" 2>&1"
-CRON_TH_HOURLY="0 10-17 * * 1-5 $SCAN_TH_CMD"
-CRON_US_SCAN="30 20 * * 1-5 $SCAN_US_CMD"
+# The GCP VM runs UTC. Encode Bangkok market hours explicitly so cron cannot
+# silently interpret the schedule in the VM's local timezone.
+# TH 10:00-17:00 ICT = 03:00-10:00 UTC.
+CRON_TH_HOURLY="0 3-10 * * 1-5 $SCAN_TH_CMD"
+CRON_US_SCAN="30 13 * * 1-5 $SCAN_US_CMD"
 
 # The TH scan endpoint already invokes the signal pipeline after each scan.
-CRON_US_PIPE="0 21 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_daily_pipeline.sh US"
+CRON_US_PIPE="0 14 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_daily_pipeline.sh US"
 
 # Mark updates refresh open paper positions after each hourly scan.
 MARKS_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs && curl -fsS -X POST --max-time 600 \"$DASHBOARD_LOCAL_URL/api/paper/update_marks\" >> \"$PROJECT_ROOT/logs/gcp_paper_marks.log\" 2>&1"
-CRON_TH_MARKS="30 10-17 * * 1-5 $MARKS_CMD"
-CRON_US_MARKS="30 21 * * 1-5 $MARKS_CMD"
+CRON_TH_MARKS="30 3-10 * * 1-5 $MARKS_CMD"
+CRON_US_MARKS="30 14 * * 1-5 $MARKS_CMD"
 
 CURRENT_CRON=$(mktemp)
 CLEAN_CRON=$(mktemp)
@@ -79,7 +82,7 @@ awk '
 {
     echo ""
     echo "# BEGIN TONG_TRADING_AUTOMATION"
-    echo "CRON_TZ=Asia/Bangkok"
+    echo "CRON_TZ=UTC"
     echo "# Automated Trading Intelligence Scans (TH Market)"
     echo "$CRON_TH_HOURLY"
     echo "# Automated Paper Mark Updates (TH Market)"
