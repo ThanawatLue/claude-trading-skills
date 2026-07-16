@@ -22,3 +22,12 @@ def test_gcp_jobs_use_project_writable_lock_directory():
     assert "CRON_TH_PIPE_MORN=" not in cron_script
     assert 'sudo systemctl enable --now "$service"' in cron_script
     assert 'sudo systemctl is-active --quiet "$service"' in cron_script
+
+
+def test_gcp_deploy_pins_fetched_revision_before_checkout():
+    workflow = (ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+
+    assert 'DEPLOY_SHA="$(git rev-parse FETCH_HEAD)"' in workflow
+    assert 'git checkout -B main "$DEPLOY_SHA"' in workflow
+    assert 'git reset --hard "$DEPLOY_SHA"' in workflow
+    assert "git checkout -B main FETCH_HEAD" not in workflow
