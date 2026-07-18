@@ -8,6 +8,7 @@ For each open position:
 4. If price crossed stop → auto-close with status=closed_stop
 5. If price crossed target → auto-close with status=closed_target
 """
+
 from __future__ import annotations
 
 import json
@@ -88,6 +89,7 @@ def _fetch_price(symbol: str) -> float | None:
     """Get latest close price via yfinance. Returns None on failure."""
     try:
         import yfinance as yf
+
         t = yf.Ticker(symbol)
         h = t.history(period="2d")
         if h.empty:
@@ -96,6 +98,21 @@ def _fetch_price(symbol: str) -> float | None:
     except Exception as e:
         print(f"  fetch error for {symbol}: {e}", file=sys.stderr)
         return None
+
+
+def _cached_price(symbol: str) -> float | None:
+    """Return the latest cached daily close when live feeds are unavailable."""
+    try:
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT close FROM price_bar WHERE symbol=? ORDER BY date DESC LIMIT 1",
+                (symbol.upper(),),
+            ).fetchone()
+        if row is not None and row["close"] is not None:
+            return float(row["close"])
+    except (sqlite3.Error, TypeError, ValueError, KeyError) as e:
+        logging.debug("Cached price unavailable for %s: %s", symbol, e)
+    return None
 
 
 def update_one(
@@ -122,7 +139,10 @@ def update_one(
     r_mult = pnl / (risk_per_share * shares) if risk_per_share > 0 else 0
     new_mae = min(row["mae"] or price, price) if side == "long" else max(row["mae"] or price, price)
     new_mfe = max(row["mfe"] or price, price) if side == "long" else min(row["mfe"] or price, price)
-    days = (datetime.fromisoformat(_now_iso()).replace(tzinfo=None) - datetime.fromisoformat(row["entry_at"]).replace(tzinfo=None)).days
+    days = (
+        datetime.fromisoformat(_now_iso()).replace(tzinfo=None)
+        - datetime.fromisoformat(row["entry_at"]).replace(tzinfo=None)
+    ).days
     rule = _rule_for_source(row["source"], source_rules)
     take_profit_r = rule.get("take_profit_r")
     max_hold_days = rule.get("max_hold_days")
@@ -138,39 +158,71 @@ def update_one(
             short_target_price = entry - (risk_per_share * float(take_profit_r))
             hit_short_target = price <= short_target_price
     hit_time_stop = (
-        max_hold_days is not None
-        and days >= int(max_hold_days)
-        and r_mult < time_stop_min_r
+        max_hold_days is not None and days >= int(max_hold_days) and r_mult < time_stop_min_r
     )
 
     # Auto-close cases (priority: stop > target because stop fires first if both crossed)
     if hit_stop:
         # Close at stop price (assume execution at stop)
-        close_position(row["id"], row["stop_price"], status=STATUS_CLOSED_STOP,
-                       notes=f"Auto-closed: price {price:.2f} crossed stop {row['stop_price']:.2f}")
-        return {"id": row["id"], "symbol": row["symbol"], "action": "auto_closed_stop",
-                "exit_price": row["stop_price"]}
+        close_position(
+            row["id"],
+            row["stop_price"],
+            status=STATUS_CLOSED_STOP,
+            notes=f"Auto-closed: price {price:.2f} crossed stop {row['stop_price']:.2f}",
+        )
+        return {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "action": "auto_closed_stop",
+            "exit_price": row["stop_price"],
+        }
     if hit_target:
-        close_position(row["id"], row["target_price"], status=STATUS_CLOSED_TARGET,
-                       notes=f"Auto-closed: price {price:.2f} hit target {row['target_price']:.2f}")
-        return {"id": row["id"], "symbol": row["symbol"], "action": "auto_closed_target",
-                "exit_price": row["target_price"]}
+        close_position(
+            row["id"],
+            row["target_price"],
+            status=STATUS_CLOSED_TARGET,
+            notes=f"Auto-closed: price {price:.2f} hit target {row['target_price']:.2f}",
+        )
+        return {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "action": "auto_closed_target",
+            "exit_price": row["target_price"],
+        }
     if hit_short_target and short_target_price is not None:
-        close_position(row["id"], short_target_price, status=STATUS_CLOSED_TARGET,
-                       notes=(
-                           f"Auto-closed: short profit target {take_profit_r:g}R "
-                           f"reached at price {price:.2f}"
-                       ))
-        return {"id": row["id"], "symbol": row["symbol"], "action": "auto_closed_short_target",
-                "exit_price": round(short_target_price, 4), "r": float(take_profit_r)}
+        close_position(
+            row["id"],
+            short_target_price,
+            status=STATUS_CLOSED_TARGET,
+            notes=(
+                f"Auto-closed: short profit target {take_profit_r:g}R reached at price {price:.2f}"
+            ),
+        )
+        return {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "action": "auto_closed_short_target",
+            "exit_price": round(short_target_price, 4),
+            "r": float(take_profit_r),
+        }
     if hit_time_stop:
-        close_position(row["id"], price, status=STATUS_CLOSED_TIME,
-                       notes=(
-                           f"Auto-closed: time stop after {days}d; "
-                           f"current R {r_mult:.2f} < required {time_stop_min_r:.2f}R"
-                       ))
-        return {"id": row["id"], "symbol": row["symbol"], "action": "auto_closed_time",
-                "exit_price": price, "r": round(r_mult, 2), "days": days}
+        close_position(
+            row["id"],
+            price,
+            status=STATUS_CLOSED_TIME,
+            notes=(
+                f"Auto-closed: time stop after {days}d; "
+                f"current R {r_mult:.2f} < required {time_stop_min_r:.2f}R"
+            ),
+        )
+        return {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "action": "auto_closed_time",
+            "exit_price": price,
+            "r": round(r_mult, 2),
+            "days": days,
+        }
 
     # Otherwise just update marks
     with _db() as conn:
@@ -181,14 +233,19 @@ def update_one(
                WHERE id=?""",
             (price, _now_iso(), pnl, r_mult, new_mae, new_mfe, days, row["id"]),
         )
-    return {"id": row["id"], "symbol": row["symbol"], "action": "marked",
-            "price": price, "pnl": round(pnl, 2), "r": round(r_mult, 2)}
+    return {
+        "id": row["id"],
+        "symbol": row["symbol"],
+        "action": "marked",
+        "price": price,
+        "pnl": round(pnl, 2),
+        "r": round(r_mult, 2),
+    }
 
 
 def update_all() -> list[dict]:
     with _db() as conn:
-        opens = conn.execute("SELECT * FROM paper_trade WHERE status=?",
-                             (STATUS_OPEN,)).fetchall()
+        opens = conn.execute("SELECT * FROM paper_trade WHERE status=?", (STATUS_OPEN,)).fetchall()
     if not opens:
         return []
 
@@ -200,8 +257,7 @@ def update_all() -> list[dict]:
 
     # TradingView fallback for Thai stocks (.BK)
     thai_failures = [
-        sym for sym in unique_symbols
-        if sym.upper().endswith(".BK") and prices[sym] is None
+        sym for sym in unique_symbols if sym.upper().endswith(".BK") and prices[sym] is None
     ]
     if thai_failures:
         print(f"Attempting TradingView fallback for Thai stocks: {thai_failures}", file=sys.stderr)
@@ -213,13 +269,23 @@ def update_all() -> list[dict]:
 
             if tv_client.is_available():
                 stocks = tv_client.get_thai_stocks()
-                tv_prices = {s["symbol"].upper(): s["price"] for s in stocks if "symbol" in s and "price" in s}
+                tv_prices = {
+                    s["symbol"].upper(): s["price"]
+                    for s in stocks
+                    if "symbol" in s and "price" in s
+                }
                 for sym in thai_failures:
                     prices[sym] = tv_prices.get(sym.upper())
                     if prices[sym] is not None:
-                        print(f"  Successfully fetched TV fallback price for {sym}: {prices[sym]}", file=sys.stderr)
+                        print(
+                            f"  Successfully fetched TV fallback price for {sym}: {prices[sym]}",
+                            file=sys.stderr,
+                        )
             else:
-                print("  TradingView screener is not available (is_available() returned False)", file=sys.stderr)
+                print(
+                    "  TradingView screener is not available (is_available() returned False)",
+                    file=sys.stderr,
+                )
         except ImportError:
             logging.warning(
                 "tv_client not found. TradingView fallback for Thai stocks is disabled. "
@@ -232,13 +298,30 @@ def update_all() -> list[dict]:
             if str(tv_path) in sys.path:
                 sys.path.remove(str(tv_path))
 
+    # Weekend/holiday fallback: keep the paper dashboard markable from the
+    # latest daily close even when live feeds have no current bar.
+    cache_failures = [sym for sym in unique_symbols if prices[sym] is None]
+    for sym in cache_failures:
+        prices[sym] = _cached_price(sym)
+        if prices[sym] is not None:
+            print(f"  Using cached daily close for {sym}: {prices[sym]}")
+
     source_rules = _load_exit_rules()
     results = []
     for row in opens:
         price = prices.get(row["symbol"])
         if price is None:
-            results.append({"id": row["id"], "symbol": row["symbol"],
-                            "action": "fetch_failed"})
+            if row["last_price"] is not None:
+                results.append(
+                    {
+                        "id": row["id"],
+                        "symbol": row["symbol"],
+                        "action": "mark_unchanged",
+                        "price": row["last_price"],
+                    }
+                )
+                continue
+            results.append({"id": row["id"], "symbol": row["symbol"], "action": "fetch_failed"})
             continue
         results.append(update_one(row, price, source_rules))
     return results

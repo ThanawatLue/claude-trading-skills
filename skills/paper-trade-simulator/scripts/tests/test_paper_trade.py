@@ -314,6 +314,23 @@ class TestPaperTrade(unittest.TestCase):
             if "tv_client" in sys.modules:
                 del sys.modules["tv_client"]
 
+    def test_update_marks_cached_price_fallback(self):
+        paper_trade.open_position(
+            symbol="KISS.BK", market="TH", shares=100, entry=3.46, stop=3.36, target=3.54
+        )
+
+        with (
+            patch("update_marks._fetch_price", return_value=None),
+            patch("update_marks._cached_price", return_value=3.48),
+        ):
+            results = update_marks.update_all()
+
+        self.assertEqual(results[0]["action"], "marked")
+        self.assertEqual(results[0]["price"], 3.48)
+        self.assertAlmostEqual(results[0]["pnl"], 2.0)
+        position = paper_trade.list_positions(status_filter="open")[0]
+        self.assertEqual(position["last_price"], 3.48)
+
     def test_update_marks_closes_short_profit_target(self):
         with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
             paper_trade.open_position(
