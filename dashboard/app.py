@@ -530,16 +530,16 @@ def api_data():
         snapshot = db_load_run(market, at)
         if not snapshot:
             return jsonify({"error": f"No data for {market} at {at}"}), 404
-        return jsonify(snapshot)
+        return jsonify(_clean_nan(snapshot))
 
     # Live view: use the latest report files and retain the DB snapshot only as
     # a fallback for sections that are not available yet.
     snapshot = db_load_run(market)
     if snapshot:
         fresh = _collect_snapshot(market)
-        return jsonify(_merge_live_snapshot(snapshot, fresh))
+        return jsonify(_clean_nan(_merge_live_snapshot(snapshot, fresh)))
 
-    return jsonify(_collect_snapshot(market))
+    return jsonify(_clean_nan(_collect_snapshot(market)))
 
 
 @app.route("/api/runs")

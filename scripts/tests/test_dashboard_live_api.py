@@ -19,6 +19,30 @@ def test_live_snapshot_prefers_fresh_report_values() -> None:
     assert merged["legacy_only"] == {"value": 1}
 
 
+def test_api_data_returns_standard_json_for_non_finite_values(monkeypatch) -> None:
+    monkeypatch.setattr(
+        dashboard_app,
+        "db_load_run",
+        lambda market, at=None: {"market": market, "stored": float("nan")},
+    )
+    monkeypatch.setattr(
+        dashboard_app,
+        "_collect_snapshot",
+        lambda market: {"fresh": {"value": float("inf")}},
+    )
+
+    response = dashboard_app.app.test_client().get("/api/data?market=TH")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "market": "TH",
+        "stored": None,
+        "fresh": {"value": None},
+    }
+    assert b"NaN" not in response.data
+    assert b"Infinity" not in response.data
+
+
 def test_paper_list_normalizes_status_and_rejects_invalid(monkeypatch) -> None:
     calls = []
 
