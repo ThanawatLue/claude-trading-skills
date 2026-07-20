@@ -1668,12 +1668,24 @@ async function loadData(at) {
     renderThaiWatchlists(RAW_DATA.thai_watchlists);
     renderThaiDividends(RAW_DATA.thai_dividends);
 
+    // Render US TV Suite
+    renderUsBreadth(RAW_DATA.us_breadth_tv);
+    renderUsSectorHeatmap(RAW_DATA.us_sector_heatmap);
+    renderUsWatchlists(RAW_DATA.us_watchlists);
+    renderUsDividends(RAW_DATA.us_dividends);
+
     const usOnly = currentMarket === 'US';
     const thOnly = currentMarket === 'TH';
-    // US-only sections (IBD, Earnings, Downtrend)
+    // US-only sections (IBD, Earnings, Downtrend, US TV Suite)
     ['ibdSection','ibdCard','earnSection','earnCard',
-     'downtrendSection','downtrendCard'].forEach(id => {
-      document.getElementById(id).style.display = usOnly ? '' : 'none';
+     'downtrendSection','downtrendCard',
+     'usSuiteSection',
+     'usBreadthSection','usBreadthCard',
+     'usSectorSection','usSectorCard',
+     'usWatchlistsSection','usWatchlistsCard',
+     'usDividendsSection','usDividendsCard'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = usOnly ? '' : 'none';
     });
     // Uptrend Analyzer: script only supports US market data — show warning badge for TH
     const uptrendNote = document.getElementById('uptrendUsNote');
@@ -3125,6 +3137,194 @@ function renderThaiDividends(data) {
         Filters: yield ≥ ${f.min_yield_pct||3}%, mcap ≥ ${((f.min_market_cap||5e9)/1e9).toFixed(1)}B THB, P/E ${(f.pe_range||[4,25]).join('-')}
       </div>
       <select id="thDividendLimit" onchange="renderThaiDividends(RAW_DATA.thai_dividends)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;font-size:0.8rem">
+        <option value="10" ${currentLimit === '10' ? 'selected' : ''}>แสดง 10 ตัวแรก</option>
+        <option value="30" ${currentLimit === '30' ? 'selected' : ''}>แสดง 30 ตัวแรก</option>
+        <option value="999" ${currentLimit === '999' ? 'selected' : ''}>แสดงทั้งหมด</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;font-size:.85rem">
+      <thead><tr>
+        <th>#</th><th>Symbol</th><th style="text-align:right">Price</th>
+        <th style="text-align:right">Yield</th><th style="text-align:right">P/E</th>
+        <th style="text-align:right">RSI</th><th style="text-align:right">1Y</th>
+        <th style="text-align:right">Score</th><th>Grade</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `;
+}
+
+function renderUsBreadth(data) {
+  const el = document.getElementById('usBreadthContent');
+  if (!el) return;
+  if (!data) {
+    el.innerHTML = '<span style="color:var(--muted)">⚠️ ยังไม่มีข้อมูล US Breadth — กด Run Fresh Analysis</span>';
+    return;
+  }
+  const b = data.breadth || {};
+  const c = data.composite || {};
+  const score = data.composite_score ?? c.score ?? 0;
+  const regime = data.regime || c.regime || '—';
+  const ts = (data.generated || '').replace('_', ' ');
+  const regimeColor = score >= 70 ? 'var(--green)' : score >= 50 ? 'var(--cyan)' : score >= 30 ? 'var(--gold)' : 'var(--red)';
+
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center;margin-bottom:12px">
+      <div style="font-size:2.2rem;font-weight:700;color:${regimeColor}">${score.toFixed(1)}</div>
+      <div>
+        <div style="font-size:1.1rem;color:${regimeColor};font-weight:600">${regime}</div>
+        <div style="color:var(--muted);font-size:.85rem">${ts} · ${b.total_stocks || 0} stocks · TradingView</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;font-size:.88rem">
+      <div class="metric"><b>% above SMA50</b><br><span style="color:${_pctColor(b.pct_above_sma50)}">${(b.pct_above_sma50||0).toFixed(1)}%</span></div>
+      <div class="metric"><b>% above SMA200</b><br><span style="color:${_pctColor(b.pct_above_sma200)}">${(b.pct_above_sma200||0).toFixed(1)}%</span></div>
+      <div class="metric"><b>A/D</b><br><span style="color:var(--green)">${b.advancers||0}</span> / <span style="color:var(--red)">${b.decliners||0}</span></div>
+      <div class="metric"><b>52w Hi/Lo</b><br><span style="color:var(--green)">${b.new_52w_highs||0}</span> / <span style="color:var(--red)">${b.new_52w_lows||0}</span></div>
+      <div class="metric"><b>Median RSI</b><br>${(b.median_rsi||0).toFixed(1)}</div>
+      <div class="metric"><b>Median 1M</b><br><span style="color:${_pctColor(b.median_perf_1m)}">${(b.median_perf_1m||0).toFixed(2)}%</span></div>
+      <div class="metric"><b>Oversold (RSI&lt;30)</b><br>${b.rsi_oversold||0}</div>
+      <div class="metric"><b>Overbought (RSI&gt;70)</b><br>${b.rsi_overbought||0}</div>
+    </div>
+  `;
+}
+
+function renderUsSectorHeatmap(data) {
+  const el = document.getElementById('usSectorContent');
+  if (!el) return;
+  if (!data || !data.sectors) {
+    el.innerHTML = '<span style="color:var(--muted)">⚠️ ยังไม่มีข้อมูล Sector Heatmap</span>';
+    return;
+  }
+  const ts = (data.generated || '').replace('_', ' ');
+  const num = v => (typeof v === 'number' && !isNaN(v)) ? v : 0;
+  const rows = (data.sectors || []).map(s => `
+    <tr>
+      <td>${s.rank ?? '-'}</td>
+      <td>${_emoji(s.momentum_score)} <b>${s.sector || '?'}</b></td>
+      <td style="text-align:right">${s.n_stocks ?? 0}</td>
+      <td style="text-align:right;color:${_pctColor(s.median_perf_1m)}">${num(s.median_perf_1m).toFixed(2)}%</td>
+      <td style="text-align:right;color:${_pctColor(s.median_perf_3m)}">${num(s.median_perf_3m).toFixed(2)}%</td>
+      <td style="text-align:right;color:${_pctColor(s.median_perf_6m)}">${num(s.median_perf_6m).toFixed(2)}%</td>
+      <td style="text-align:right;color:${_pctColor(s.median_perf_y)}">${num(s.median_perf_y).toFixed(2)}%</td>
+      <td style="text-align:right;color:${_pctColor(s.momentum_score)};font-weight:600">${num(s.momentum_score).toFixed(2)}</td>
+      <td style="font-size:.78rem;color:var(--muted)">${(s.top_stocks||[]).map(t=>t.symbol||'').join(', ')}</td>
+    </tr>
+  `).join('');
+  el.innerHTML = `
+    <div style="color:var(--muted);font-size:.85rem;margin-bottom:8px">${ts} · ${data.universe_size||0} stocks · ${(data.sectors||[]).length} sectors</div>
+    <div style="overflow-x:auto"><table style="width:100%;font-size:.85rem">
+      <thead><tr>
+        <th>#</th><th>Sector</th><th style="text-align:right">N</th>
+        <th style="text-align:right">1M</th><th style="text-align:right">3M</th>
+        <th style="text-align:right">6M</th><th style="text-align:right">1Y</th>
+        <th style="text-align:right">Score</th><th>Top stocks</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `;
+}
+
+function renderUsWatchlists(data) {
+  const el = document.getElementById('usWatchlistsContent');
+  if (!el) return;
+  if (!data || !data.buckets) {
+    el.innerHTML = '<span style="color:var(--muted)">⚠️ ยังไม่มีข้อมูล Watchlists</span>';
+    return;
+  }
+  const currentLimit = document.getElementById('usWatchlistLimit')?.value || '10';
+  const limit = parseInt(currentLimit);
+  const ts = (data.generated || '').replace('_', ' ');
+  const titles = {
+    growth: '🚀 Growth',
+    value: '💎 Value',
+    momentum: '🔥 Momentum',
+    mean_reversion: '⚖️ Mean-Reversion',
+  };
+  const criteria = data.criteria || {};
+  const tabs = Object.entries(data.buckets).map(([name, rows], i) => {
+    const crit = criteria[name];
+    const items = (rows || []).slice(0, limit).map((r, ri) => `
+      <tr>
+        <td>${ri+1}</td>
+        <td>
+          <span class="star-btn" onclick="toggleStar(event, '${r.symbol}')" title="${isStarred(r.symbol) ? 'เลิกติดตาม' : 'ติดตาม'}" style="font-size:0.95rem; margin-right:4px;">
+            ${isStarred(r.symbol) ? '★' : '☆'}
+          </span>
+          <b>${r.symbol||''}</b><br>
+          <small style="color:var(--muted)">${(r.sector||'').slice(0,18)}</small>
+        </td>
+        <td style="text-align:right">$${(r.price||0).toFixed(2)}</td>
+        <td style="text-align:right">${(r.rsi||0).toFixed(0)}</td>
+        <td style="text-align:right;color:${_pctColor(r.perf_1m)}">${(r.perf_1m||0).toFixed(1)}%</td>
+        <td style="text-align:right;color:${_pctColor(r.perf_3m)}">${(r.perf_3m||0).toFixed(1)}%</td>
+        <td style="text-align:right;font-weight:600;color:var(--cyan)">${r.score.toFixed(1)}</td>
+      </tr>
+    `).join('');
+    return `
+      <div style="margin-bottom:18px">
+        <h4 style="margin:8px 0 4px 0">${titles[name] || name.toUpperCase()} <span style="color:var(--muted);font-weight:normal">(${rows.length})</span></h4>
+        ${crit ? `<div style="font-size:.72rem;color:var(--muted);margin-bottom:6px;font-style:italic">เกณฑ์: ${crit}</div>` : ''}
+        ${rows.length ? `<div style="overflow-x:auto;width:100%;"><table style="width:100%;font-size:.82rem"><thead><tr><th>#</th><th>Symbol</th><th style="text-align:right">Price</th><th style="text-align:right">RSI</th><th style="text-align:right">1M</th><th style="text-align:right">3M</th><th style="text-align:right">Score</th></tr></thead><tbody>${items}</tbody></table></div>` : '<div style="color:var(--muted);padding:8px 0">ไม่มี candidate ผ่านเกณฑ์</div>'}
+      </div>
+    `;
+  }).join('');
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:.85rem;margin-bottom:8px;flex-wrap:wrap;gap:10px">
+      <div>${ts} · ${data.universe_size||0} stocks scanned · top ${data.top_per_bucket||30} per bucket</div>
+      <select id="usWatchlistLimit" onchange="renderUsWatchlists(RAW_DATA.us_watchlists)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;font-size:0.8rem">
+        <option value="10" ${currentLimit === '10' ? 'selected' : ''}>แสดง 10 ตัวแรก</option>
+        <option value="15" ${currentLimit === '15' ? 'selected' : ''}>แสดง 15 ตัวแรก</option>
+        <option value="999" ${currentLimit === '999' ? 'selected' : ''}>แสดงทั้งหมด</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px">
+      ${tabs}
+    </div>
+  `;
+}
+
+function renderUsDividends(data) {
+  const el = document.getElementById('usDividendsContent');
+  if (!el) return;
+  if (!data || !data.candidates) {
+    el.innerHTML = '<span style="color:var(--muted)">⚠️ ยังไม่มีข้อมูล Dividend Screener</span>';
+    return;
+  }
+  const currentLimit = document.getElementById('usDividendLimit')?.value || '10';
+  const limit = parseInt(currentLimit);
+  const ts = (data.generated || '').replace('_', ' ');
+  const rows = (data.candidates || []).slice(0, limit).map((r, i) => {
+    const gradeColor = r.grade === 'Excellent' ? 'var(--green)' : r.grade === 'Good' ? 'var(--cyan)' : r.grade === 'Fair' ? 'var(--gold)' : 'var(--red)';
+    return `
+      <tr>
+        <td>${i+1}</td>
+        <td>
+          <span class="star-btn" onclick="toggleStar(event, '${r.symbol}')" title="${isStarred(r.symbol) ? 'เลิกติดตาม' : 'ติดตาม'}" style="font-size:0.95rem; margin-right:4px;">
+            ${isStarred(r.symbol) ? '★' : '☆'}
+          </span>
+          <span class="paper-btn" style="background:var(--green)22;color:var(--green);border-color:var(--green)" onclick="event.stopPropagation();paperAddPick('${r.symbol}','US',${(r.price||0).toFixed(2)},${((r.price||0)*0.92).toFixed(2)},${((r.price||0)*1.25).toFixed(2)},'us-dividend',${r.score||0},100)" title="Add to Paper (Stop -8%, Target +25%)">📝</span>
+          <b>${r.symbol||''}</b><br>
+          <small style="color:var(--muted)">${(r.sector||'').slice(0,20)}</small>
+        </td>
+        <td style="text-align:right">$${(r.price||0).toFixed(2)}</td>
+        <td style="text-align:right;color:var(--green);font-weight:600">${(r.dividend_yield||0).toFixed(2)}%</td>
+        <td style="text-align:right">${(r.pe_ratio||0).toFixed(1)}</td>
+        <td style="text-align:right">${(r.rsi||0).toFixed(0)}</td>
+        <td style="text-align:right;color:${_pctColor(r.perf_y)}">${(r.perf_y||0).toFixed(1)}%</td>
+        <td style="text-align:right;font-weight:600">${(r.score||0).toFixed(1)}</td>
+        <td style="color:${gradeColor};font-weight:600">${r.grade}</td>
+      </tr>
+    `;
+  }).join('');
+  const f = data.filters || {};
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:.85rem;margin-bottom:8px;flex-wrap:wrap;gap:10px">
+      <div>
+        ${ts} · ${data.universe_size||0} stocks scanned · ${data.candidates.length} qualified ·
+        Filters: yield ≥ ${data.min_yield||3}%, mcap ≥ $${((data.min_mcap||1e9)/1e9).toFixed(1)}B, P/E 4-25
+      </div>
+      <select id="usDividendLimit" onchange="renderUsDividends(RAW_DATA.us_dividends)" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;font-size:0.8rem">
         <option value="10" ${currentLimit === '10' ? 'selected' : ''}>แสดง 10 ตัวแรก</option>
         <option value="30" ${currentLimit === '30' ? 'selected' : ''}>แสดง 30 ตัวแรก</option>
         <option value="999" ${currentLimit === '999' ? 'selected' : ''}>แสดงทั้งหมด</option>

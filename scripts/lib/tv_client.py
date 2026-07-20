@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-TradingView Screener Client — Thai SET market enrichment.
+TradingView Screener Client — Thai and US market enrichment.
 
 Uses tradingview-screener (pip install tradingview-screener) to fetch
-all SET stocks in a single API call with pre-computed technicals.
+Thai or US stocks in a single API call with pre-computed technicals.
 This is dramatically faster than fetching individual yfinance quotes
 for the Thai universe and provides RSI, SMAs, sector, performance,
 dividend, and fundamental data.
@@ -13,7 +13,9 @@ Falls back gracefully to an empty result if the package is not installed.
 
 Public API:
     is_available()         → bool
+    get_tv_stocks()        → list[dict]   (full TH or US universe)
     get_thai_stocks()      → list[dict]   (full SET universe)
+    get_us_stocks()        → list[dict]   (full US universe)
     get_thai_set50()       → list[dict]   (SET50 proxy: top 50 by mcap)
     get_thai_set100()      → list[dict]   (SET100 proxy: top 100 by mcap)
     get_thai_sethd()       → list[dict]   (high-dividend: yield ≥ 3%, mcap ≥ 5B)
@@ -86,6 +88,16 @@ def is_available() -> bool:
 # ---------------------------------------------------------------------------
 
 _LIQUIDITY_SCORE_FULL_THB = 50_000_000
+_LIQUIDITY_SCORE_FULL_USD = 5_000_000
+_VALID_MARKETS = {"TH", "US"}
+
+
+def _normalize_market(market: str) -> str:
+    """Normalize and validate the supported TradingView market codes."""
+    normalized = str(market).upper()
+    if normalized not in _VALID_MARKETS:
+        raise ValueError("market must be TH or US")
+    return normalized
 
 
 def _safe_float(value) -> float:
@@ -98,24 +110,35 @@ def _safe_float(value) -> float:
 
 
 def _turnover_value(price, volume) -> float:
-    """Approximate traded value in THB from price and share volume."""
+    """Approximate traded value from price and share volume."""
     return _safe_float(price) * _safe_float(volume)
 
 
-def _liquidity_score(avg_turnover: float) -> float:
-    """Normalize average turnover to a 0-100 score for Thai screening."""
+def _liquidity_score(avg_turnover: float, full_value: float = _LIQUIDITY_SCORE_FULL_THB) -> float:
+    """Normalize average turnover to a 0-100 score."""
     if avg_turnover <= 0:
         return 0.0
-    return round(min(100.0, avg_turnover / _LIQUIDITY_SCORE_FULL_THB * 100), 2)
+    return round(min(100.0, avg_turnover / full_value * 100), 2)
 
 
-def _row_to_stock(row) -> dict:
+def _row_to_stock(row, market: str = "TH") -> dict:
     """Convert a TradingView row to a yfinance-compatible quote dict."""
+    market = _normalize_market(market)
     ticker = row.get("ticker", "")
-    raw = ticker.replace("SET:", "").replace("MAI:", "")
-    symbol = f"{raw}.BK"
+    if market == "TH":
+        raw = ticker.replace("SET:", "").replace("MAI:", "")
+        symbol = f"{raw}.BK"
+        board = "MAI" if ticker.startswith("MAI:") else "SET"
+        liq_floor = _LIQUIDITY_SCORE_FULL_THB
+    else:
+        # US market ticker shape is "NASDAQ:AAPL", "NYSE:MSFT" etc.
+        if ":" in ticker:
+            board, symbol = ticker.split(":", 1)
+        else:
+            board = "US"
+            symbol = ticker
+        liq_floor = _LIQUIDITY_SCORE_FULL_USD
 
-    board = "MAI" if ticker.startswith("MAI:") else "SET"
     price = _safe_float(row.get("close"))
     volume = _safe_float(row.get("volume"))
     avg_volume = _safe_float(row.get("average_volume_10d_calc"))
@@ -124,7 +147,7 @@ def _row_to_stock(row) -> dict:
 
     return {
         "symbol": symbol,
-        "name": row.get("name", raw),
+        "name": row.get("name", symbol),
         "sector": row.get("sector") or "Unknown",
         "industry": row.get("industry") or "Unknown",
         "board": board,
@@ -158,12 +181,12 @@ def _row_to_stock(row) -> dict:
         "shares_outstanding": row.get("total_shares_outstanding_current"),
         "turnover": turnover,
         "avg_turnover": avg_turnover,
-        "liquidity_score": _liquidity_score(avg_turnover),
+        "liquidity_score": _liquidity_score(avg_turnover, liq_floor),
         "_source": "tradingview",
     }
 
 
-def _safe_query(builder_fn, label: str) -> list[dict]:
+def _safe_query(builder_fn, label: str, market: str = "TH") -> list[dict]:
     """Run a TV query and convert rows; return [] on any failure."""
     if not _TV_AVAILABLE:
         logger.warning(
@@ -173,7 +196,7 @@ def _safe_query(builder_fn, label: str) -> list[dict]:
     try:
         n, df = builder_fn().get_scanner_data()
         logger.info("TradingView: fetched %d rows for %s", n, label)
-        return [_row_to_stock(row) for _, row in df.iterrows()]
+        return [_row_to_stock(row, market) for _, row in df.iterrows()]
     except Exception as e:
         logger.error("TradingView %s query error: %s", label, e)
         return []
@@ -183,20 +206,42 @@ def _safe_query(builder_fn, label: str) -> list[dict]:
 # Universe fetchers
 # ---------------------------------------------------------------------------
 
+def get_tv_stocks(
+    market: str = "TH",
+    limit: int = 1000,
+    min_market_cap: Optional[float] = None,
+    min_avg_volume: Optional[float] = None,
+) -> list[dict]:
+    """Fetch full market (US or TH) with technicals and fundamentals."""
+    market = _normalize_market(market)
+    tv_market = "thailand" if market == "TH" else "america"
+    def build():
+        q = Query().set_markets(tv_market).select(*_TV_FIELDS).limit(limit)
+        if min_market_cap is not None:
+            q = q.where(col("market_cap_basic") > min_market_cap)
+        if min_avg_volume is not None:
+            q = q.where(col("average_volume_10d_calc") > min_avg_volume)
+        return q
+    return _safe_query(build, f"{market}_full", market=market)
+
+
 def get_thai_stocks(
     limit: int = 1000,
     min_market_cap: Optional[float] = None,
     min_avg_volume: Optional[float] = None,
 ) -> list[dict]:
     """Fetch full Thai market (SET + MAI) with technicals and fundamentals."""
-    def build():
-        q = Query().set_markets("thailand").select(*_TV_FIELDS).limit(limit)
-        if min_market_cap is not None:
-            q = q.where(col("market_cap_basic") > min_market_cap)
-        if min_avg_volume is not None:
-            q = q.where(col("average_volume_10d_calc") > min_avg_volume)
-        return q
-    return _safe_query(build, "thai_full")
+    return get_tv_stocks("TH", limit, min_market_cap, min_avg_volume)
+
+
+def get_us_stocks(
+    limit: int = 4000,
+    min_market_cap: Optional[float] = None,
+    min_avg_volume: Optional[float] = None,
+) -> list[dict]:
+    """Fetch full US market (S&P 500/Nasdaq/etc.) with technicals and fundamentals."""
+    return get_tv_stocks("US", limit, min_market_cap, min_avg_volume)
+
 
 
 # NOTE: TradingView's Thailand scanner does not expose index_of(SET50/100/HD)
@@ -359,9 +404,9 @@ def get_thai_by_sector(sector_name: str, limit: int = 200,
 # Breadth snapshot — aggregate stats across the whole market
 # ---------------------------------------------------------------------------
 
-def get_thai_breadth(min_price: float = 1.0, limit: int = 1000) -> dict:
+def get_tv_breadth(market: str = "TH", min_price: float = 1.0, limit: int = 1000) -> dict:
     """
-    Compute market-breadth snapshot for Thai market in a single call.
+    Compute market-breadth snapshot for US or Thai market in a single call.
 
     Returns a dict with:
         total_stocks            : count after price filter
@@ -375,7 +420,12 @@ def get_thai_breadth(min_price: float = 1.0, limit: int = 1000) -> dict:
         median_rsi              : median daily RSI
         sector_breakdown        : dict[sector] → median Perf.1M
     """
-    stocks = get_thai_stocks(limit=limit)
+    market = _normalize_market(market)
+    if market == "TH":
+        stocks = get_thai_stocks(limit=limit)
+    else:
+        stocks = get_us_stocks(limit=limit)
+
     stocks = [s for s in stocks if (s.get("price") or 0) >= min_price]
     n = len(stocks)
     if n == 0:
@@ -439,3 +489,17 @@ def get_thai_breadth(min_price: float = 1.0, limit: int = 1000) -> dict:
         "sector_breakdown": dict(sorted(sector_breakdown.items(),
                                         key=lambda kv: kv[1], reverse=True)),
     }
+
+
+def get_thai_breadth(min_price: float = 1.0, limit: int = 1000) -> dict:
+    """
+    Compute market-breadth snapshot for Thai market in a single call.
+    """
+    return get_tv_breadth("TH", min_price, limit)
+
+
+def get_us_breadth(min_price: float = 1.0, limit: int = 4000) -> dict:
+    """
+    Compute market-breadth snapshot for US market in a single call.
+    """
+    return get_tv_breadth("US", min_price, limit)

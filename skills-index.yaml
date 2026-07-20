@@ -1155,6 +1155,78 @@ skills:
   - bubble_risk_score
   workflows: []
   hand_written_doc: false
+- id: us-breadth-analyzer-tv
+  display_name: US Breadth Analyzer (TV)
+  category: market-regime
+  status: beta
+  summary: Compute fast market-breadth snapshot for the US market via TradingView Screener.
+  timeframe: daily
+  difficulty: intermediate
+  integrations:
+  - id: tv_public
+    type: market_data
+    requirement: required
+    note: TradingView public API
+  inputs:
+  - us_universe
+  outputs:
+  - breadth_report
+  workflows: []
+  hand_written_doc: false
+- id: us-dividend-screener
+  display_name: US Dividend Screener
+  category: swing-opportunity
+  status: beta
+  summary: Screen US stocks for high-quality dividend income opportunities.
+  timeframe: weekly
+  difficulty: intermediate
+  integrations:
+  - id: tv_public
+    type: market_data
+    requirement: required
+    note: TradingView public API
+  inputs:
+  - us_universe
+  outputs:
+  - dividend_candidates
+  workflows: []
+  hand_written_doc: false
+- id: us-sector-heatmap
+  display_name: US Sector Heatmap
+  category: market-regime
+  status: beta
+  summary: Generate a sector-rotation heatmap for the US market using TradingView Screener data.
+  timeframe: daily
+  difficulty: intermediate
+  integrations:
+  - id: tv_public
+    type: market_data
+    requirement: required
+    note: TradingView public API
+  inputs:
+  - us_universe
+  outputs:
+  - sector_heatmap_report
+  workflows: []
+  hand_written_doc: false
+- id: us-watchlist-builder
+  display_name: US Watchlist Builder
+  category: swing-opportunity
+  status: beta
+  summary: Auto-build 4 curated watchlists from the US market using TradingView Screener filters.
+  timeframe: daily
+  difficulty: intermediate
+  integrations:
+  - id: tv_public
+    type: market_data
+    requirement: required
+    note: TradingView public API
+  inputs:
+  - us_universe
+  outputs:
+  - curated_watchlists
+  workflows: []
+  hand_written_doc: false
 - id: us-stock-analysis
   display_name: US Stock Analysis
   category: trade-planning

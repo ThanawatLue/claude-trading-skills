@@ -272,6 +272,19 @@ def _collect_snapshot(market: str) -> dict:
         latest_file_any(os.path.join(REPORTS_DIR, "thai_watchlists_*.json"))
     )
     thai_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json")))
+
+    # NEW: TV-powered US skills
+    us_sector_heatmap = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "us_sector_heatmap_*.json"))
+    )
+    us_breadth_tv = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.json"))
+    )
+    us_watchlists = load_json(
+        latest_file_any(os.path.join(REPORTS_DIR, "us_watchlists_*.json"))
+    )
+    us_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_dividends_*.json")))
+
     return {
         "market": market,
         "breadth": breadth,
@@ -288,6 +301,10 @@ def _collect_snapshot(market: str) -> dict:
         "thai_breadth": thai_breadth,
         "thai_watchlists": thai_watchlists,
         "thai_dividends": thai_dividends,
+        "us_sector_heatmap": us_sector_heatmap,
+        "us_breadth_tv": us_breadth_tv,
+        "us_watchlists": us_watchlists,
+        "us_dividends": us_dividends,
     }
 
 
@@ -346,6 +363,14 @@ def cleanup_old_files(keep_count: int = 2):
         os.path.join(REPORTS_DIR, "thai_watchlists_*.md"),
         os.path.join(REPORTS_DIR, "thai_dividends_*.json"),
         os.path.join(REPORTS_DIR, "thai_dividends_*.md"),
+        os.path.join(REPORTS_DIR, "us_sector_heatmap_*.json"),
+        os.path.join(REPORTS_DIR, "us_sector_heatmap_*.md"),
+        os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.json"),
+        os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.md"),
+        os.path.join(REPORTS_DIR, "us_watchlists_*.json"),
+        os.path.join(REPORTS_DIR, "us_watchlists_*.md"),
+        os.path.join(REPORTS_DIR, "us_dividends_*.json"),
+        os.path.join(REPORTS_DIR, "us_dividends_*.md"),
         os.path.join(REPORTS_DIR, "skill_review_*.json"),
         os.path.join(REPORTS_DIR, "skill_review_*.md"),
     ]
@@ -731,6 +756,47 @@ def api_run():
                     600,
                     None,
                 ),
+                # 8-11. TV-powered US skills (parallel, no API key required)
+                (
+                    [
+                        sys.executable,
+                        os.path.join(BASE_DIR, "skills", "us-sector-heatmap", "scripts", "generate_us_heatmap.py"),
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    120,
+                    None,
+                ),
+                (
+                    [
+                        sys.executable,
+                        os.path.join(BASE_DIR, "skills", "us-breadth-analyzer-tv", "scripts", "analyze_us_breadth_tv.py"),
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    120,
+                    None,
+                ),
+                (
+                    [
+                        sys.executable,
+                        os.path.join(BASE_DIR, "skills", "us-watchlist-builder", "scripts", "build_us_watchlists.py"),
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    120,
+                    None,
+                ),
+                (
+                    [
+                        sys.executable,
+                        os.path.join(BASE_DIR, "skills", "us-dividend-screener", "scripts", "screen_us_dividends.py"),
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    120,
+                    None,
+                ),
             ]
         )
 
@@ -1069,6 +1135,47 @@ def api_run_stream():
                             REPORTS_DIR,
                         ],
                         600,
+                        None,
+                    ),
+                    # 8-11. TV-powered US skills (parallel, no API key required)
+                    (
+                        [
+                            sys.executable,
+                            os.path.join(BASE_DIR, "skills", "us-sector-heatmap", "scripts", "generate_us_heatmap.py"),
+                            "--output-dir",
+                            REPORTS_DIR,
+                        ],
+                        120,
+                        None,
+                    ),
+                    (
+                        [
+                            sys.executable,
+                            os.path.join(BASE_DIR, "skills", "us-breadth-analyzer-tv", "scripts", "analyze_us_breadth_tv.py"),
+                            "--output-dir",
+                            REPORTS_DIR,
+                        ],
+                        120,
+                        None,
+                    ),
+                    (
+                        [
+                            sys.executable,
+                            os.path.join(BASE_DIR, "skills", "us-watchlist-builder", "scripts", "build_us_watchlists.py"),
+                            "--output-dir",
+                            REPORTS_DIR,
+                        ],
+                        120,
+                        None,
+                    ),
+                    (
+                        [
+                            sys.executable,
+                            os.path.join(BASE_DIR, "skills", "us-dividend-screener", "scripts", "screen_us_dividends.py"),
+                            "--output-dir",
+                            REPORTS_DIR,
+                        ],
+                        120,
                         None,
                     ),
                 ]

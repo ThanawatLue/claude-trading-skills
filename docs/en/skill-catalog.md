@@ -262,5 +262,9 @@ A comprehensive catalog of all 59 Claude Trading Skills organized by category. B
 | Thai Dividend Screener | -- | -- | -- |
 | Thai Watchlist Builder | -- | -- | -- |
 | Paper Trade Simulator | -- | -- | -- |
+| US Breadth Analyzer Tv | -- | -- | -- |
+| US Dividend Screener | -- | -- | -- |
+| US Sector Heatmap | -- | -- | -- |
+| US Watchlist Builder | -- | -- | -- |
 
 "--" means not required. "Optional" means functionality is enhanced but the skill works without it.
