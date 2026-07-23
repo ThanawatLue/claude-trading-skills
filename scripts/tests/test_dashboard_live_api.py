@@ -61,6 +61,19 @@ def test_paper_list_normalizes_status_and_rejects_invalid(monkeypatch) -> None:
     assert invalid.status_code == 400
 
 
+def test_paper_fingerprint_endpoint_returns_profiles(monkeypatch) -> None:
+    monkeypatch.setattr(
+        dashboard_app,
+        "paper_fingerprints",
+        lambda market: {"market": market, "profiles": [{"symbol": "ABC.BK"}]},
+    )
+
+    response = dashboard_app.app.test_client().get("/api/paper/fingerprint?market=TH")
+
+    assert response.status_code == 200
+    assert response.get_json() == {"market": "TH", "profiles": [{"symbol": "ABC.BK"}]}
+
+
 def test_run_stream_disables_proxy_buffering() -> None:
     with dashboard_app.app.test_request_context("/api/run/stream?market=TH"):
         response = dashboard_app.api_run_stream()

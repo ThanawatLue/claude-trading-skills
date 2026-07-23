@@ -7,6 +7,7 @@ Subcommands:
     list      List positions (open/closed/all)
     stats     Show portfolio statistics
     journal   Add/update journal entry on a trade
+    fingerprint  Show symbol/technique behavior profiles
 """
 
 from __future__ import annotations
@@ -65,6 +66,15 @@ CREATE TABLE IF NOT EXISTS paper_trade (
 );
 CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_trade(status);
 CREATE INDEX IF NOT EXISTS idx_paper_symbol ON paper_trade(symbol);
+
+CREATE TABLE IF NOT EXISTS paper_trade_mark (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id        INTEGER NOT NULL,
+    observed_at     TEXT    NOT NULL,
+    price           REAL    NOT NULL,
+    UNIQUE(trade_id, observed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_paper_mark_trade_at ON paper_trade_mark(trade_id, observed_at);
 """
 
 VALID_EMOTIONS = {"calm", "fearful", "greedy", "frustrated", "fomo", "confident", "uncertain"}
@@ -114,6 +124,32 @@ def _now_iso() -> str:
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
+
+
+def record_mark(trade_id: int, price: float, observed_at: str | None = None) -> None:
+    """Record one price observation for a trade, idempotent per timestamp."""
+    if price <= 0:
+        raise ValueError("price must be > 0")
+    observed_at = observed_at or _now_iso()
+    with _db() as conn:
+        exists = conn.execute("SELECT 1 FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
+        if exists is None:
+            raise ValueError(f"trade id {trade_id} not found")
+        conn.execute(
+            "INSERT OR IGNORE INTO paper_trade_mark (trade_id, observed_at, price) VALUES (?,?,?)",
+            (trade_id, observed_at, price),
+        )
+
+
+def list_marks(trade_id: int) -> list[dict[str, Any]]:
+    """Return chronological price observations for one trade."""
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT id, trade_id, observed_at, price FROM paper_trade_mark "
+            "WHERE trade_id=? ORDER BY observed_at ASC, id ASC",
+            (trade_id,),
+        ).fetchall()
+    return [_row_to_dict(row) for row in rows]
 
 
 def normalize_source(source: str | None) -> str:
@@ -247,6 +283,10 @@ def open_position(
             ),
         )
         new_id = cur.lastrowid
+        conn.execute(
+            "INSERT OR IGNORE INTO paper_trade_mark (trade_id, observed_at, price) VALUES (?,?,?)",
+            (new_id, now, entry),
+        )
         row = conn.execute("SELECT * FROM paper_trade WHERE id=?", (new_id,)).fetchone()
         row_dict = _row_to_dict(row)
         row_dict["discipline_warnings"] = warnings
@@ -342,6 +382,10 @@ def close_position(
                 trade_id,
             ),
         )
+        conn.execute(
+            "INSERT OR IGNORE INTO paper_trade_mark (trade_id, observed_at, price) VALUES (?,?,?)",
+            (trade_id, now, exit_price),
+        )
         out = conn.execute("SELECT * FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
     return _row_to_dict(out)
 
@@ -386,6 +430,170 @@ def add_journal(trade_id: int, text: str, emotion: str | None = None) -> dict[st
         )
         out = conn.execute("SELECT * FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
     return _row_to_dict(out)
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _forward_trade_outcomes(row: sqlite3.Row, marks: list[sqlite3.Row]) -> dict[str, dict[str, Any]]:
+    """Return first distinct-date forward outcomes at +1/+3/+5 observations."""
+    exit_dt = _parse_iso(row["exit_at"])
+    if exit_dt is None or row["exit_price"] is None:
+        return {str(h): {"available": False} for h in (1, 3, 5)}
+
+    # Keep the last mark for each post-exit date so repeated intraday updates do
+    # not overweight a single session.
+    by_date: dict[Any, sqlite3.Row] = {}
+    for mark in marks:
+        observed = _parse_iso(mark["observed_at"])
+        if observed is not None and observed.date() > exit_dt.date():
+            by_date[observed.date()] = mark
+
+    dates = sorted(by_date)
+    risk_per_share = abs(row["entry_price"] - row["stop_price"])
+    direction = 1 if row["side"] == "long" else -1
+    outcomes: dict[str, dict[str, Any]] = {}
+    for horizon in (1, 3, 5):
+        if len(dates) < horizon or risk_per_share <= 0:
+            outcomes[str(horizon)] = {"available": False}
+            continue
+        mark = by_date[dates[horizon - 1]]
+        price = float(mark["price"])
+        move = (price - row["exit_price"]) * direction
+        outcomes[str(horizon)] = {
+            "available": True,
+            "observed_at": mark["observed_at"],
+            "price": price,
+            "return_pct": round(move / row["exit_price"] * 100, 2),
+            "r": round(move / risk_per_share, 3),
+        }
+    return outcomes
+
+
+def _aggregate_forward(values: list[dict[str, Any]]) -> dict[str, Any]:
+    if not values:
+        return {"samples": 0, "avg_r": None, "median_r": None, "avg_return_pct": None, "positive_rate": None}
+    rs = [value["r"] for value in values]
+    returns = [value["return_pct"] for value in values]
+    return {
+        "samples": len(values),
+        "avg_r": round(sum(rs) / len(rs), 3),
+        "median_r": round(sorted(rs)[len(rs) // 2], 3),
+        "avg_return_pct": round(sum(returns) / len(returns), 2),
+        "positive_rate": round(sum(1 for r in rs if r > 0) / len(rs), 3),
+    }
+
+
+def compute_fingerprints(market: str | None = None) -> dict[str, Any]:
+    """Summarize symbol/technique behavior without changing trading decisions."""
+    where = ""
+    params: list[Any] = []
+    if market:
+        where = " WHERE market = ?"
+        params.append(market.upper())
+
+    with _db() as conn:
+        rows = conn.execute(f"SELECT * FROM paper_trade{where}", params).fetchall()
+        marks = conn.execute(
+            "SELECT trade_id, observed_at, price FROM paper_trade_mark ORDER BY observed_at ASC, id ASC"
+        ).fetchall()
+
+    marks_by_trade: dict[int, list[sqlite3.Row]] = {}
+    for mark in marks:
+        marks_by_trade.setdefault(mark["trade_id"], []).append(mark)
+
+    groups: dict[tuple[str, str, str], list[sqlite3.Row]] = {}
+    for row in rows:
+        key = (row["market"], row["symbol"], normalize_source(row["source"]))
+        groups.setdefault(key, []).append(row)
+
+    profiles = []
+    for (group_market, symbol, source), group_rows in groups.items():
+        closed = [row for row in group_rows if row["status"] != STATUS_OPEN]
+        open_positions = [row for row in group_rows if row["status"] == STATUS_OPEN]
+        wins = [row for row in closed if (row["realized_r"] or 0) > 0]
+        forward_by_horizon = {"1": [], "3": [], "5": []}
+        trade_forwards = []
+        for row in closed:
+            forward = _forward_trade_outcomes(row, marks_by_trade.get(row["id"], []))
+            trade_forwards.append((row, forward))
+            for horizon, outcome in forward.items():
+                if outcome.get("available"):
+                    forward_by_horizon[horizon].append(outcome)
+
+        avg_realized_r = (
+            sum((row["realized_r"] or 0) for row in closed) / len(closed) if closed else 0
+        )
+        avg_mae_r = []
+        avg_mfe_r = []
+        for row in closed:
+            risk = abs(row["entry_price"] - row["stop_price"])
+            if risk <= 0:
+                continue
+            direction = 1 if row["side"] == "long" else -1
+            avg_mae_r.append(abs((row["mae"] or row["entry_price"]) - row["entry_price"]) / risk)
+            avg_mfe_r.append(
+                ((row["mfe"] or row["entry_price"]) - row["entry_price"]) * direction / risk
+            )
+
+        flags = []
+        fwd3 = _aggregate_forward(forward_by_horizon["3"])
+        if fwd3["avg_r"] is not None and fwd3["avg_r"] >= 0.5:
+            flags.append("post_exit_continuation")
+        if fwd3["avg_r"] is not None and fwd3["avg_r"] <= -0.5:
+            flags.append("post_exit_reversal")
+        if any(
+            row["status"] == STATUS_CLOSED_STOP
+            and forwards["3"].get("available")
+            and forwards["3"]["r"] >= 0.5
+            for row, forwards in trade_forwards
+        ):
+            flags.append("stop_then_recover")
+        if any(row["status"] == STATUS_CLOSED_TARGET and (row["days_held"] or 0) <= 1 for row in closed):
+            flags.append("fast_target")
+        if not flags:
+            flags.append("mixed_or_unconfirmed")
+
+        profiles.append(
+            {
+                "market": group_market,
+                "symbol": symbol,
+                "source": source,
+                "total_trades": len(group_rows),
+                "open_positions": len(open_positions),
+                "closed_trades": len(closed),
+                "wins": len(wins),
+                "losses": sum(1 for row in closed if (row["realized_r"] or 0) < 0),
+                "win_rate": round(len(wins) / len(closed), 3) if closed else None,
+                "avg_realized_r": round(avg_realized_r, 3) if closed else None,
+                "avg_net_pnl": round(
+                    sum((row["realized_pnl"] or 0) for row in closed) / len(closed), 2
+                )
+                if closed
+                else None,
+                "avg_mae_r": round(sum(avg_mae_r) / len(avg_mae_r), 3) if avg_mae_r else None,
+                "avg_mfe_r": round(sum(avg_mfe_r) / len(avg_mfe_r), 3) if avg_mfe_r else None,
+                "forward": {
+                    horizon: _aggregate_forward(values)
+                    for horizon, values in forward_by_horizon.items()
+                },
+                "flags": flags,
+                "sample_status": "review_ready" if len(closed) >= 20 else "research_only",
+            }
+        )
+
+    profiles.sort(key=lambda profile: (-profile["closed_trades"], profile["symbol"], profile["source"]))
+    return {
+        "market": market.upper() if market else None,
+        "min_closed_for_review": 20,
+        "profiles": profiles,
+        "profile_count": len(profiles),
+        "tracked_mark_count": len(marks),
+        "as_of": _now_iso(),
+    }
 
 
 # ── Stats ───────────────────────────────────────────────────────────────────
@@ -457,7 +665,9 @@ def compute_stats(market: str | None = None) -> dict[str, Any]:
 
     total_realized_r = sum((r["realized_r"] or 0) for r in closed)
     total_realized_pnl = sum((r["realized_pnl"] or 0) for r in closed)
-    total_gross_realized_pnl = sum((r["gross_realized_pnl"] or r["realized_pnl"] or 0) for r in closed)
+    total_gross_realized_pnl = sum(
+        (r["gross_realized_pnl"] or r["realized_pnl"] or 0) for r in closed
+    )
     total_closed_cost = sum((r["entry_cost"] or 0) + (r["exit_cost"] or 0) for r in closed)
     total_open_entry_cost = sum((r["entry_cost"] or 0) for r in open_pos)
     total_unrealized_pnl = sum((r["unrealized_pnl"] or 0) for r in open_pos)
@@ -577,6 +787,9 @@ def main():
     st = sub.add_parser("stats")
     st.add_argument("--market", choices=["TH", "US"])
 
+    fp = sub.add_parser("fingerprint")
+    fp.add_argument("--market", choices=["TH", "US"])
+
     j = sub.add_parser("journal")
     j.add_argument("--id", type=int, required=True)
     j.add_argument("--text", required=True)
@@ -607,6 +820,9 @@ def main():
         _print_json(out)
     elif args.cmd == "stats":
         out = compute_stats(args.market)
+        _print_json(out)
+    elif args.cmd == "fingerprint":
+        out = compute_fingerprints(args.market)
         _print_json(out)
     elif args.cmd == "journal":
         out = add_journal(args.id, args.text, args.emotion)

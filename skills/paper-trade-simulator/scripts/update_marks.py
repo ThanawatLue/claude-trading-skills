@@ -15,7 +15,7 @@ import json
 import logging
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -27,6 +27,7 @@ from paper_trade import (  # noqa: E402
     _db,
     _now_iso,
     close_position,
+    record_mark,
 )
 
 # Backward-compatible patch target for older tests and callers. The active DB
@@ -122,6 +123,8 @@ def update_one(
 ) -> dict:
     """Update marks for one open position; auto-close if stop/target crossed."""
     source_rules = source_rules or DEFAULT_SOURCE_RULES
+    observed_at = _now_iso()
+    record_mark(row["id"], price, observed_at)
     side = row["side"]
     entry = row["entry_price"]
     shares = row["shares"]
@@ -245,12 +248,19 @@ def update_one(
 
 def update_all() -> list[dict]:
     with _db() as conn:
-        opens = conn.execute("SELECT * FROM paper_trade WHERE status=?", (STATUS_OPEN,)).fetchall()
-    if not opens:
+        opens = conn.execute("SELECT * FROM paper_trade WHERE status=?",
+                             (STATUS_OPEN,)).fetchall()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(timespec="seconds")
+        recent_closed = conn.execute(
+            "SELECT * FROM paper_trade WHERE status != ? AND exit_at >= ?",
+            (STATUS_OPEN, cutoff),
+        ).fetchall()
+    tracked = list(opens) + list(recent_closed)
+    if not tracked:
         return []
 
     # Group by symbol to dedupe fetches
-    unique_symbols = sorted({r["symbol"] for r in opens})
+    unique_symbols = sorted({r["symbol"] for r in tracked})
     prices: dict[str, float | None] = {}
     for sym in unique_symbols:
         prices[sym] = _fetch_price(sym)
@@ -324,6 +334,16 @@ def update_all() -> list[dict]:
             results.append({"id": row["id"], "symbol": row["symbol"], "action": "fetch_failed"})
             continue
         results.append(update_one(row, price, source_rules))
+
+    # Keep collecting post-exit observations for the +1/+3/+5 session
+    # fingerprint analysis. This never changes a closed trade.
+    for row in recent_closed:
+        price = prices.get(row["symbol"])
+        if price is None:
+            continue
+        record_mark(row["id"], price)
+        results.append({"id": row["id"], "symbol": row["symbol"],
+                        "action": "forward_marked", "price": price})
     return results
 
 

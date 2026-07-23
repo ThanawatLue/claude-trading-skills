@@ -56,6 +56,9 @@ from paper_trade import (
     compute_stats as paper_stats,
 )
 from paper_trade import (
+    compute_fingerprints as paper_fingerprints,
+)
+from paper_trade import (
     list_positions as paper_list,
 )
 from paper_trade import (  # noqa: E402
@@ -2140,6 +2143,13 @@ def api_paper_stats():
     """Portfolio statistics. Query: ?market=TH|US"""
     market = request.args.get("market")
     return jsonify(_clean_nan(paper_stats(market)))
+
+
+@app.route("/api/paper/fingerprint")
+def api_paper_fingerprint():
+    """Stock/technique behavior profiles with forward +1/+3/+5 observations."""
+    market = request.args.get("market")
+    return jsonify(_clean_nan(paper_fingerprints(market)))
 
 
 @app.route("/api/paper/update_marks", methods=["POST"])

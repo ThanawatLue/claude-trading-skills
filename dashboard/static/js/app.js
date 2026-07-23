@@ -3351,13 +3351,15 @@ const VALID_EMOTIONS = ['calm','fearful','greedy','frustrated','fomo','confident
 async function paperRefresh() {
   try {
     const marketParam = currentMarket ? `&market=${encodeURIComponent(currentMarket)}` : '';
-    const [openRes, closedRes, statsRes, signalSummary] = await Promise.all([
+    const [openRes, closedRes, statsRes, fingerprintRes, signalSummary] = await Promise.all([
       fetch(`/api/paper/list?status=open${marketParam}`).then(r=>r.json()),
       fetch(`/api/paper/list?status=closed${marketParam}`).then(r=>r.json()),
       fetch(`/api/paper/stats?market=${encodeURIComponent(currentMarket || '')}`).then(r=>r.json()),
+      fetch(`/api/paper/fingerprint?market=${encodeURIComponent(currentMarket || '')}`).then(r=>r.json()),
       fetch(`/api/signal-results?market=${encodeURIComponent(currentMarket || '')}`).then(r=>r.json()),
     ]);
     renderPaperStats(statsRes);
+    renderPaperFingerprint(fingerprintRes);
     renderPaperOpen(openRes);
     renderPaperClosed(closedRes);
     if (CURRENT_DASHBOARD_TAB === 'decisions') {
@@ -3366,6 +3368,44 @@ async function paperRefresh() {
   } catch (e) {
     console.error('paperRefresh failed:', e);
   }
+}
+
+function renderPaperFingerprint(data) {
+  const el = document.getElementById('paperFingerprintContent');
+  if (!el) return;
+  const profiles = data?.profiles || [];
+  const minClosed = data?.min_closed_for_review || 20;
+  if (!profiles.length) {
+    el.innerHTML = '<div style="padding:10px;border:1px solid var(--border);border-radius:8px">ยังไม่มีข้อมูล Stock Fingerprint — ระบบจะเริ่มเก็บ mark หลังเปิด/ปิดไม้</div>';
+    return;
+  }
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const fmtR = value => value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${Number(value).toFixed(2)}R`;
+  const fmtPct = value => value === null || value === undefined ? '-' : `${value > 0 ? '+' : ''}${Number(value).toFixed(1)}%`;
+  const rows = profiles.slice(0, 30).map(profile => {
+    const f = profile.forward || {};
+    const behavior = (profile.flags || []).map(flag => flag.replaceAll('_', ' ')).join(', ');
+    const statusColor = profile.sample_status === 'review_ready' ? 'var(--green)' : 'var(--gold)';
+    return `<tr>
+      <td><b>${esc(profile.symbol)}</b><br><small>${esc(profile.source)}</small></td>
+      <td>${profile.closed_trades} closed / ${profile.open_positions} open<br><small>${profile.wins}W-${profile.losses}L</small></td>
+      <td style="color:${(profile.avg_realized_r||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtR(profile.avg_realized_r)}</td>
+      <td>${fmtR(f['1']?.avg_r)}<br><small>${fmtPct(f['1']?.avg_return_pct)}</small></td>
+      <td>${fmtR(f['3']?.avg_r)}<br><small>${fmtPct(f['3']?.avg_return_pct)}</small></td>
+      <td>${fmtR(f['5']?.avg_r)}<br><small>${fmtPct(f['5']?.avg_return_pct)}</small></td>
+      <td style="color:${statusColor};font-size:.75rem">${esc(profile.sample_status.replaceAll('_', ' '))}<br><small style="color:var(--muted)">${esc(behavior)}</small></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div><b>Stock Fingerprint</b> <span style="color:var(--muted)">— behavior by symbol + technique</span></div>
+      <div style="color:var(--gold);font-size:.78rem">Research only until ${minClosed} closed trades/profile</div>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;font-size:.8rem">
+      <thead><tr><th>Symbol / Technique</th><th>Sample</th><th>Avg R</th><th>+1 session</th><th>+3 sessions</th><th>+5 sessions</th><th>Flags</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  `;
 }
 
 async function paperUpdateMarks(event) {
