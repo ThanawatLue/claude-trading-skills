@@ -2014,6 +2014,11 @@ def api_signal_results():
                     else None
                 ),
                 board_lot_size=int(paper_config.get("board_lot_size", 100)),
+                dynamic_decision=bool(paper_config.get("dynamic_decision", False)),
+                min_confirmation_score=float(paper_config.get("min_confirmation_score", 0.6)),
+                min_expected_net_r=float(paper_config.get("min_expected_net_r", 0.0)),
+                cooldown_after_loss_days=int(paper_config.get("cooldown_after_loss_days", 2)),
+                preserve_signal_plan=bool(paper_config.get("preserve_signal_plan", False)),
                 source_rules=paper_config.get("source_rules") or {},
                 dry_run=not (auto_enabled and auto_execute),
             )
@@ -2039,6 +2044,11 @@ def api_signal_results():
                     "max_position_pct": auto_config.max_position_pct,
                     "max_portfolio_heat_pct": auto_config.max_portfolio_heat_pct,
                     "board_lot_size": auto_config.board_lot_size,
+                    "dynamic_decision": auto_config.dynamic_decision,
+                    "min_confirmation_score": auto_config.min_confirmation_score,
+                    "min_expected_net_r": auto_config.min_expected_net_r,
+                    "cooldown_after_loss_days": auto_config.cooldown_after_loss_days,
+                    "preserve_signal_plan": auto_config.preserve_signal_plan,
                     "source_rules": auto_config.source_rules,
                     "execute": auto_execute,
                     "dry_run": auto_config.dry_run,

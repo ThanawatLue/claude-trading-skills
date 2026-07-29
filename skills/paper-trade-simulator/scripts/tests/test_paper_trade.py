@@ -53,12 +53,29 @@ class TestPaperTrade(unittest.TestCase):
         self.assertRegex(res["entry_at"], r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{2}:\d{2}")
         self.assertIsNotNone(datetime.fromisoformat(res["entry_at"].replace("Z", "+00:00")))
         self.assertRegex(res["last_updated"], r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{2}:\d{2}")
-        self.assertIsNotNone(datetime.fromisoformat(res["last_updated"].replace("Z", "+00:00")))
 
         # List positions
         positions = paper_trade.list_positions(status_filter="open")
         self.assertEqual(len(positions), 1)
         self.assertEqual(positions[0]["symbol"], "AAPL")
+
+    def test_open_persists_decision_trace(self):
+        trace = {"version": "dynamic-v1", "decision": "open", "components": {"expected_net_r": 0.8}}
+
+        res = paper_trade.open_position(
+            symbol="TFG.BK",
+            market="TH",
+            shares=500,
+            entry=10.2,
+            stop=10.0,
+            target=10.6,
+            decision_trace=trace,
+        )
+
+        self.assertEqual(res["decision_trace"], trace)
+        listed = paper_trade.list_positions("open", "TH")
+        self.assertEqual(listed[0]["decision_trace"], trace)
+        self.assertIsNotNone(datetime.fromisoformat(res["last_updated"].replace("Z", "+00:00")))
 
     def test_initial_risk_calculation(self):
         # Test long position

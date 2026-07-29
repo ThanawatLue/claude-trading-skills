@@ -38,6 +38,11 @@ auto_paper:
   derive_missing_risk: true
   default_stop_pct: 8
   target_r: 2
+  dynamic_decision: true
+  min_confirmation_score: 0.6
+  min_expected_net_r: 0.0
+  cooldown_after_loss_days: 2
+  preserve_signal_plan: true
   # InnovestX online cash-balance fee model. The simulator applies these per side.
   # slippage_bps is an explicit paper-trading assumption, not a broker fee.
   fee_model:

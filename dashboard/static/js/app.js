@@ -4800,6 +4800,24 @@ function renderAutoPaperGate(autoPaper) {
   const replacement = autoPaper.replacement_review || {};
   const selected = diag.selected || autoPaper.candidates || [];
   const skipped = diag.skipped || [];
+  const decisionSummary = (row) => {
+    const trace = row?.decision_trace || {};
+    const components = trace.components || {};
+    const features = trace.features || {};
+    const confirmation = components.confirmation_score ?? features.confirmation_score;
+    const expected = components.expected_net_r;
+    const parts = [];
+    if (confirmation !== null && confirmation !== undefined) parts.push(`confirm ${Number(confirmation).toFixed(2)}`);
+    if (expected !== null && expected !== undefined) parts.push(`net edge ${Number(expected).toFixed(2)}R`);
+    if (trace.history?.closed_count) parts.push(`history ${trace.history.closed_count}`);
+    return parts.length ? parts.join(' Â· ') : 'feature snapshot unavailable';
+  };
+  const dynamicRows = [...selected.slice(0, 3), ...skipped.slice(0, 4)].map(r => `
+    <div class="signal-diagnostic-row">
+      <div><strong>${_srEscape(r.symbol)}</strong><div class="signal-mini-path">decision ${r.decision_score === undefined ? '--' : Number(r.decision_score).toFixed(1)} Â· ${_srEscape(decisionSummary(r))}</div></div>
+      <div style="text-align:right;color:var(--muted)">${(r.reasons || []).map(_srEscape).join('; ') || 'selected'}</div>
+    </div>
+  `).join('');
   const selectedRows = selected.slice(0, 3).map(r => `
     <div class="signal-diagnostic-row">
       <div><strong>${_srEscape(r.symbol)}</strong><div class="signal-mini-path">${_srEscape(r.source_skill)} · score ${r.raw_score ?? '--'}</div></div>
@@ -4825,7 +4843,9 @@ function renderAutoPaperGate(autoPaper) {
       <div><span>New / Open cap</span><strong>${_srNum(config.max_new_positions)} / ${_srNum(config.max_open_positions)}</strong></div>
     </div>
     <div class="signal-note">Risk sizing: ${_srNum(config.risk_per_trade_pct)}% per trade | max position ${_srNum(config.max_position_pct)}% | portfolio heat ${_srNum(config.max_portfolio_heat_pct)}%.</div>
+    <div class="signal-note">Dynamic decision: ${config.dynamic_decision ? 'on' : 'off'} | preserve signal plan: ${config.preserve_signal_plan ? 'on' : 'off'} | cooldown after loss: ${_srNum(config.cooldown_after_loss_days)}d.</div>
     <div class="signal-note">High-score override: score ${_srNum(config.high_score_override_min)}+ can expand open cap to ${_srNum(config.max_open_positions_with_override)}.</div>
+    <div style="margin-top:10px"><strong style="color:var(--text);font-size:.8rem">Decision trace</strong>${dynamicRows || '<div class="signal-note">No decision trace available.</div>'}</div>
     <div style="margin-top:10px"><strong style="color:var(--text);font-size:.8rem">Selected</strong>${selectedRows || '<div class="signal-note">No selected auto-paper candidates.</div>'}</div>
     <div style="margin-top:12px"><strong style="color:var(--text);font-size:.8rem">Replacement Review</strong>${replacementRows || '<div class="signal-note">No replacement review is required. This panel never closes a position automatically.</div>'}</div>
     <div style="margin-top:12px"><strong style="color:var(--text);font-size:.8rem">Skipped</strong>${skippedRows || '<div class="signal-note">No skipped rows in the diagnostic window.</div>'}</div>

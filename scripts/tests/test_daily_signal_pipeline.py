@@ -218,7 +218,9 @@ def test_run_pipeline_ingests_signal_file_patterns(tmp_path: Path) -> None:
     result = pipeline.run_pipeline(
         config,
         analysis_runner=lambda _: {"enabled": False, "ok": True, "status": "skipped"},
-        as_of=date(2026, 7, 1),
+        # Use the following day so the TH session gate is deterministic even
+        # when the test suite runs during a live local session.
+        as_of=date(2026, 7, 2),
         write_output=False,
     )
 

@@ -17,19 +17,22 @@ def _register(
     stop: float | None = None,
     target: float | None = None,
     source: str = "vcp-screener",
+    payload: dict | None = None,
+    market: str | None = None,
 ) -> None:
     signal_ledger.register_signal(
         conn,
         signal_ledger.SignalRecord(
             signal_id=signal_id,
             symbol=symbol,
-            market="US",
+            market=market or signal_ledger.infer_market(symbol),
             source_skill=source,
             signal_date=signal_date,
             raw_score=score,
             entry_price=entry,
             stop_price=stop,
             target_price=target,
+            payload=payload,
         ),
     )
 
@@ -71,6 +74,32 @@ def test_source_rules_cap_stop_and_target(tmp_path: Path) -> None:
     assert len(candidates) == 1
     assert candidates[0]["stop"] == 96
     assert candidates[0]["target"] == 103.6
+
+
+def test_preserve_signal_plan_keeps_screener_execution_plan(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        _register(
+            conn,
+            source="thai-swing-dip",
+            signal_date="2026-07-10",
+            entry=5.15,
+            stop=5.0,
+            target=5.45,
+            market="TH",
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            preserve_signal_plan=True,
+        )
+
+        candidates = auto_paper.eligible_signals(conn, config)
+
+    assert len(candidates) == 1
+    assert candidates[0]["stop"] == 5.0
+    assert candidates[0]["target"] == 5.45
 
 
 def test_risk_sizing_uses_account_risk_in_board_lots(tmp_path: Path) -> None:
@@ -150,7 +179,9 @@ def test_replacement_review_identifies_weaker_open_position(tmp_path: Path) -> N
         finally:
             if str(auto_paper.PAPER_SCRIPT_DIR) in sys.path:
                 sys.path.remove(str(auto_paper.PAPER_SCRIPT_DIR))
-        _register(conn, signal_id="sig_strong", symbol="STRONG", score=90, entry=10, stop=9, target=12)
+        _register(
+            conn, signal_id="sig_strong", symbol="STRONG", score=90, entry=10, stop=9, target=12
+        )
         config = auto_paper.AutoPaperConfig(
             market="US",
             min_score=70,
@@ -412,3 +443,109 @@ def test_explain_candidates_reports_selected_and_skipped_reasons(tmp_path: Path)
     skipped = {row["symbol"]: row["reasons"] for row in diagnostics["skipped"]}
     assert any("score 60.0 < 70" in reason for reason in skipped["MSFT"])
     assert any("age" in reason for reason in skipped["NVDA"])
+
+
+def test_dynamic_decision_blocks_repeated_loss_during_cooldown(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        import sys
+
+        sys.path.insert(0, str(auto_paper.PAPER_SCRIPT_DIR))
+        try:
+            import paper_trade
+
+            conn.executescript(paper_trade.SCHEMA)
+            conn.execute(
+                """INSERT INTO paper_trade
+                   (symbol, market, side, status, entry_price, entry_at, shares,
+                    stop_price, target_price, initial_risk, exit_at, realized_r,
+                    gross_realized_pnl)
+                   VALUES ('KCC.BK', 'TH', 'long', 'closed_stop', 3.02,
+                           '2026-07-23T05:00:00+00:00', 1000, 2.94, 3.08, 80,
+                           '2026-07-23T06:00:00+00:00', -1.1, -80)"""
+            )
+        finally:
+            if str(auto_paper.PAPER_SCRIPT_DIR) in sys.path:
+                sys.path.remove(str(auto_paper.PAPER_SCRIPT_DIR))
+        _register(
+            conn,
+            signal_id="sig_kcc_repeat",
+            symbol="KCC.BK",
+            score=85.5,
+            signal_date="2026-07-24",
+            entry=2.94,
+            stop=2.86,
+            target=3.08,
+            source="thai-swing-dip",
+            payload={
+                "price": 2.94,
+                "rsi": 40.7,
+                "rsi_weekly": 62.2,
+                "sma20": 3.107,
+                "sma50": 2.9304,
+                "perf_1m": -6.96,
+                "perf_3m": 52.3,
+                "volume": 1_154_601,
+                "avg_volume": 344_215.3,
+            },
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 24),
+            now=datetime(2026, 7, 24, 4, 0, tzinfo=timezone.utc),
+            dynamic_decision=True,
+        )
+
+        diagnostics = auto_paper.explain_candidates(conn, config)
+        candidates = auto_paper.eligible_signals(conn, config)
+
+    assert candidates == []
+    assert "symbol_cooldown_after_loss" in diagnostics["skipped"][0]["reasons"]
+
+
+def test_dynamic_decision_passes_trace_to_open_fn(tmp_path: Path) -> None:
+    calls = []
+
+    def fake_open(**kwargs):
+        calls.append(kwargs)
+        return {"id": 987}
+
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        _register(
+            conn,
+            signal_id="sig_dynamic",
+            symbol="TFG.BK",
+            score=82,
+            signal_date="2026-07-10",
+            entry=10.2,
+            stop=10.0,
+            target=10.6,
+            source="thai-swing-dip",
+            payload={
+                "price": 10.2,
+                "rsi": 49.9,
+                "rsi_weekly": 64.7,
+                "sma20": 10.41,
+                "sma50": 9.884,
+                "perf_1m": 12.1,
+                "perf_3m": 9.7,
+                "volume": 27209943,
+                "avg_volume": 14955373.5,
+                "plan": {"entry": 10.2, "stop": 10.0, "target": 10.6},
+            },
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            dynamic_decision=True,
+            preserve_signal_plan=True,
+            dry_run=False,
+        )
+
+        result = auto_paper.run_auto_paper(conn, config, open_fn=fake_open)
+
+    assert result["opened"] == 1
+    assert calls[0]["decision_trace"]["version"] == "dynamic-v1"
+    assert calls[0]["decision_trace"]["execution"]["preserve_signal_plan"] is True

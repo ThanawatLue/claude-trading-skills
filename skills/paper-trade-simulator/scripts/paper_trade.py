@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS paper_trade (
     source          TEXT,
     source_score    REAL,
     notes_entry     TEXT,
+    decision_trace_json TEXT,
 
     exit_price      REAL,
     exit_at         TEXT,
@@ -108,6 +109,7 @@ def _db() -> sqlite3.Connection:
         "transaction_cost_bps": "REAL NOT NULL DEFAULT 0",
         "entry_cost": "REAL NOT NULL DEFAULT 0",
         "exit_cost": "REAL NOT NULL DEFAULT 0",
+        "decision_trace_json": "TEXT",
     }
     for column, definition in migrations.items():
         if column not in existing:
@@ -123,7 +125,14 @@ def _now_iso() -> str:
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-    return dict(row)
+    value = dict(row)
+    raw_trace = value.get("decision_trace_json")
+    if raw_trace:
+        try:
+            value["decision_trace"] = json.loads(raw_trace)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            value["decision_trace"] = None
+    return value
 
 
 def record_mark(trade_id: int, price: float, observed_at: str | None = None) -> None:
@@ -214,6 +223,7 @@ def open_position(
     notes: str | None = None,
     emotion: str | None = None,
     transaction_cost_bps: float = 0.0,
+    decision_trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Open a new paper position. Returns the created row."""
     if shares <= 0:
@@ -251,10 +261,10 @@ def open_position(
         cur = conn.execute(
             """INSERT INTO paper_trade
                (symbol, market, side, status, entry_price, entry_at, shares,
-                stop_price, target_price, initial_risk, source, source_score,
-                 notes_entry, transaction_cost_bps, entry_cost, exit_cost, last_price, last_updated, unrealized_pnl, unrealized_r,
+               stop_price, target_price, initial_risk, source, source_score,
+                 notes_entry, decision_trace_json, transaction_cost_bps, entry_cost, exit_cost, last_price, last_updated, unrealized_pnl, unrealized_r,
                 mae, mfe, journal_emotion, days_held)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 symbol.upper(),
                 market.upper(),
@@ -269,6 +279,9 @@ def open_position(
                 normalize_source(source) if source else None,
                 source_score,
                 notes,
+                json.dumps(decision_trace, ensure_ascii=False, sort_keys=True)
+                if decision_trace is not None
+                else None,
                 transaction_cost_bps,
                 entry_cost,
                 0.0,

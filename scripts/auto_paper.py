@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts import signal_ledger
+from scripts import decision_engine, signal_ledger
 
 PAPER_SCRIPT_DIR = PROJECT_ROOT / "skills" / "paper-trade-simulator" / "scripts"
 if str(PAPER_SCRIPT_DIR) not in sys.path:
@@ -56,6 +56,11 @@ class AutoPaperConfig:
     board_lot_size: int = 100
     replacement_min_score_gap: float = 10.0
     replacement_max_unrealized_r: float = 0.25
+    dynamic_decision: bool = False
+    min_confirmation_score: float = 0.6
+    min_expected_net_r: float = 0.0
+    cooldown_after_loss_days: int = 2
+    preserve_signal_plan: bool = False
     dry_run: bool = True
 
 
@@ -231,16 +236,17 @@ def _derive_prices(
     if stop is None or target is None:
         return None
     source_rule = _source_rule(signal, config)
-    stop_pct_cap = source_rule.get("stop_pct_cap")
-    if stop_pct_cap is not None:
-        max_risk = entry * (float(stop_pct_cap) / 100.0)
-        if entry - stop > max_risk:
-            stop = entry - max_risk
-    effective_target_r = float(source_rule.get("target_r", config.target_r))
-    risk = entry - stop
-    capped_target = entry + (risk * effective_target_r)
-    if capped_target < target:
-        target = capped_target
+    if not config.preserve_signal_plan:
+        stop_pct_cap = source_rule.get("stop_pct_cap")
+        if stop_pct_cap is not None:
+            max_risk = entry * (float(stop_pct_cap) / 100.0)
+            if entry - stop > max_risk:
+                stop = entry - max_risk
+        effective_target_r = float(source_rule.get("target_r", config.target_r))
+        risk = entry - stop
+        capped_target = entry + (risk * effective_target_r)
+        if capped_target < target:
+            target = capped_target
     if not (0 < stop < entry < target):
         return None
     if (signal["market"] or "").upper() == "TH":
@@ -250,6 +256,101 @@ def _derive_prices(
     if not (0 < stop < entry < target):
         return None
     return float(entry), float(stop), float(target)
+
+
+def _payload(row: sqlite3.Row) -> dict[str, Any]:
+    raw = row["payload_json"] if "payload_json" in row.keys() else None
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _history_context(
+    conn: sqlite3.Connection, row: sqlite3.Row, config: AutoPaperConfig
+) -> dict[str, Any]:
+    """Build stock-level history for the dynamic decision trace."""
+    empty = {
+        "closed_count": 0,
+        "wins": 0,
+        "losses": 0,
+        "sum_realized_r": 0.0,
+        "avg_loss_r": -1.0,
+        "cooldown_active": False,
+        "last_exit_at": None,
+    }
+    try:
+        rows = conn.execute(
+            """SELECT status, realized_r, exit_at FROM paper_trade
+               WHERE symbol=? AND market=? AND status != 'open'
+               ORDER BY exit_at DESC""",
+            (row["symbol"].upper(), row["market"].upper()),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return empty
+
+    closed = [r for r in rows if r["realized_r"] is not None]
+    if not closed:
+        return empty
+    wins = sum(1 for r in closed if float(r["realized_r"]) > 0)
+    losses = sum(1 for r in closed if float(r["realized_r"]) < 0)
+    loss_values = [float(r["realized_r"]) for r in closed if float(r["realized_r"]) < 0]
+    last = closed[0]
+    cooldown_active = False
+    if float(last["realized_r"]) < 0 and last["exit_at"]:
+        try:
+            exit_at = datetime.fromisoformat(str(last["exit_at"]).replace("Z", "+00:00"))
+            elapsed = (_as_of(config) - exit_at.astimezone(timezone.utc).date()).days
+            cooldown_active = elapsed <= int(config.cooldown_after_loss_days)
+        except ValueError:
+            cooldown_active = False
+    return {
+        "closed_count": len(closed),
+        "wins": wins,
+        "losses": losses,
+        "sum_realized_r": round(sum(float(r["realized_r"]) for r in closed), 4),
+        "avg_loss_r": round(sum(loss_values) / len(loss_values), 4) if loss_values else -1.0,
+        "cooldown_active": cooldown_active,
+        "last_exit_at": last["exit_at"],
+    }
+
+
+def _decision_trace(
+    conn: sqlite3.Connection,
+    row: sqlite3.Row,
+    candidate: dict[str, Any],
+    config: AutoPaperConfig,
+) -> dict[str, Any]:
+    history = _history_context(conn, row, config)
+    payload = _payload(row)
+    trace = decision_engine.evaluate_signal(
+        {
+            "symbol": row["symbol"],
+            "market": row["market"],
+            "source_skill": row["source_skill"],
+            "raw_score": row["raw_score"],
+            "payload": payload,
+            "entry": candidate["entry"],
+            "stop": candidate["stop"],
+            "target": candidate["target"],
+            "transaction_cost_bps": candidate["transaction_cost_bps"],
+            "history": history,
+            "cooldown_active": history["cooldown_active"],
+            "min_confirmation_score": config.min_confirmation_score,
+            "min_expected_net_r": config.min_expected_net_r,
+        }
+    )
+    trace["execution"]["preserve_signal_plan"] = config.preserve_signal_plan
+    plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
+    trace["execution"]["source_plan"] = {
+        "entry": plan.get("entry"),
+        "stop": plan.get("stop"),
+        "target": plan.get("target"),
+    }
+    return trace
 
 
 def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[dict[str, Any]]:
@@ -296,11 +397,27 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
         if prices is None:
             continue
         candidate = _candidate_from_prices(row, config, prices)
-        if candidate is None or _would_exceed_heat(planned_heat, candidate["initial_risk"], config):
+        if candidate is None:
+            continue
+        trace = _decision_trace(conn, row, candidate, config)
+        candidate["decision_trace"] = trace
+        candidate["decision_score"] = trace["components"]["decision_score"]
+        candidate["expected_net_r"] = trace["components"]["expected_net_r"]
+        if config.dynamic_decision and trace["decision"] != "open":
+            continue
+        if _would_exceed_heat(planned_heat, candidate["initial_risk"], config):
             continue
         out.append(candidate)
         planned_heat += candidate["initial_risk"]
         reserved_symbols.add(symbol)
+    out.sort(
+        key=lambda item: (
+            float(item.get("decision_score") or 0),
+            float(item.get("raw_score") or 0),
+            str(item.get("signal_date") or ""),
+        ),
+        reverse=True,
+    )
     return out[: config.max_new_positions]
 
 
@@ -370,13 +487,6 @@ def explain_candidates(
         capacity = _open_capacity_for_score(config, score)
         if capacity is not None and len(open_symbols) + len(selected_symbols) >= capacity:
             reasons.append(f"open capacity {capacity} reached")
-        prices = _derive_prices(row, config)
-        candidate = _candidate_from_prices(row, config, prices) if prices else None
-        if candidate is None:
-            reasons.append("missing or invalid entry/stop/target")
-        elif _would_exceed_heat(planned_heat, candidate["initial_risk"], config):
-            reasons.append("portfolio heat limit reached")
-
         base = {
             "signal_id": row["signal_id"],
             "symbol": row["symbol"],
@@ -386,6 +496,20 @@ def explain_candidates(
             "signal_date": row["signal_date"],
             "age_days": age_days,
         }
+        prices = _derive_prices(row, config)
+        candidate = _candidate_from_prices(row, config, prices) if prices else None
+        trace = _decision_trace(conn, row, candidate, config) if candidate is not None else None
+        if trace is not None:
+            base["decision_trace"] = trace
+            base["decision_score"] = trace["components"]["decision_score"]
+            base["expected_net_r"] = trace["components"]["expected_net_r"]
+        if candidate is None:
+            reasons.append("missing or invalid entry/stop/target")
+        elif config.dynamic_decision and trace and trace["decision"] != "open":
+            reasons.extend(trace["gates"]["failed"])
+        elif _would_exceed_heat(planned_heat, candidate["initial_risk"], config):
+            reasons.append("portfolio heat limit reached")
+
         if reasons:
             skipped.append({**base, "reasons": reasons})
             continue
@@ -523,6 +647,7 @@ def run_auto_paper(
             ),
             emotion="calm",
             transaction_cost_bps=float(candidate["transaction_cost_bps"]),
+            decision_trace=candidate.get("decision_trace"),
         )
         link_signal_to_paper(conn, candidate["signal_id"], int(row["id"]))
         opened.append({"signal_id": candidate["signal_id"], "paper_trade_id": row["id"]})
@@ -552,6 +677,11 @@ def run_auto_paper(
             "max_position_pct": config.max_position_pct,
             "max_portfolio_heat_pct": config.max_portfolio_heat_pct,
             "board_lot_size": config.board_lot_size,
+            "dynamic_decision": config.dynamic_decision,
+            "min_confirmation_score": config.min_confirmation_score,
+            "min_expected_net_r": config.min_expected_net_r,
+            "cooldown_after_loss_days": config.cooldown_after_loss_days,
+            "preserve_signal_plan": config.preserve_signal_plan,
             "source_rules": config.source_rules,
             "as_of": _as_of(config).isoformat(),
         },

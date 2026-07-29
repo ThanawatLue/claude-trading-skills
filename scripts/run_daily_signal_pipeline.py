@@ -72,6 +72,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "derive_missing_risk": True,
         "default_stop_pct": 8.0,
         "target_r": 2.0,
+        "dynamic_decision": True,
+        "min_confirmation_score": 0.6,
+        "min_expected_net_r": 0.0,
+        "cooldown_after_loss_days": 2,
+        "preserve_signal_plan": True,
         "fee_model": {
             "broker": "innovestx",
             "commission_pct": 0.15,
@@ -206,6 +211,11 @@ def _build_auto_config(
             float(paper["max_portfolio_heat_pct"]) if paper.get("max_portfolio_heat_pct") else None
         ),
         board_lot_size=int(paper.get("board_lot_size", 100)),
+        dynamic_decision=bool(paper.get("dynamic_decision", False)),
+        min_confirmation_score=float(paper.get("min_confirmation_score", 0.6)),
+        min_expected_net_r=float(paper.get("min_expected_net_r", 0.0)),
+        cooldown_after_loss_days=int(paper.get("cooldown_after_loss_days", 2)),
+        preserve_signal_plan=bool(paper.get("preserve_signal_plan", False)),
         source_rules=paper.get("source_rules") or {},
         as_of=as_of,
         dry_run=dry_run,
