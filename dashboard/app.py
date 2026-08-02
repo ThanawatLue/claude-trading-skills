@@ -49,6 +49,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE_DIR, "skills", "paper-trade-simulator", "scripts"))
 from paper_trade import VALID_EMOTIONS  # noqa: E402
 
+from dashboard.services.analytics_service import build_decision_analytics  # noqa: E402
 from dashboard.services.paper_service import PaperService  # noqa: E402
 
 paper_open = PaperService.open
@@ -2134,6 +2135,40 @@ def api_signal_results():
                 auto_paper_summary,
             ),
             "feedback_files": _read_feedback_files(),
+        }
+        return jsonify(_clean_nan(payload))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/decision-analytics")
+def api_decision_analytics():
+    """Read-only expectancy, risk excursion, and calibration analytics."""
+    market = request.args.get("market") or None
+    try:
+        market_clause = "WHERE s.market = ?" if market else ""
+        params = [market.upper()] if market else []
+        with signal_ledger.connect(DB_PATH) as conn:
+            rows = conn.execute(
+                f"""SELECT s.signal_id, s.symbol, s.market, s.source_skill,
+                           s.signal_date, s.raw_score, s.entry_price, s.stop_price,
+                           s.target_price, s.payload_json,
+                           o.horizon_days, o.evaluation_date, o.entry_close,
+                           o.close_price, o.high_price, o.low_price,
+                           o.return_pct, o.mae_pct, o.mfe_pct,
+                           o.hit_stop, o.hit_target, o.theoretical_r,
+                           o.is_complete
+                    FROM signal_ledger s
+                    JOIN signal_outcome o ON o.signal_id = s.signal_id
+                    {market_clause}{" AND" if market_clause else "WHERE"} o.is_complete = 1
+                    ORDER BY o.evaluation_date ASC, s.signal_id ASC""",
+                params,
+            ).fetchall()
+        analytics = build_decision_analytics([dict(row) for row in rows])
+        payload = {
+            "as_of": datetime.now().isoformat(timespec="seconds"),
+            "market": market.upper() if market else None,
+            "analytics": analytics,
         }
         return jsonify(_clean_nan(payload))
     except Exception as e:

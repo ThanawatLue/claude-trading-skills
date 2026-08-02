@@ -638,6 +638,48 @@
     <div class="metric signal-kpi"><b>Postmortems</b><span id="srPostmortems">--</span></div>
   </div>
 
+  <div class="card decision-analytics-card" id="decisionAnalyticsPanel">
+    <div class="section-title analytics-section-title">
+      <span>Decision Quality Analytics</span>
+      <span class="analytics-status" id="decisionAnalyticsStatus">Loading...</span>
+      <button class="guide-btn" type="button" onclick="loadDecisionAnalytics()">Refresh analytics</button>
+    </div>
+    <div id="decisionAnalyticsNotes" class="signal-note">กำลังอ่าน complete signal outcomes...</div>
+    <div class="analytics-kpi-grid">
+      <div class="metric signal-kpi"><b>5D Expectancy</b><span id="daExpectancy">--</span></div>
+      <div class="metric signal-kpi"><b>Win Rate / 95% CI</b><span id="daWinRate">--</span></div>
+      <div class="metric signal-kpi"><b>Profit Factor</b><span id="daProfitFactor">--</span></div>
+      <div class="metric signal-kpi"><b>Max Drawdown</b><span id="daDrawdown">--</span></div>
+    </div>
+    <div class="analytics-grid-two">
+      <div>
+        <div class="analytics-subtitle">Score bucket performance</div>
+        <div class="analytics-bars" id="daScoreBars">--</div>
+      </div>
+      <div>
+        <div class="analytics-subtitle">Regime-conditioned expectancy</div>
+        <div class="analytics-bars" id="daRegimeBars">--</div>
+      </div>
+    </div>
+    <div class="analytics-grid-two analytics-detail-grid">
+      <div>
+        <div class="analytics-subtitle">Forward return by horizon</div>
+        <div class="analytics-table-wrap">
+          <table class="signal-table analytics-table">
+            <thead><tr><th>Days</th><th>N</th><th>Avg R</th><th>Avg return</th><th>Win rate</th></tr></thead>
+            <tbody id="daHorizonRows"><tr><td colspan="5">--</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="analytics-subtitle">MAE / MFE excursion</div>
+        <div id="daMaeMfe" class="analytics-excursion">--</div>
+        <div class="analytics-subtitle" style="margin-top:18px">Probability calibration</div>
+        <div id="daCalibration" class="analytics-calibration">--</div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid3 signal-results-grid">
     <div class="card">
       <div class="card-title">Outcome Maturity</div>

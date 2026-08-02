@@ -4619,9 +4619,126 @@ async function loadSignalResults() {
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
     renderSignalResults(data);
+    loadDecisionAnalytics();
   } catch (e) {
     console.error('signal results failed', e);
     if (readiness) readiness.textContent = `โหลด Signal Results ไม่สำเร็จ: ${e.message}`;
+  }
+}
+
+async function loadDecisionAnalytics() {
+  const status = document.getElementById('decisionAnalyticsStatus');
+  const notes = document.getElementById('decisionAnalyticsNotes');
+  if (status) status.textContent = 'Loading...';
+  if (notes) notes.textContent = 'กำลังอ่าน complete signal outcomes...';
+  try {
+    const res = await fetch(`/api/decision-analytics?market=${encodeURIComponent(currentMarket)}`);
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    renderDecisionAnalytics(data.analytics || {});
+  } catch (e) {
+    console.error('decision analytics failed', e);
+    if (status) status.textContent = 'error';
+    if (notes) notes.textContent = `โหลด Decision Analytics ไม่สำเร็จ: ${e.message}`;
+  }
+}
+
+function _analyticsValue(value, digits = 2) {
+  if (value === null || value === undefined || value === '') return '--';
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : '--';
+}
+
+function _analyticsBarRows(items) {
+  if (!items || !items.length) return '<div class="signal-note">ยังไม่มีข้อมูลกลุ่มนี้</div>';
+  const metrics = items.map(item => {
+    const r = Number(item.expectancy_r);
+    const isR = item.expectancy_r !== null && item.expectancy_r !== undefined && Number.isFinite(r);
+    return isR ? {value: r, isR: true} : {value: Number(item.avg_return_pct) || 0, isR: false};
+  });
+  const max = Math.max(0.0001, ...metrics.map(item => Math.abs(item.value)));
+  return items.map(item => {
+    const r = Number(item.expectancy_r);
+    const isR = item.expectancy_r !== null && item.expectancy_r !== undefined && Number.isFinite(r);
+    const metric = isR ? r : (Number(item.avg_return_pct) || 0);
+    const positive = metric >= 0;
+    const width = Math.max(4, Math.min(100, Math.abs(metric) / max * 100));
+    const display = isR ? _srR(r) : _srSignedPct(item.avg_return_pct);
+    return `
+      <div class="analytics-bar-row">
+        <span>${_srEscape(item.label || 'unknown')}</span>
+        <div class="analytics-bar-track"><div class="analytics-bar-fill ${positive ? 'analytics-bar-positive' : 'analytics-bar-negative'}" style="width:${width}%"></div></div>
+        <span class="analytics-bar-meta">${display} · N${_srNum(item.sample_size || 0)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderDecisionAnalytics(analytics) {
+  const overall = analytics.overall || {};
+  const ci = overall.win_rate_ci || [];
+  const status = document.getElementById('decisionAnalyticsStatus');
+  const notes = document.getElementById('decisionAnalyticsNotes');
+  const n = Number(overall.sample_size || 0);
+  if (status) status.textContent = analytics.status === 'ok' ? `${analytics.primary_horizon_days || 5}D · N=${n}` : 'insufficient data';
+  if (notes) {
+    const noteItems = analytics.notes || [];
+    notes.innerHTML = noteItems.length
+      ? noteItems.map(item => `<div class="signal-note">${_srEscape(item)}</div>`).join('')
+      : '<div class="signal-note" style="color:var(--green)">Analytics ใช้ complete outcomes จาก signal ledger และไม่เปลี่ยนกติกา execution</div>';
+  }
+  _srSetText('daExpectancy', _srR(overall.expectancy_r));
+  _srSetText('daWinRate', overall.win_rate === null || overall.win_rate === undefined
+    ? '--'
+    : `${_srPct(overall.win_rate)} (${_srPct(ci[0])}-${_srPct(ci[1])})`);
+  _srSetText('daProfitFactor', _analyticsValue(overall.profit_factor));
+  _srSetText('daDrawdown', _srR(overall.max_drawdown_r));
+
+  const score = document.getElementById('daScoreBars');
+  if (score) score.innerHTML = _analyticsBarRows(analytics.score_buckets || []);
+  const regimes = document.getElementById('daRegimeBars');
+  if (regimes) regimes.innerHTML = _analyticsBarRows(analytics.regimes || []);
+
+  const horizonBody = document.getElementById('daHorizonRows');
+  const horizons = analytics.by_horizon || {};
+  if (horizonBody) {
+    const entries = Object.entries(horizons);
+    horizonBody.innerHTML = entries.length
+      ? entries.map(([days, item]) => `<tr>
+          <td><strong style="color:var(--text)">${_srEscape(days)}D</strong></td>
+          <td>${_srNum(item.sample_size)}</td>
+          <td style="color:${Number(item.expectancy_r) >= 0 ? 'var(--green)' : 'var(--red)'}">${_srR(item.expectancy_r)}</td>
+          <td>${_srSignedPct(item.avg_return_pct)}</td>
+          <td>${_srPct(item.win_rate)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" style="color:var(--muted)">ยังไม่มี complete horizon outcome</td></tr>';
+  }
+
+  const excursion = document.getElementById('daMaeMfe');
+  if (excursion) {
+    const mae = Number(overall.avg_mae_pct);
+    const mfe = Number(overall.avg_mfe_pct);
+    const max = Math.max(.01, Math.abs(Number(overall.worst_mae_pct) || 0), Math.abs(Number(overall.best_mfe_pct) || 0));
+    const excursionRow = (label, value, color) => {
+      const width = Number.isFinite(value) ? Math.max(4, Math.min(100, Math.abs(value) / max * 100)) : 2;
+      return `<div class="analytics-excursion-row"><span>${label}</span><div class="analytics-excursion-track"><div class="analytics-excursion-fill" style="width:${width}%;background:${color}"></div></div><span class="analytics-bar-meta">${_srSignedPct(value)}</span></div>`;
+    };
+    excursion.innerHTML = `${excursionRow('Avg MAE', mae, 'var(--red)')}${excursionRow('Avg MFE', mfe, 'var(--green)')}<div class="signal-note">Worst MAE ${_srSignedPct(overall.worst_mae_pct)} · Best MFE ${_srSignedPct(overall.best_mfe_pct)} · N${_srNum(overall.mae_mfe_sample)}</div>`;
+  }
+
+  const calibration = document.getElementById('daCalibration');
+  const calibrationData = analytics.calibration || {};
+  if (calibration) {
+    if (!calibrationData.available) {
+      calibration.innerHTML = '<div class="signal-note">ยังไม่มี predicted probability/confidence ที่ผูกกับผลลัพธ์</div>';
+    } else {
+      const rows = (calibrationData.bins || []).filter(item => item.sample_size > 0).map(item => {
+        const predicted = Number(item.predicted) || 0;
+        const observed = Number(item.observed) || 0;
+        return `<div class="analytics-calibration-row"><span>${_srEscape(item.label)}</span><div class="analytics-calibration-track"><div class="analytics-calibration-pred" style="width:${predicted * 100}%"></div></div><div class="analytics-calibration-track"><div class="analytics-calibration-obs" style="width:${observed * 100}%"></div></div><span>N${_srNum(item.sample_size)}</span></div>`;
+      }).join('');
+      calibration.innerHTML = `${rows || '<div class="signal-note">ไม่มี bin ที่มี sample</div>'}<div class="signal-note">Brier ${_analyticsValue(calibrationData.brier_score, 3)} · ECE ${_analyticsValue(calibrationData.ece, 3)} (cyan predicted / green observed)</div>`;
+    }
   }
 }
 

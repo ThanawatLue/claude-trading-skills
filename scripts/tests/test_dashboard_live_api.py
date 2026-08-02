@@ -74,6 +74,58 @@ def test_paper_fingerprint_endpoint_returns_profiles(monkeypatch) -> None:
     assert response.get_json() == {"market": "TH", "profiles": [{"symbol": "ABC.BK"}]}
 
 
+def test_decision_analytics_endpoint_reads_complete_signal_outcomes(monkeypatch, tmp_path) -> None:
+    from scripts import signal_ledger
+
+    db_path = tmp_path / "analytics.db"
+    with signal_ledger.connect(db_path) as conn:
+        signal_ledger.register_signal(
+            conn,
+            signal_ledger.SignalRecord(
+                signal_id="sig_analytics",
+                symbol="AAPL",
+                source_skill="vcp-screener",
+                signal_date="2026-01-01",
+                market="US",
+                raw_score=84,
+                entry_price=100,
+                stop_price=95,
+                payload={"regime": "bull", "predicted_probability": 0.7},
+            ),
+        )
+        conn.execute(
+            """INSERT INTO signal_outcome
+               (signal_id, horizon_days, evaluation_date, entry_close, close_price,
+                high_price, low_price, return_pct, mae_pct, mfe_pct, theoretical_r, is_complete, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                "sig_analytics",
+                5,
+                "2026-01-08",
+                100,
+                110,
+                112,
+                97,
+                0.10,
+                -0.03,
+                0.12,
+                2.0,
+                1,
+                "2026-01-08T00:00:00",
+            ),
+        )
+        conn.commit()
+
+    monkeypatch.setattr(dashboard_app, "DB_PATH", str(db_path))
+    response = dashboard_app.app.test_client().get("/api/decision-analytics?market=US")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["analytics"]["status"] == "ok"
+    assert payload["analytics"]["overall"]["expectancy_r"] == 2.0
+    assert payload["analytics"]["regimes"][0]["label"] == "bull"
+
+
 def test_jobs_latest_reports_never_run_without_confusing_health(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(dashboard_app, "DB_PATH", str(tmp_path / "db.sqlite"))
 
