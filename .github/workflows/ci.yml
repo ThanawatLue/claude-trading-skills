@@ -1,0 +1,74 @@
+name: Quality and Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+      - name: Lint
+        run: uv run --frozen ruff check scripts dashboard src tests
+      - name: Validate skill registry
+        run: uv run --frozen python scripts/validate_skills_index.py --strict-workflows --strict-metadata
+      - name: Check lockfile
+        run: uv lock --check
+
+  core-and-regression-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+      - name: Run core and pipeline regression tests
+        env:
+          PYTHONUTF8: "1"
+        run: >-
+          uv run --frozen pytest -q
+          tests/core
+          tests/dashboard
+          scripts/tests/test_auto_paper.py
+          scripts/tests/test_daily_signal_pipeline.py
+          scripts/tests/test_dashboard_live_api.py
+          scripts/tests/test_job_status.py
+          scripts/tests/test_signal_ledger.py
+          scripts/tests/test_gcp_lock_paths.py
+          skills/paper-trade-simulator/scripts/tests
+
+  skill-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
+      - name: Run supported skill test paths
+        env:
+          PYTHONUTF8: "1"
+        run: uv run --frozen pytest -q

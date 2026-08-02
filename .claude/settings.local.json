@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Select-String \"add_argument\" \"d:\\\\ex_work\\\\trading\\\\skills\\\\downtrend-duration-analyzer\\\\scripts\\\\analyze_downtrends.py\" | ForEach-Object { $_.Line.Trim\\(\\) })",
+      "PowerShell(Stop-Process -Name python -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Process -FilePath \"python\" -ArgumentList \"d:\\\\ex_work\\\\trading\\\\dashboard\\\\app.py\" -WorkingDirectory \"d:\\\\ex_work\\\\trading\" -WindowStyle Hidden)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl -s http://localhost:5050/api/data?market=US)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,':', type\\(v\\).__name__, '-', str\\(v\\)[:120] if not isinstance\\(v,dict\\) else list\\(v.keys\\(\\)\\)\\) for k,v in d.items\\(\\)]\")",
+      "WebSearch",
+      "Bash(Get-ChildItem -Path \"D:\\\\ex_work\\\\trading\\\\reports\" -Filter \"*.json\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(uv run *)",
+      "Bash(python scripts/run_skill_improvement_loop.py --dry-run)",
+      "Bash(python scripts/run_skill_improvement_loop.py --no-git)",
+      "Bash(python -c \"from pathlib import Path; skills=[d.name for d in Path\\('skills'\\).iterdir\\(\\) if d.is_dir\\(\\) and \\(d/'SKILL.md'\\).exists\\(\\)]; print\\(f'จำนวน skills: {len\\(skills\\)}'\\); [print\\(f'  - {s}'\\) for s in sorted\\(skills\\)]\")",
+      "Bash(python -c \"from pathlib import Path; skills=[d.name for d in Path\\('skills'\\).iterdir\\(\\) if d.is_dir\\(\\) and \\(d/'SKILL.md'\\).exists\\(\\)]; print\\(f'Total skills: {len\\(skills\\)}'\\); [print\\(f'  - {s}'\\) for s in sorted\\(skills\\)]\")",
+      "Bash(python skills/dual-axis-skill-reviewer/scripts/run_dual_axis_review.py --project-root . --all --output-dir reports/)",
+      "Bash(python -c ' *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --title 'fix\\(dashboard\\): target price anchoring, exposure enum, FMP API key override, and UX improvements' --body ' *)",
+      "Bash(python -c \"import os; t=os.environ.get\\('GITHUB_TOKEN',''\\); print\\('token_len='+str\\(len\\(t\\)\\)\\)\")",
+      "Bash(python scripts/run_skill_improvement_loop.py --help)"
+    ]
+  }
+}
