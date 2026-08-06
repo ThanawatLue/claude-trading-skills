@@ -88,6 +88,26 @@ jobs:
 
             DASHBOARD_LOCAL_URL="$LOCAL_DASHBOARD_URL" bash scripts/setup_gcp_cron.sh
 
+            # Remove the legacy duplicate automation block that was installed
+            # under the old github-actions account. Preserve any unrelated
+            # crontab entries owned by that account.
+            if id github-actions >/dev/null 2>&1; then
+              LEGACY_CRON="$(mktemp)"
+              LEGACY_CLEAN="$(mktemp)"
+              if sudo -n crontab -u github-actions -l > "$LEGACY_CRON" 2>/dev/null; then
+                awk '
+                  $0 == "# BEGIN TONG_TRADING_AUTOMATION" { skip = 1; next }
+                  $0 == "# END TONG_TRADING_AUTOMATION" { skip = 0; next }
+                  !skip { print }
+                ' "$LEGACY_CRON" > "$LEGACY_CLEAN"
+                if ! cmp -s "$LEGACY_CRON" "$LEGACY_CLEAN"; then
+                  sudo -n crontab -u github-actions "$LEGACY_CLEAN"
+                  echo "Removed legacy TONG_TRADING_AUTOMATION crontab block from github-actions."
+                fi
+              fi
+              rm -f "$LEGACY_CRON" "$LEGACY_CLEAN"
+            fi
+
             kill_port_listeners() {
               port="$1"
               for attempt in $(seq 1 8); do
