@@ -95,11 +95,8 @@ jobs:
               LEGACY_CRON="$(mktemp)"
               LEGACY_CLEAN="$(mktemp)"
               if sudo -n crontab -u github-actions -l > "$LEGACY_CRON" 2>/dev/null; then
-                awk '
-                  $0 == "# BEGIN TONG_TRADING_AUTOMATION" { skip = 1; next }
-                  $0 == "# END TONG_TRADING_AUTOMATION" { skip = 0; next }
-                  !skip { print }
-                ' "$LEGACY_CRON" > "$LEGACY_CLEAN"
+                sed '/^# BEGIN TONG_TRADING_AUTOMATION$/,/^# END TONG_TRADING_AUTOMATION$/d' \
+                  "$LEGACY_CRON" > "$LEGACY_CLEAN"
                 if ! cmp -s "$LEGACY_CRON" "$LEGACY_CLEAN"; then
                   sudo -n crontab -u github-actions "$LEGACY_CLEAN"
                   echo "Removed legacy TONG_TRADING_AUTOMATION crontab block from github-actions."
