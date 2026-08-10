@@ -571,6 +571,9 @@ def api_health():
                 "ranked_candidates": True,
                 "market_aliases": True,
                 "step1_breadth_fallback": True,
+                "dual_check_pattern_gates": True,
+                "thai_swing_dual_check": True,
+                "earnings_multi_source": True,
             },
         }
     )
@@ -1555,58 +1558,29 @@ def _lookup_earnings(symbol: str) -> dict:
     sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
     from cache_manager import CacheManager
 
+    from dashboard.services.earnings_lookup import lookup_earnings
+
     cache = CacheManager(DB_PATH)
+    return lookup_earnings(symbol, cache=cache, ttl_hours=24.0, allow_network=True)
 
-    # Check local sqlite cache first (TTL 24 hours)
-    is_cached, cached_res = cache.get_earnings_scan(symbol, ttl_hours=24.0)
-    if is_cached:
-        if cached_res:
-            try:
-                from datetime import date
 
-                earn_date = date.fromisoformat(cached_res["date"])
-                days_to = (earn_date - date.today()).days
-                cached_res["days_to_earnings"] = days_to
-            except Exception:
-                cached_res["days_to_earnings"] = None
-            return cached_res
-        return {"symbol": symbol, "date": None, "days_to_earnings": None}
-
-    # Fetch dynamically from yfinance
-    earnings_date = None
+def _lookup_bars_for_dual_check(symbol: str) -> list[dict] | None:
+    """Prefer local price_bar cache for Dual-Check pattern gates (no live fetch)."""
     try:
-        import yfinance as yf
+        sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+        from cache_manager import CacheManager
 
-        ticker = yf.Ticker(symbol)
-        cal = ticker.calendar
-        if cal:
-            key = next((k for k in cal.keys() if k.lower() == "earnings date"), None)
-            if key:
-                dates = cal[key]
-                if dates and len(dates) > 0:
-                    d = dates[0]
-                    if hasattr(d, "strftime"):
-                        earnings_date = d.strftime("%Y-%m-%d")
-                    else:
-                        earnings_date = str(d)
-    except Exception as err:
-        print(f"Failed to fetch earnings for {symbol} via yfinance: {err}", file=sys.stderr)
-
-    # Save to cache
-    res_dict = None
-    days_to_earnings = None
-    if earnings_date:
-        res_dict = {"symbol": symbol, "date": earnings_date, "time": "unknown"}
-        try:
-            from datetime import date
-
-            earn_date = date.fromisoformat(earnings_date)
-            days_to_earnings = (earn_date - date.today()).days
-        except Exception:
-            pass
-
-    cache.save_earnings_scan(symbol, res_dict)
-    return {"symbol": symbol, "date": earnings_date, "days_to_earnings": days_to_earnings}
+        cache = CacheManager(DB_PATH)
+        for sym in (symbol, symbol.replace(".BK", ""), f"{symbol.replace('.BK', '')}.BK"):
+            if not sym:
+                continue
+            bars = cache.get_bars(sym, 260)
+            if bars and len(bars) >= 50:
+                # Cache returns newest-first; pattern_stats normalizes/sorts
+                return list(bars)
+    except Exception as exc:
+        print(f"bars lookup failed for {symbol}: {exc}", file=sys.stderr)
+    return None
 
 
 @app.route("/api/ranked-candidates")
@@ -1641,6 +1615,8 @@ def api_ranked_candidates():
         snapshot,
         hold_style=hold_style,  # type: ignore[arg-type]
         earnings_lookup=earnings_lookup if hold_style == "overnight" else None,
+        bars_lookup=_lookup_bars_for_dual_check,
+        require_verified_earnings=(market == "TH"),
     )
     if limit_n >= 0:
         ranked["passed"] = ranked["passed"][:limit_n]

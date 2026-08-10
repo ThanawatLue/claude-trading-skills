@@ -628,8 +628,9 @@ function calculatePatternStats(bars, currentIndex) {
     }
   }
 
-  // ── Day-of-Week Bias ──
+  // ── Day-of-Week Bias (overnight C→C + intraday O→C) ──
   let dayOfWeekBias = null;
+  let dayOfWeekBiasIntraday = null;
   if (currentIndex >= 5) {
     const todayDate = new Date(bars[currentIndex].time);
     const targetDay = todayDate.getDay();
@@ -639,18 +640,31 @@ function calculatePatternStats(bars, currentIndex) {
     let sameDayCount = 0;
     let sameDayWins = 0;
     let sameDayReturnSum = 0;
+    let intraCount = 0;
+    let intraWins = 0;
+    let intraReturnSum = 0;
 
-    for (let i = 1; i <= currentIndex; i++) {
+    for (let i = 0; i <= currentIndex; i++) {
       const barDate = new Date(bars[i].time);
-      if (barDate.getDay() === targetDay) {
+      if (barDate.getDay() !== targetDay) continue;
+
+      // Intraday open→close
+      const openPx = bars[i].open;
+      if (openPx > 0) {
+        const iRet = (bars[i].close - openPx) / openPx * 100;
+        intraCount++;
+        intraReturnSum += iRet;
+        if (iRet > 0) intraWins++;
+      }
+
+      // Overnight close→close needs previous bar
+      if (i >= 1) {
         sameDayCount++;
         const prevClose = bars[i-1].close;
         const currentClose = bars[i].close;
         const ret = prevClose > 0 ? (currentClose - prevClose) / prevClose * 100 : 0;
         sameDayReturnSum += ret;
-        if (ret > 0) {
-          sameDayWins++;
-        }
+        if (ret > 0) sameDayWins++;
       }
     }
 
@@ -659,7 +673,17 @@ function calculatePatternStats(bars, currentIndex) {
         day: dayName,
         winRate: (sameDayWins / sameDayCount * 100).toFixed(1),
         avgReturn: (sameDayReturnSum / sameDayCount).toFixed(2),
-        count: sameDayCount
+        count: sameDayCount,
+        metric: 'close_to_close'
+      };
+    }
+    if (intraCount > 0) {
+      dayOfWeekBiasIntraday = {
+        day: dayName,
+        winRate: (intraWins / intraCount * 100).toFixed(1),
+        avgReturn: (intraReturnSum / intraCount).toFixed(2),
+        count: intraCount,
+        metric: 'open_to_close'
       };
     }
   }
@@ -896,7 +920,8 @@ function calculatePatternStats(bars, currentIndex) {
       score: rsScore,
       raw: rawWeightedRs.toFixed(2)
     } : null,
-    dayBias: dayOfWeekBias
+    dayBias: dayOfWeekBias,
+    dayBiasIntraday: dayOfWeekBiasIntraday
   };
 }
 
@@ -1124,11 +1149,19 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
         rsStr = `<span style="color:${rsColor};font-weight:bold">Percentile ${stats.rs.percentile} (${stats.rs.raw}%)</span>`;
       }
 
-      // 6. Day bias
+      // 6. Day bias — show overnight C→C and intraday O→C
       let dayBiasStr = "N/A";
-      if (stats.dayBias) {
-        const biasColor = parseFloat(stats.dayBias.avgReturn) >= 0 ? 'var(--green)' : 'var(--red)';
-        dayBiasStr = `${stats.dayBias.day}: <span style="color:${biasColor}">${stats.dayBias.winRate}% (Avg ${stats.dayBias.avgReturn}%)</span>`;
+      if (stats.dayBias || stats.dayBiasIntraday) {
+        const parts = [];
+        if (stats.dayBias) {
+          const biasColor = parseFloat(stats.dayBias.avgReturn) >= 0 ? 'var(--green)' : 'var(--red)';
+          parts.push(`Swing C→C ${stats.dayBias.day}: <span style="color:${biasColor}">${stats.dayBias.winRate}% (Avg ${stats.dayBias.avgReturn}%)</span>`);
+        }
+        if (stats.dayBiasIntraday) {
+          const biasColor = parseFloat(stats.dayBiasIntraday.avgReturn) >= 0 ? 'var(--green)' : 'var(--red)';
+          parts.push(`ATC O→C: <span style="color:${biasColor}">${stats.dayBiasIntraday.winRate}% (Avg ${stats.dayBiasIntraday.avgReturn}%)</span>`);
+        }
+        dayBiasStr = parts.join('<br>');
       }
 
       // 7. Confluence Score
@@ -1688,12 +1721,15 @@ async function loadData(at) {
       const el = document.getElementById(id);
       if (el) el.style.display = usOnly ? '' : 'none';
     });
-    // Uptrend Analyzer: script only supports US market data — show warning badge for TH
+    // Uptrend Analyzer is US-only — hide on TH and show SET breadth proxy instead
     const uptrendNote = document.getElementById('uptrendUsNote');
     const uptrendCard = document.getElementById('uptrendCard');
-    if (uptrendNote && uptrendCard) {
-      uptrendNote.style.display = thOnly ? 'inline' : 'none';
-      uptrendCard.style.opacity  = thOnly ? '0.5' : '1';
+    const thProxy = document.getElementById('thBreadthProxyCard');
+    if (uptrendCard) uptrendCard.style.display = thOnly ? 'none' : '';
+    if (uptrendNote) uptrendNote.style.display = 'none';
+    if (thProxy) {
+      thProxy.style.display = thOnly ? '' : 'none';
+      if (thOnly) renderThBreadthProxy(RAW_DATA.thai_breadth || RAW_DATA._step1_breadth);
     }
     // CANSLIM: visible for both US and TH (backend runs it for both markets)
     // Thai Swing + TH Suite — TH only
@@ -1762,13 +1798,35 @@ function renderFreshnessBanner(freshness) {
   el.textContent = `⚠️ ข้อมูลบางส่วนเก่าเกิน ${freshness.stale_after_days || 3} วัน: ${stale}. อย่าใช้เป็นสัญญาณ overnight จนกว่าจะรัน Fresh Analysis`;
 }
 
+function renderThBreadthProxy(tb) {
+  const scoreEl = document.getElementById('thBreadthProxyScore');
+  const zoneEl = document.getElementById('thBreadthProxyZone');
+  const barEl = document.getElementById('thBreadthProxyBar');
+  if (!scoreEl) return;
+  if (!tb) {
+    scoreEl.textContent = '—';
+    if (zoneEl) zoneEl.textContent = '—';
+    if (barEl) barEl.style.width = '0%';
+    return;
+  }
+  const score = tb.composite_score ?? tb.composite?.score ?? tb.composite?.composite_score ?? null;
+  const zone = tb.regime || tb.composite?.zone || tb.composite?.regime || '—';
+  scoreEl.textContent = score != null ? Number(score).toFixed(1) : '—';
+  if (zoneEl) zoneEl.textContent = zone;
+  if (barEl && score != null) {
+    const s = Math.max(0, Math.min(100, Number(score)));
+    barEl.style.width = s + '%';
+    barEl.style.background = s >= 60 ? 'var(--green)' : (s >= 40 ? 'var(--gold)' : 'var(--red)');
+  }
+}
+
 async function loadRankedCandidates() {
   const body = document.getElementById('dualCheckBody');
   const summary = document.getElementById('dualCheckSummary');
   const rejectedEl = document.getElementById('dualCheckRejected');
   if (!body) return;
   const holdStyle = document.getElementById('dualCheckHoldStyle')?.value || 'overnight';
-  body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">กำลังโหลด Dual-Check…</td></tr>`;
+  body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">กำลังโหลด Dual-Check…</td></tr>`;
   try {
     const res = await fetch(`/api/ranked-candidates?market=${currentMarket}&hold_style=${encodeURIComponent(holdStyle)}&limit=25`);
     const data = await res.json();
@@ -1776,31 +1834,39 @@ async function loadRankedCandidates() {
 
     if (!data.regime_allowed) {
       summary.innerHTML = `<span style="color:var(--red);font-weight:700">Regime blocked:</span> ${data.recommendation || data.blocked_reason || 'not NEW_ENTRY_ALLOWED'} — ไม่แนะนำเปิดไม้ใหม่`;
-      body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px">Dual-Check หยุดที่ regime gate</td></tr>`;
+      body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Dual-Check หยุดที่ regime gate</td></tr>`;
     } else {
       const s = data.summary || {};
-      summary.innerHTML = `ผ่าน ${s.passed || 0} / ประเมิน ${s.evaluated || 0} · hold=${data.hold_style} · unavailable: ${(data.gates_unavailable || []).join(', ') || '—'}`;
+      const src = s.sources || {};
+      summary.innerHTML = `ผ่าน ${s.passed || 0} / ประเมิน ${s.evaluated || 0} · hold=${data.hold_style} · VCP ${src.vcp || 0} / Swing ${src.thai_swing || 0}` +
+        (data.gates_unavailable?.length ? ` · soft-unavailable: ${data.gates_unavailable.join(', ')}` : '');
     }
 
     const passed = data.passed || [];
     if (data.regime_allowed && !passed.length) {
-      body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">ยังไม่มีหุ้นที่ผ่าน Dual-Check วันนี้ (ดู near-miss ด้านล่าง)</td></tr>`;
+      body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">ยังไม่มีหุ้นที่ผ่าน Dual-Check วันนี้ (ดู near-miss ด้านล่าง)</td></tr>`;
     } else if (passed.length) {
       body.innerHTML = passed.map((c, i) => {
         const earn = c.earnings?.days_to_earnings;
-        const earnTxt = earn == null ? '—' : `${earn}d`;
+        const earnTxt = earn == null ? (c.earnings?.verified === false ? 'unverified' : '—') : `${earn}d`;
+        const conf = c.confluence?.net_score != null ? `${c.confluence.net_score > 0 ? '+' : ''}${c.confluence.net_score}` : '—';
+        const bias = c.day_bias?.win_rate != null ? `${c.day_bias.win_rate}%` : '—';
         const gateBits = Object.entries(c.gates || {})
           .filter(([, g]) => g && g.status !== 'pass')
           .map(([k, g]) => `${k}:${g.status}`)
           .join(' · ') || 'all hard gates pass';
         const sym = (c.symbol || '').replace('.BK', '');
+        const src = (c.source || 'vcp').replace('thai_swing_', 'swing:');
         return `<tr style="cursor:pointer" onclick="initChart('${c.symbol}')">
           <td>${i + 1}</td>
           <td><b>${sym}</b></td>
+          <td style="font-size:.7rem;color:var(--muted)">${src}</td>
           <td style="color:var(--cyan);font-weight:700">${(c.composite_score || 0).toFixed(1)}</td>
           <td>${c.execution_state || '—'}</td>
           <td style="color:${(c.rs_percentile || 0) >= 80 ? 'var(--green)' : 'var(--red)'}">${c.rs_percentile == null ? '—' : Math.round(c.rs_percentile)}</td>
           <td>${c.distance_from_pivot_pct == null ? '—' : c.distance_from_pivot_pct.toFixed(2) + '%'}</td>
+          <td>${conf}</td>
+          <td>${bias}</td>
           <td>${earnTxt}</td>
           <td style="font-size:.72rem;color:var(--muted)">${gateBits}</td>
         </tr>`;
@@ -1814,14 +1880,15 @@ async function loadRankedCandidates() {
       } else {
         rejectedEl.innerHTML = rejected.map(c => {
           const reasons = (c.reject_reasons || []).join(', ') || '—';
-          return `<div><b>${(c.symbol || '').replace('.BK','')}</b> score=${(c.composite_score || 0).toFixed(1)} — ${reasons}</div>`;
+          const src = (c.source || '').replace('thai_swing_', 'swing:');
+          return `<div><b>${(c.symbol || '').replace('.BK','')}</b> [${src}] score=${(c.composite_score || 0).toFixed(1)} — ${reasons}</div>`;
         }).join('');
       }
     }
   } catch (e) {
     console.error(e);
     if (summary) summary.textContent = 'โหลด Dual-Check ไม่สำเร็จ';
-    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px">Error: ${e.message || e}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Error: ${e.message || e}</td></tr>`;
   }
 }
 

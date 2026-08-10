@@ -320,13 +320,20 @@
   </div>
   <div class="card" id="uptrendCard">
     <div class="card-title">Uptrend Ratio Score <button class="guide-btn" onclick="showLegend('uptrend')">📖</button>
-      <small id="uptrendUsNote" style="display:none;font-size:.6rem;color:var(--orange);margin-left:6px">⚠️ US data only</small>
+      <small id="uptrendUsNote" style="display:none;font-size:.6rem;color:var(--orange);margin-left:6px">⚠️ US data only — hidden on TH</small>
     </div>
     <div id="uptrendScore" class="score-hero" style="color:var(--purple)">—</div>
     <div id="uptrendZone" class="score-badge">—</div>
     <div class="progress-container"><div class="progress-bar" id="uptrendBar"></div></div>
     <div id="uptrendGuidance" style="font-weight:700;color:var(--gold);font-size:.85rem">—</div>
     <div id="uptrendWarnings" style="margin-top:8px"></div>
+  </div>
+  <div class="card" id="thBreadthProxyCard" style="display:none">
+    <div class="card-title">SET Breadth (TH) <button class="guide-btn" onclick="showLegend('breadth')">📖</button></div>
+    <div id="thBreadthProxyScore" class="score-hero" style="color:var(--cyan)">—</div>
+    <div id="thBreadthProxyZone" class="score-badge">—</div>
+    <div class="progress-container"><div class="progress-bar" id="thBreadthProxyBar"></div></div>
+    <div id="thBreadthProxyGuidance" style="font-weight:700;color:var(--gold);font-size:.85rem">ใช้แทน US Uptrend บนตลาดไทย</div>
   </div>
   <div class="card" style="grid-column: span 1">
     <div class="card-title">Breadth Components (6)</div>
@@ -353,18 +360,19 @@
 </div>
 
 <!-- DUAL-CHECK SHORTLIST (primary recommendation) -->
-<div class="section-title" id="dualCheckSection">✅ Dual-Check Shortlist — แนะนำซื้อ (Regime + Setup + RS + Earnings)
+<div class="section-title" id="dualCheckSection">✅ Dual-Check Shortlist — Regime + Setup + Stage2 + RS + Earnings + Confluence + Day Bias
   <button class="guide-btn" onclick="showLegend('vcp')">📖 คู่มือ</button>
 </div>
 <div class="card" style="margin-bottom:24px">
   <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-    <div style="color:var(--muted);font-size:.8rem;line-height:1.4;max-width:720px">
-      กรองจาก VCP ด้วย Dual-Check: <b>NEW_ENTRY_ALLOWED</b>, state Pre-breakout/Breakout, pivot -2%…+3%, RS ≥ 80,
-      และ (overnight) earnings &gt; 7 วัน — confluence/day bias ยังดูบนกราฟ (unavailable ฝั่งเซิร์ฟเวอร์)
+    <div style="color:var(--muted);font-size:.8rem;line-height:1.4;max-width:760px">
+      กรอง VCP + Thai Swing: <b>NEW_ENTRY_ALLOWED</b>, Pre-breakout/Breakout, Stage&nbsp;2, pivot -2%…+3%, RS ≥ 80,
+      confluence net ≥ 1, day bias (overnight C→C win&gt;55% / intraday O→C win&gt;50%), overnight earnings &gt; 7 วัน
+      (TH overnight ต้อง verified earnings)
     </div>
     <select id="dualCheckHoldStyle" onchange="loadRankedCandidates()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px">
       <option value="overnight">Overnight / Swing</option>
-      <option value="intraday">Intraday</option>
+      <option value="intraday">Intraday (ATC)</option>
     </select>
   </div>
   <div id="dualCheckSummary" style="color:var(--muted);font-size:.85rem;margin-bottom:10px"></div>
@@ -374,16 +382,19 @@
         <tr>
           <th>#</th>
           <th>Symbol</th>
+          <th>Src</th>
           <th>Score</th>
           <th>State</th>
           <th>RS%</th>
           <th>Pivot%</th>
+          <th>Conf</th>
+          <th>Bias</th>
           <th>Earnings</th>
           <th>Gates</th>
         </tr>
       </thead>
       <tbody id="dualCheckBody">
-        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">กำลังโหลด Dual-Check…</td></tr>
+        <tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">กำลังโหลด Dual-Check…</td></tr>
       </tbody>
     </table>
   </div>

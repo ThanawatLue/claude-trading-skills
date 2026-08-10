@@ -1,22 +1,33 @@
 """Server-side Dual-Check ranking for dashboard candidates.
 
-Hard gates use snapshot JSON + optional earnings lookup. Confluence and
-day-bias remain unavailable until OHLCV pattern stats are ported server-side.
+Hard gates: regime, setup state, Stage-2 trend template, pivot band, RS,
+earnings (overnight), confluence, and hold-style day bias when OHLCV bars
+are available. Thai swing candidates are included alongside VCP.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, Literal
+
+from dashboard.services.pattern_stats import (
+    compute_confluence,
+    compute_day_bias,
+    evaluate_confluence_gate,
+    evaluate_day_bias_gate,
+)
 
 HoldStyle = Literal["overnight", "intraday"]
 EarningsLookup = Callable[[str], Mapping[str, Any] | None]
+BarsLookup = Callable[[str], Sequence[Mapping[str, Any]] | None]
 
 TRADABLE_STATES = frozenset({"Pre-breakout", "Breakout"})
 PIVOT_MIN_PCT = -2.0
 PIVOT_MAX_PCT = 3.0
 RS_MIN = 80.0
 EARNINGS_MIN_DAYS = 7
+TREND_TEMPLATE_MIN = 85.0
+THAI_SWING_MIN_SCORE = 70.0
 
 
 def _number(value: Any) -> float | None:
@@ -43,6 +54,12 @@ def _pivot_distance(row: Mapping[str, Any]) -> float | None:
     proximity = row.get("pivot_proximity")
     if isinstance(proximity, Mapping):
         return _number(proximity.get("distance_from_pivot_pct"))
+    plan = row.get("plan")
+    price = _number(row.get("price"))
+    if isinstance(plan, Mapping) and price is not None and price > 0:
+        entry = _number(plan.get("entry"))
+        if entry is not None:
+            return (price - entry) / entry * 100.0
     return None
 
 
@@ -72,6 +89,29 @@ def _rs_percentile(
     return None
 
 
+def _trend_template_passed(row: Mapping[str, Any]) -> bool | None:
+    tt = row.get("trend_template")
+    if isinstance(tt, Mapping):
+        if "passed" in tt:
+            return bool(tt.get("passed"))
+        score = _number(tt.get("score"))
+        if score is not None:
+            return score >= TREND_TEMPLATE_MIN
+    # Explicit flag from screeners
+    if "trend_template_passed" in row:
+        return bool(row.get("trend_template_passed"))
+    # Thai swing proxy: price above SMA50 (Stage-2-ish short-term)
+    if row.get("source", "").startswith("thai_swing") or row.get("_dual_source", "").startswith(
+        "thai_swing"
+    ):
+        price = _number(row.get("price"))
+        sma50 = _number(row.get("sma50"))
+        if price is not None and sma50 is not None and sma50 > 0:
+            return price > sma50
+        return None
+    return None
+
+
 def _canslim_index(snapshot: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     canslim = snapshot.get("canslim")
     results = []
@@ -91,17 +131,61 @@ def _canslim_index(snapshot: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     return out
 
 
-def _unavailable_client_gates() -> dict[str, dict[str, Any]]:
-    return {
-        "confluence": _gate(
-            "unavailable",
-            "Confluence requires OHLCV pattern stats (client-side only in Phase B)",
-        ),
-        "day_bias": _gate(
-            "unavailable",
-            "Overnight/intraday day bias requires bar history (client-side only in Phase B)",
-        ),
-    }
+def _normalize_thai_swing_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
+    thai = snapshot.get("thai_swing")
+    if not isinstance(thai, Mapping):
+        return []
+    rows: list[dict[str, Any]] = []
+    for bucket, state in (("dip_buy", "Pre-breakout"), ("momentum", "Breakout")):
+        items = thai.get(bucket) or []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            symbol = str(item.get("symbol") or "").strip()
+            if not symbol:
+                continue
+            score = _number(item.get("score")) or 0.0
+            row = dict(item)
+            row["symbol"] = symbol
+            row["composite_score"] = score
+            row["execution_state"] = state
+            row["_dual_source"] = f"thai_swing_{bucket}"
+            row["source"] = f"thai_swing_{bucket}"
+            rows.append(row)
+    return rows
+
+
+def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    vcp = snapshot.get("vcp") if isinstance(snapshot.get("vcp"), Mapping) else {}
+    results = (vcp or {}).get("results") or []
+    if isinstance(results, list):
+        for row in results:
+            if not isinstance(row, Mapping):
+                continue
+            symbol = str(row.get("symbol") or "").strip()
+            if not symbol or symbol in seen:
+                continue
+            item = dict(row)
+            item.setdefault("source", "vcp")
+            item["_dual_source"] = "vcp"
+            rows.append(item)
+            seen.add(symbol)
+
+    for row in _normalize_thai_swing_rows(snapshot):
+        symbol = str(row.get("symbol") or "").strip()
+        if not symbol or symbol in seen:
+            continue
+        # Only keep swing names that clear a minimum score before Dual-Check
+        if (_number(row.get("composite_score")) or 0.0) < THAI_SWING_MIN_SCORE:
+            continue
+        rows.append(row)
+        seen.add(symbol)
+    return rows
 
 
 def evaluate_candidate(
@@ -111,12 +195,15 @@ def evaluate_candidate(
     hold_style: HoldStyle,
     canslim_by_symbol: Mapping[str, Mapping[str, Any]],
     earnings_lookup: EarningsLookup | None,
+    bars_lookup: BarsLookup | None = None,
+    require_verified_earnings: bool = False,
 ) -> dict[str, Any]:
     symbol = str(row.get("symbol") or "").strip()
     score = _number(row.get("composite_score")) or 0.0
     state = str(row.get("execution_state") or row.get("consolidation_state") or "")
     distance = _pivot_distance(row)
     rs = _rs_percentile(row, canslim_by_symbol)
+    source = str(row.get("_dual_source") or row.get("source") or "vcp")
 
     gates: dict[str, dict[str, Any]] = {}
     reject_reasons: list[str] = []
@@ -135,8 +222,21 @@ def evaluate_candidate(
         gates["setup_state"] = _gate("fail", f"state={state or 'missing'}", "state_not_tradable")
         reject_reasons.append("state_not_tradable")
 
+    tt_passed = _trend_template_passed(row)
+    if tt_passed is True:
+        gates["stage2"] = _gate("pass", "Trend template / Stage-2 proxy passed")
+    elif tt_passed is False:
+        gates["stage2"] = _gate("fail", "Trend template / Stage-2 failed", "stage2_failed")
+        reject_reasons.append("stage2_failed")
+    else:
+        # VCP funnel usually already Stage-2 filtered; missing field = unavailable (non-blocking)
+        gates["stage2"] = _gate(
+            "unavailable",
+            "Trend template fields missing on candidate",
+        )
+
     if distance is not None and PIVOT_MIN_PCT <= distance <= PIVOT_MAX_PCT:
-        gates["pivot"] = _gate("pass", f"{distance:.2f}% from pivot")
+        gates["pivot"] = _gate("pass", f"{distance:.2f}% from pivot/entry")
     else:
         detail = (
             "missing pivot distance" if distance is None else f"{distance:.2f}% outside [-2,+3]"
@@ -146,6 +246,9 @@ def evaluate_candidate(
 
     if rs is not None and rs >= RS_MIN:
         gates["rs"] = _gate("pass", f"RS percentile {rs:.0f}")
+    elif source.startswith("thai_swing") and rs is None:
+        # Thai swing often lacks universe RS — do not hard-fail; require confluence instead
+        gates["rs"] = _gate("unavailable", "RS percentile not provided for Thai swing")
     else:
         detail = "missing RS percentile" if rs is None else f"RS percentile {rs:.0f} < 80"
         gates["rs"] = _gate("fail", detail, "rs_below_80")
@@ -163,11 +266,22 @@ def evaluate_candidate(
                 reject_reasons.append("earnings_lookup_error")
                 earnings_info = None
         days = None
+        verified = False
         if isinstance(earnings_info, Mapping):
             days = _number(earnings_info.get("days_to_earnings"))
+            verified = bool(earnings_info.get("verified")) or bool(earnings_info.get("date"))
         if "earnings" not in gates:
-            if days is None or days > EARNINGS_MIN_DAYS:
+            if require_verified_earnings and not verified:
+                gates["earnings"] = _gate(
+                    "fail",
+                    "earnings date unverified for overnight hold",
+                    "earnings_unverified",
+                )
+                reject_reasons.append("earnings_unverified")
+            elif days is None or days > EARNINGS_MIN_DAYS:
                 detail = "no upcoming earnings" if days is None else f"earnings in {int(days)} days"
+                if not verified and days is None:
+                    detail = "no upcoming earnings (unverified)"
                 gates["earnings"] = _gate("pass", detail)
             else:
                 gates["earnings"] = _gate(
@@ -182,7 +296,24 @@ def evaluate_candidate(
             "Earnings gate applies to overnight holds only",
         )
 
-    gates.update(_unavailable_client_gates())
+    bars = None
+    if bars_lookup is not None and symbol:
+        try:
+            bars = bars_lookup(symbol)
+        except Exception:
+            bars = None
+
+    confluence = compute_confluence(bars) if bars is not None else None
+    c_status, c_detail, c_code = evaluate_confluence_gate(confluence)
+    gates["confluence"] = _gate(c_status, c_detail, c_code)
+    if c_code:
+        reject_reasons.append(c_code)
+
+    bias = compute_day_bias(bars, hold_style=hold_style) if bars is not None else None
+    b_status, b_detail, b_code = evaluate_day_bias_gate(bias)
+    gates["day_bias"] = _gate(b_status, b_detail, b_code)
+    if b_code:
+        reject_reasons.append(b_code)
 
     passed = not reject_reasons
     return {
@@ -192,10 +323,12 @@ def evaluate_candidate(
         "distance_from_pivot_pct": distance,
         "rs_percentile": rs,
         "earnings": dict(earnings_info) if isinstance(earnings_info, Mapping) else None,
+        "confluence": dict(confluence) if isinstance(confluence, Mapping) else None,
+        "day_bias": dict(bias) if isinstance(bias, Mapping) else None,
         "gates": gates,
         "passed": passed,
         "reject_reasons": reject_reasons,
-        "source": "vcp",
+        "source": source,
     }
 
 
@@ -204,26 +337,25 @@ def rank_candidates(
     *,
     hold_style: HoldStyle = "overnight",
     earnings_lookup: EarningsLookup | None = None,
+    bars_lookup: BarsLookup | None = None,
+    require_verified_earnings: bool | None = None,
 ) -> dict[str, Any]:
-    """Rank VCP candidates that pass Dual-Check hard gates."""
+    """Rank VCP + Thai swing candidates that pass Dual-Check hard gates."""
     snapshot = snapshot or {}
     if hold_style not in ("overnight", "intraday"):
         hold_style = "overnight"
+
+    market = str(snapshot.get("market") or "").upper()
+    if require_verified_earnings is None:
+        require_verified_earnings = market in {"TH", "THA"}
 
     exposure = snapshot.get("exposure") if isinstance(snapshot.get("exposure"), Mapping) else {}
     recommendation = str((exposure or {}).get("recommendation") or "")
     regime_allowed = recommendation == "NEW_ENTRY_ALLOWED"
 
-    vcp = snapshot.get("vcp") if isinstance(snapshot.get("vcp"), Mapping) else {}
-    results = (vcp or {}).get("results") or []
-    if not isinstance(results, list):
-        results = []
-
     canslim_by_symbol = _canslim_index(snapshot)
     evaluated: list[dict[str, Any]] = []
-    for row in results:
-        if not isinstance(row, Mapping):
-            continue
+    for row in _candidate_rows(snapshot):
         evaluated.append(
             evaluate_candidate(
                 row,
@@ -231,6 +363,8 @@ def rank_candidates(
                 hold_style=hold_style,
                 canslim_by_symbol=canslim_by_symbol,
                 earnings_lookup=earnings_lookup,
+                bars_lookup=bars_lookup,
+                require_verified_earnings=require_verified_earnings,
             )
         )
 
@@ -238,18 +372,31 @@ def rank_candidates(
     passed = [item for item in evaluated if item.get("passed")]
     rejected = [item for item in evaluated if not item.get("passed")]
 
+    unavailable: set[str] = set()
+    for item in evaluated:
+        for name, gate in (item.get("gates") or {}).items():
+            if isinstance(gate, Mapping) and gate.get("status") == "unavailable":
+                unavailable.add(name)
+
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "hold_style": hold_style,
         "regime_allowed": regime_allowed,
         "recommendation": recommendation or None,
         "blocked_reason": None if regime_allowed else "regime_not_new_entry_allowed",
+        "require_verified_earnings": require_verified_earnings,
         "passed": passed,
         "rejected": rejected,
         "summary": {
             "evaluated": len(evaluated),
             "passed": len(passed),
             "rejected": len(rejected),
+            "sources": {
+                "vcp": sum(1 for c in evaluated if c.get("source") == "vcp"),
+                "thai_swing": sum(
+                    1 for c in evaluated if str(c.get("source") or "").startswith("thai_swing")
+                ),
+            },
         },
-        "gates_unavailable": ["confluence", "day_bias"],
+        "gates_unavailable": sorted(unavailable),
     }

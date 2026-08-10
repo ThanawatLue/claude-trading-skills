@@ -239,4 +239,5 @@ def test_e2e_index_includes_dual_check_markup(dash_env) -> None:
     html = res.get_data(as_text=True)
     assert "dualCheckSection" in html
     assert "freshnessBanner" in html
+    assert "thBreadthProxyCard" in html
     assert "ranked-candidates" in html or "Dual-Check" in html
