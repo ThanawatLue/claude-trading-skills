@@ -34,11 +34,13 @@ def test_api_data_returns_standard_json_for_non_finite_values(monkeypatch) -> No
     response = dashboard_app.app.test_client().get("/api/data?market=TH")
 
     assert response.status_code == 200
-    assert response.get_json() == {
-        "market": "TH",
-        "stored": None,
-        "fresh": {"value": None},
-    }
+    body = response.get_json()
+    assert body["market"] == "TH"
+    assert body["stored"] is None
+    assert body["fresh"] == {"value": None}
+    assert "_step1_breadth" in body
+    assert "_freshness" in body
+    assert body["_freshness"]["market"] == "TH"
     assert b"NaN" not in response.data
     assert b"Infinity" not in response.data
 
