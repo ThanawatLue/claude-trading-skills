@@ -50,6 +50,12 @@ sys.path.insert(0, os.path.join(BASE_DIR, "skills", "paper-trade-simulator", "sc
 from paper_trade import VALID_EMOTIONS  # noqa: E402
 
 from dashboard.services.analytics_service import build_decision_analytics  # noqa: E402
+from dashboard.services.dual_check_service import rank_candidates  # noqa: E402
+from dashboard.services.market_data import (  # noqa: E402
+    annotate_snapshot,
+    has_usable_breadth,
+    normalize_market,
+)
 from dashboard.services.paper_service import PaperService  # noqa: E402
 
 paper_open = PaperService.open
@@ -153,6 +159,7 @@ def db_list_runs(market: str, limit: int = 50) -> list[str]:
 
 
 def latest_file(pattern: str, market: str = "US") -> str | None:
+    market = normalize_market(market)
     files = sorted(glob.glob(pattern), reverse=True)
     if not files:
         return None
@@ -192,7 +199,7 @@ def latest_file(pattern: str, market: str = "US") -> str | None:
                 if not m:
                     m = "US"
 
-                if m.upper() == market.upper():
+                if normalize_market(m) == market:
                     return f
         except Exception:
             continue
@@ -364,8 +371,27 @@ def cleanup_old_files(keep_count: int = 2):
                     print(f"Error removing {f}: {e}", file=sys.stderr)
 
 
+def resolve_latest_exposure_breadth(market: str) -> str | None:
+    """Resolve market-local breadth JSON for exposure-coach --breadth."""
+    market = normalize_market(market)
+    if market == "TH":
+        thai_tv = latest_file_any(os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"))
+        if thai_tv:
+            return thai_tv
+        return latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), "TH")
+
+    classic = latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), "US")
+    if classic:
+        return classic
+    return latest_file_any(os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.json"))
+
+
 def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
-    """Build the command to run the exposure coach with all available dimensions."""
+    """Build the command to run the exposure coach with market-local dimensions.
+
+    TH must not ingest US-only uptrend/top-risk inputs (cross-market bleed).
+    """
+    market = normalize_market(market)
     cmd = [
         sys.executable,
         os.path.join(BASE_DIR, "skills", "exposure-coach", "scripts", "calculate_exposure.py"),
@@ -374,11 +400,12 @@ def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
         "--breadth",
         latest_mb,
     ]
-    latest_uptrend = latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json"))
-    if latest_uptrend:
-        cmd.extend(["--uptrend", latest_uptrend])
 
     if market == "US":
+        latest_uptrend = latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json"))
+        if latest_uptrend:
+            cmd.extend(["--uptrend", latest_uptrend])
+
         latest_top = latest_file_any(os.path.join(REPORTS_DIR, "market_top_*.json"))
         if latest_top:
             cmd.extend(["--top-risk", latest_top])
@@ -389,6 +416,24 @@ def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
             if latest_ibd:
                 cmd.extend(["--top-risk", latest_ibd])
     return cmd
+
+
+def _run_success(snapshot: dict, market: str) -> bool:
+    """Persistable run requires usable Step-1 breadth (classic or TV fallback) + VCP."""
+    annotated = annotate_snapshot(snapshot, market)
+    vcp = annotated.get("vcp")
+    return bool(has_usable_breadth(annotated.get("_step1_breadth"))) and isinstance(vcp, dict)
+
+
+def _load_live_snapshot(market: str) -> dict:
+    market = normalize_market(market)
+    snapshot = db_load_run(market)
+    if snapshot:
+        fresh = _collect_snapshot(market)
+        merged = _clean_nan(_merge_live_snapshot(snapshot, fresh))
+    else:
+        merged = _clean_nan(_collect_snapshot(market))
+    return annotate_snapshot(merged, market)
 
 
 def clean_unsuccessful_db_runs():
@@ -413,12 +458,12 @@ def clean_unsuccessful_db_runs():
                 to_delete.append(run_id)
                 continue
 
-            breadth = data.get("breadth")
-            vcp = data.get("vcp")
-            exposure = data.get("exposure")
+            annotated = annotate_snapshot(data, row["market"])
+            vcp = annotated.get("vcp")
+            exposure = annotated.get("exposure")
 
             is_unsuccessful = False
-            if not breadth or not isinstance(breadth, dict) or not breadth.get("composite"):
+            if not has_usable_breadth(annotated.get("_step1_breadth")):
                 is_unsuccessful = True
             elif not vcp or not isinstance(vcp, dict):
                 is_unsuccessful = True
@@ -523,6 +568,9 @@ def api_health():
                 "signal_results": True,
                 "manual_run_signal_followup": True,
                 "job_status": True,
+                "ranked_candidates": True,
+                "market_aliases": True,
+                "step1_breadth_fallback": True,
             },
         }
     )
@@ -534,6 +582,8 @@ def api_jobs_latest():
 
     job_name = request.args.get("job", "daily_signal_pipeline").strip()
     market = request.args.get("market")
+    if market:
+        market = normalize_market(market)
     if not job_name or any(
         ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
         for ch in job_name
@@ -544,7 +594,7 @@ def api_jobs_latest():
         latest
         or {
             "job_name": job_name,
-            "market": market.upper() if market else None,
+            "market": market,
             "status": "never_run",
         }
     )
@@ -552,7 +602,7 @@ def api_jobs_latest():
 
 @app.route("/api/data")
 def api_data():
-    market = request.args.get("market", "US").upper()
+    market = normalize_market(request.args.get("market", "US"))
     at = request.args.get("at")  # optional ISO timestamp for historical view
 
     if at:
@@ -560,22 +610,15 @@ def api_data():
         snapshot = db_load_run(market, at)
         if not snapshot:
             return jsonify({"error": f"No data for {market} at {at}"}), 404
-        return jsonify(snapshot)
+        return jsonify(annotate_snapshot(_clean_nan(snapshot), market))
 
-    # Live view: use the latest report files and retain the DB snapshot only as
-    # a fallback for sections that are not available yet.
-    snapshot = db_load_run(market)
-    if snapshot:
-        fresh = _collect_snapshot(market)
-        return jsonify(_clean_nan(_merge_live_snapshot(snapshot, fresh)))
-
-    return jsonify(_clean_nan(_collect_snapshot(market)))
+    return jsonify(_load_live_snapshot(market))
 
 
 @app.route("/api/runs")
 def api_runs():
     """List past run timestamps for a market."""
-    market = request.args.get("market", "US").upper()
+    market = normalize_market(request.args.get("market", "US"))
     limit = int(request.args.get("limit", 50))
     runs = db_list_runs(market, limit)
     return jsonify({"market": market, "runs": runs})
@@ -584,7 +627,7 @@ def api_runs():
 @app.route("/api/run")
 def api_run():
     """Re-run analysis scripts for a specific market, then snapshot to DB."""
-    market = request.args.get("market", "US").upper()
+    market = normalize_market(request.args.get("market", "US"))
     account_size = request.args.get("account_size", "50000")
     risk_pct = request.args.get("risk_pct", "0.5")
     target_r = request.args.get("target_r", "2.0")
@@ -864,7 +907,7 @@ def api_run():
             log.append(future.result())
 
     # ── Phase 2: Dependent Planners (Parallel Execution) ─────────────────────────
-    latest_mb = latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
+    latest_mb = resolve_latest_exposure_breadth(market)
     latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
 
     dependent_tasks = []
@@ -946,19 +989,11 @@ def api_run():
     # Save snapshot to DB if successful
     snapshot = _collect_snapshot(market)
 
-    # Verify if the run was successful (must have valid breadth and vcp data)
-    breadth = snapshot.get("breadth")
-    vcp = snapshot.get("vcp")
-    is_success = (
-        breadth
-        and isinstance(breadth, dict)
-        and breadth.get("composite")
-        and vcp
-        and isinstance(vcp, dict)
-    )
+    # Verify if the run was successful (Step-1 breadth classic/TV fallback + VCP)
+    is_success = _run_success(snapshot, market)
 
     if is_success:
-        run_at = db_save_run(market, snapshot)
+        run_at = db_save_run(market, annotate_snapshot(snapshot, market))
         status = "success"
     else:
         run_at = None
@@ -988,7 +1023,7 @@ def api_run():
 @app.route("/api/run/stream")
 def api_run_stream():
     """Re-run analysis scripts and stream progress via SSE."""
-    market = request.args.get("market", "US").upper()
+    market = normalize_market(request.args.get("market", "US"))
     account_size = request.args.get("account_size", "50000")
     risk_pct = request.args.get("risk_pct", "0.5")
     target_r = request.args.get("target_r", "2.0")
@@ -1274,9 +1309,7 @@ def api_run_stream():
                 yield f"event: task_done\ndata: {json.dumps(res)}\n\n"
 
         # Phase 2
-        latest_mb = latest_file(
-            os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market
-        )
+        latest_mb = resolve_latest_exposure_breadth(market)
         latest_vcp = latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market)
 
         dependent_tasks = []
@@ -1350,18 +1383,10 @@ def api_run_stream():
 
         # Save snapshot
         snapshot = _collect_snapshot(market)
-        breadth = snapshot.get("breadth")
-        vcp = snapshot.get("vcp")
-        is_success = (
-            breadth
-            and isinstance(breadth, dict)
-            and breadth.get("composite")
-            and vcp
-            and isinstance(vcp, dict)
-        )
+        is_success = _run_success(snapshot, market)
 
         if is_success:
-            run_at = db_save_run(market, snapshot)
+            run_at = db_save_run(market, annotate_snapshot(snapshot, market))
             status = "success"
         else:
             run_at = None
@@ -1520,65 +1545,116 @@ def api_history(symbol):
 @app.route("/api/earnings/<symbol>")
 def api_earnings(symbol):
     try:
-        sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
-        from cache_manager import CacheManager
+        return jsonify(_lookup_earnings(symbol))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-        cache = CacheManager(DB_PATH)
 
-        # Check local sqlite cache first (TTL 24 hours)
-        is_cached, cached_res = cache.get_earnings_scan(symbol, ttl_hours=24.0)
-        if is_cached:
-            if cached_res:
-                try:
-                    from datetime import date
+def _lookup_earnings(symbol: str) -> dict:
+    """Return earnings date metadata for Dual-Check / chart tooltips."""
+    sys.path.insert(0, os.path.join(BASE_DIR, "scripts"))
+    from cache_manager import CacheManager
 
-                    earn_date = date.fromisoformat(cached_res["date"])
-                    days_to = (earn_date - date.today()).days
-                    cached_res["days_to_earnings"] = days_to
-                except Exception:
-                    cached_res["days_to_earnings"] = None
-                return jsonify(cached_res)
-            return jsonify({"symbol": symbol, "date": None, "days_to_earnings": None})
+    cache = CacheManager(DB_PATH)
 
-        # Fetch dynamically from yfinance
-        earnings_date = None
-        try:
-            import yfinance as yf
-
-            ticker = yf.Ticker(symbol)
-            cal = ticker.calendar
-            if cal:
-                key = next((k for k in cal.keys() if k.lower() == "earnings date"), None)
-                if key:
-                    dates = cal[key]
-                    if dates and len(dates) > 0:
-                        d = dates[0]
-                        if hasattr(d, "strftime"):
-                            earnings_date = d.strftime("%Y-%m-%d")
-                        else:
-                            earnings_date = str(d)
-        except Exception as err:
-            print(f"Failed to fetch earnings for {symbol} via yfinance: {err}", file=sys.stderr)
-
-        # Save to cache
-        res_dict = None
-        days_to_earnings = None
-        if earnings_date:
-            res_dict = {"symbol": symbol, "date": earnings_date, "time": "unknown"}
+    # Check local sqlite cache first (TTL 24 hours)
+    is_cached, cached_res = cache.get_earnings_scan(symbol, ttl_hours=24.0)
+    if is_cached:
+        if cached_res:
             try:
                 from datetime import date
 
-                earn_date = date.fromisoformat(earnings_date)
-                days_to_earnings = (earn_date - date.today()).days
+                earn_date = date.fromisoformat(cached_res["date"])
+                days_to = (earn_date - date.today()).days
+                cached_res["days_to_earnings"] = days_to
             except Exception:
-                pass
+                cached_res["days_to_earnings"] = None
+            return cached_res
+        return {"symbol": symbol, "date": None, "days_to_earnings": None}
 
-        cache.save_earnings_scan(symbol, res_dict)
-        return jsonify(
-            {"symbol": symbol, "date": earnings_date, "days_to_earnings": days_to_earnings}
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # Fetch dynamically from yfinance
+    earnings_date = None
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker(symbol)
+        cal = ticker.calendar
+        if cal:
+            key = next((k for k in cal.keys() if k.lower() == "earnings date"), None)
+            if key:
+                dates = cal[key]
+                if dates and len(dates) > 0:
+                    d = dates[0]
+                    if hasattr(d, "strftime"):
+                        earnings_date = d.strftime("%Y-%m-%d")
+                    else:
+                        earnings_date = str(d)
+    except Exception as err:
+        print(f"Failed to fetch earnings for {symbol} via yfinance: {err}", file=sys.stderr)
+
+    # Save to cache
+    res_dict = None
+    days_to_earnings = None
+    if earnings_date:
+        res_dict = {"symbol": symbol, "date": earnings_date, "time": "unknown"}
+        try:
+            from datetime import date
+
+            earn_date = date.fromisoformat(earnings_date)
+            days_to_earnings = (earn_date - date.today()).days
+        except Exception:
+            pass
+
+    cache.save_earnings_scan(symbol, res_dict)
+    return {"symbol": symbol, "date": earnings_date, "days_to_earnings": days_to_earnings}
+
+
+@app.route("/api/ranked-candidates")
+def api_ranked_candidates():
+    """Dual-Check ranked shortlist for the active market."""
+    market = normalize_market(request.args.get("market", "US"))
+    hold_style = (request.args.get("hold_style") or "overnight").strip().lower()
+    if hold_style not in ("overnight", "intraday"):
+        return jsonify({"error": "hold_style must be overnight or intraday"}), 400
+
+    include_rejected = (request.args.get("include_rejected") or "1").strip() not in (
+        "0",
+        "false",
+        "False",
+    )
+    limit = request.args.get("limit")
+    try:
+        limit_n = int(limit) if limit is not None else 25
+    except ValueError:
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    snapshot = _load_live_snapshot(market)
+
+    def earnings_lookup(symbol: str):
+        try:
+            return _lookup_earnings(symbol)
+        except Exception as exc:
+            print(f"ranked-candidates earnings lookup failed for {symbol}: {exc}", file=sys.stderr)
+            return None
+
+    ranked = rank_candidates(
+        snapshot,
+        hold_style=hold_style,  # type: ignore[arg-type]
+        earnings_lookup=earnings_lookup if hold_style == "overnight" else None,
+    )
+    if limit_n >= 0:
+        ranked["passed"] = ranked["passed"][:limit_n]
+        if include_rejected:
+            ranked["rejected"] = ranked["rejected"][: max(limit_n * 2, 50)]
+        else:
+            ranked["rejected"] = []
+
+    ranked["market"] = market
+    ranked["freshness"] = snapshot.get("_freshness")
+    ranked["recommendation"] = ranked.get("recommendation") or (
+        (snapshot.get("exposure") or {}).get("recommendation")
+    )
+    return jsonify(_clean_nan(ranked))
 
 
 @app.route("/api/db/stats")

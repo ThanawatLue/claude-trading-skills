@@ -45,6 +45,7 @@
   <div>
     <h1>Trading Intelligence Dashboard</h1>
     <p class="subtitle" id="ts">กำลังโหลดข้อมูลระบบ...</p>
+    <div id="freshnessBanner" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,152,0,.45);background:rgba(255,152,0,.12);color:var(--gold);font-size:.8rem;line-height:1.4"></div>
   </div>
   <div class="dashboard-actions" style="display:flex;gap:8px;align-items:center">
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark theme" aria-label="Toggle theme">☾</button>
@@ -349,6 +350,47 @@
     <div><div id="expConf" style="font-size:1.3rem">—</div><div style="font-size:.65rem;color:var(--muted)">CONFIDENCE</div></div>
   </div>
   <div class="logic-box" id="expRationale" style="margin-top:16px"></div>
+</div>
+
+<!-- DUAL-CHECK SHORTLIST (primary recommendation) -->
+<div class="section-title" id="dualCheckSection">✅ Dual-Check Shortlist — แนะนำซื้อ (Regime + Setup + RS + Earnings)
+  <button class="guide-btn" onclick="showLegend('vcp')">📖 คู่มือ</button>
+</div>
+<div class="card" style="margin-bottom:24px">
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+    <div style="color:var(--muted);font-size:.8rem;line-height:1.4;max-width:720px">
+      กรองจาก VCP ด้วย Dual-Check: <b>NEW_ENTRY_ALLOWED</b>, state Pre-breakout/Breakout, pivot -2%…+3%, RS ≥ 80,
+      และ (overnight) earnings &gt; 7 วัน — confluence/day bias ยังดูบนกราฟ (unavailable ฝั่งเซิร์ฟเวอร์)
+    </div>
+    <select id="dualCheckHoldStyle" onchange="loadRankedCandidates()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px">
+      <option value="overnight">Overnight / Swing</option>
+      <option value="intraday">Intraday</option>
+    </select>
+  </div>
+  <div id="dualCheckSummary" style="color:var(--muted);font-size:.85rem;margin-bottom:10px"></div>
+  <div style="overflow-x:auto">
+    <table style="width:100%;font-size:.85rem" id="dualCheckTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Symbol</th>
+          <th>Score</th>
+          <th>State</th>
+          <th>RS%</th>
+          <th>Pivot%</th>
+          <th>Earnings</th>
+          <th>Gates</th>
+        </tr>
+      </thead>
+      <tbody id="dualCheckBody">
+        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">กำลังโหลด Dual-Check…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <details id="dualCheckRejectedWrap" style="margin-top:12px">
+    <summary style="cursor:pointer;color:var(--muted);font-size:.85rem">Near-miss / rejected</summary>
+    <div id="dualCheckRejected" style="margin-top:8px;font-size:.8rem;color:var(--muted)"></div>
+  </details>
 </div>
 
 <!-- STEP 4: VCP SCREENER -->

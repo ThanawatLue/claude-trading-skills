@@ -1646,7 +1646,7 @@ function onHistoryChange() {
 
 async function loadData(at) {
   const ts = document.getElementById('ts');
-  ts.textContent = `⏳ กำลังโหลดข้อมูล...ด ${currentMarket}...`;
+  ts.textContent = `⏳ กำลังโหลดข้อมูล ${currentMarket}...`;
   try {
     const url = at
       ? `/api/data?market=${currentMarket}&at=${encodeURIComponent(at)}`
@@ -1654,7 +1654,8 @@ async function loadData(at) {
     const res = await fetch(url);
     RAW_DATA = await res.json();
 
-    if (RAW_DATA.breadth) renderBreadth(RAW_DATA.breadth);
+    const step1 = RAW_DATA._step1_breadth || RAW_DATA.breadth;
+    if (step1) renderBreadth(step1);
     if (RAW_DATA.exposure) renderExposure(RAW_DATA.exposure);
     if (RAW_DATA.ibd) renderIBD(RAW_DATA.ibd);
     if (RAW_DATA.earnings_trade) renderEarnings(RAW_DATA.earnings_trade);
@@ -1708,18 +1709,20 @@ async function loadData(at) {
 
     updateVCP();
     renderFavoritesCard();
+    renderFreshnessBanner(RAW_DATA._freshness);
+    loadRankedCandidates();
 
     const runAt = RAW_DATA._run_at || '';
     if (at) {
       ts.textContent = `📅 ข้อมูลย้อนหลัง ${at.replace('T',' ')} (${currentMarket})`;
-    } else if (RAW_DATA.breadth?.metadata?.generated_at) {
-      let genAtStr = RAW_DATA.breadth.metadata.generated_at;
+    } else if (step1?.metadata?.generated_at || step1?.generated_at || step1?.generated) {
+      let genAtStr = step1?.metadata?.generated_at || step1?.generated_at || step1?.generated;
       try {
-        if (!genAtStr.endsWith('Z') && genAtStr.length === 19) {
-          // Legacy format "YYYY-MM-DD HH:MM:SS" which was actually UTC on some servers or Local on others.
-          // We will assume UTC and append Z if it looks like a UTC timestamp that caused 07:50:52 in TH,
-          // but safely, we'll try to parse it first. If it's standard ISO, it handles natively.
-          genAtStr = genAtStr.replace(' ', 'T') + 'Z';
+        if (typeof genAtStr === 'string') {
+          genAtStr = String(genAtStr).replace('_', 'T');
+          if (!genAtStr.endsWith('Z') && genAtStr.length === 19) {
+            genAtStr = genAtStr.replace(' ', 'T') + 'Z';
+          }
         }
         const d = new Date(genAtStr);
         if (!isNaN(d.getTime())) {
@@ -1731,7 +1734,8 @@ async function loadData(at) {
                      String(d.getSeconds()).padStart(2, '0');
         }
       } catch(e) {}
-      ts.textContent = `ข้อมูลตลาด ${currentMarket} ณ ${genAtStr}`;
+      const src = step1?._step1_source ? ` · source ${step1._step1_source}` : '';
+      ts.textContent = `ข้อมูลตลาด ${currentMarket} ณ ${genAtStr}${src}`;
     } else {
       ts.textContent = `⚠️ ไม่มีข้อมูลล่าสุดสำหรับตลาด ${currentMarket} — กรุณารัน Fresh Analysis`;
     }
@@ -1741,31 +1745,113 @@ async function loadData(at) {
   }
 }
 
+function renderFreshnessBanner(freshness) {
+  const el = document.getElementById('freshnessBanner');
+  if (!el) return;
+  if (!freshness || !freshness.any_critical_stale) {
+    el.style.display = 'none';
+    el.textContent = '';
+    return;
+  }
+  const stale = (freshness.stale_sources || []).map(name => {
+    const src = freshness.sources?.[name] || {};
+    const age = src.age_days != null ? `${src.age_days}d` : 'unknown age';
+    return `${name} (${age})`;
+  }).join(', ');
+  el.style.display = 'block';
+  el.textContent = `⚠️ ข้อมูลบางส่วนเก่าเกิน ${freshness.stale_after_days || 3} วัน: ${stale}. อย่าใช้เป็นสัญญาณ overnight จนกว่าจะรัน Fresh Analysis`;
+}
+
+async function loadRankedCandidates() {
+  const body = document.getElementById('dualCheckBody');
+  const summary = document.getElementById('dualCheckSummary');
+  const rejectedEl = document.getElementById('dualCheckRejected');
+  if (!body) return;
+  const holdStyle = document.getElementById('dualCheckHoldStyle')?.value || 'overnight';
+  body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">กำลังโหลด Dual-Check…</td></tr>`;
+  try {
+    const res = await fetch(`/api/ranked-candidates?market=${currentMarket}&hold_style=${encodeURIComponent(holdStyle)}&limit=25`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'ranked-candidates failed');
+
+    if (!data.regime_allowed) {
+      summary.innerHTML = `<span style="color:var(--red);font-weight:700">Regime blocked:</span> ${data.recommendation || data.blocked_reason || 'not NEW_ENTRY_ALLOWED'} — ไม่แนะนำเปิดไม้ใหม่`;
+      body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px">Dual-Check หยุดที่ regime gate</td></tr>`;
+    } else {
+      const s = data.summary || {};
+      summary.innerHTML = `ผ่าน ${s.passed || 0} / ประเมิน ${s.evaluated || 0} · hold=${data.hold_style} · unavailable: ${(data.gates_unavailable || []).join(', ') || '—'}`;
+    }
+
+    const passed = data.passed || [];
+    if (data.regime_allowed && !passed.length) {
+      body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">ยังไม่มีหุ้นที่ผ่าน Dual-Check วันนี้ (ดู near-miss ด้านล่าง)</td></tr>`;
+    } else if (passed.length) {
+      body.innerHTML = passed.map((c, i) => {
+        const earn = c.earnings?.days_to_earnings;
+        const earnTxt = earn == null ? '—' : `${earn}d`;
+        const gateBits = Object.entries(c.gates || {})
+          .filter(([, g]) => g && g.status !== 'pass')
+          .map(([k, g]) => `${k}:${g.status}`)
+          .join(' · ') || 'all hard gates pass';
+        const sym = (c.symbol || '').replace('.BK', '');
+        return `<tr style="cursor:pointer" onclick="initChart('${c.symbol}')">
+          <td>${i + 1}</td>
+          <td><b>${sym}</b></td>
+          <td style="color:var(--cyan);font-weight:700">${(c.composite_score || 0).toFixed(1)}</td>
+          <td>${c.execution_state || '—'}</td>
+          <td style="color:${(c.rs_percentile || 0) >= 80 ? 'var(--green)' : 'var(--red)'}">${c.rs_percentile == null ? '—' : Math.round(c.rs_percentile)}</td>
+          <td>${c.distance_from_pivot_pct == null ? '—' : c.distance_from_pivot_pct.toFixed(2) + '%'}</td>
+          <td>${earnTxt}</td>
+          <td style="font-size:.72rem;color:var(--muted)">${gateBits}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    const rejected = (data.rejected || []).slice(0, 15);
+    if (rejectedEl) {
+      if (!rejected.length) {
+        rejectedEl.innerHTML = '<div>ไม่มีรายการถูกตัด</div>';
+      } else {
+        rejectedEl.innerHTML = rejected.map(c => {
+          const reasons = (c.reject_reasons || []).join(', ') || '—';
+          return `<div><b>${(c.symbol || '').replace('.BK','')}</b> score=${(c.composite_score || 0).toFixed(1)} — ${reasons}</div>`;
+        }).join('');
+      }
+    }
+  } catch (e) {
+    console.error(e);
+    if (summary) summary.textContent = 'โหลด Dual-Check ไม่สำเร็จ';
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px">Error: ${e.message || e}</td></tr>`;
+  }
+}
+
 function renderBreadth(b) {
   if (!b || !b.composite) return;
-  const s = b.composite.composite_score || 0;
-  const zone = b.composite.zone || 'Unknown';
+  const s = b.composite.composite_score ?? b.composite.score ?? 0;
+  const zone = b.composite.zone || b.composite.regime || 'Unknown';
   const colors = { Strong:'#00e676', Healthy:'#8bc34a', Neutral:'#ffd700', Weakening:'#ff9800', Critical:'#f44336' };
-  const col = colors[zone] || 'var(--cyan)';
+  const col = colors[zone] || (Number(s) >= 60 ? '#8bc34a' : 'var(--cyan)');
   const scoreEl = document.getElementById('mbScore');
-  scoreEl.textContent = s.toFixed(1);
+  scoreEl.textContent = Number(s).toFixed(1);
   scoreEl.style.color = col;
   const badge = document.getElementById('mbBadge');
   badge.textContent = zone;
   badge.style.background = col + '25';
   badge.style.color = col;
-  document.getElementById('mbBar').style.width = s + '%';
+  document.getElementById('mbBar').style.width = Math.max(0, Math.min(100, Number(s))) + '%';
   document.getElementById('mbBar').style.background = col;
   document.getElementById('mbExposure').textContent = b.composite.exposure_guidance || '—';
-  document.getElementById('mbComponents').innerHTML = Object.entries(b.components || {}).map(([k, v]) => {
-    const score = v.score || 0;
+  const components = b.components || b.composite.component_scores || b.composite.components || {};
+  document.getElementById('mbComponents').innerHTML = Object.entries(components).map(([k, v]) => {
+    const score = (typeof v === 'object' ? (v.score || 0) : v) || 0;
     const c = score >= 70 ? '#00e676' : score >= 40 ? '#ffd700' : '#f44336';
+    const signal = typeof v === 'object' ? (v.signal || '') : '';
     return `<div class="component" style="border-left-color:${c}">
-      <div class="component-header"><span class="component-name">${k.replace(/_/g,' ').toUpperCase()}</span><span class="component-score">${typeof score === 'number' ? score.toFixed(0) : score}</span></div>
+      <div class="component-header"><span class="component-name">${k.replace(/_/g,' ').toUpperCase()}</span><span class="component-score">${typeof score === 'number' ? Number(score).toFixed(0) : score}</span></div>
       <div class="component-bar"><div class="component-bar-fill" style="width:${score}%;background:${c}"></div></div>
-      <div class="component-signal">${v.signal || ''}</div>
+      <div class="component-signal">${signal}</div>
     </div>`;
-  }).join('');
+  }).join('') || '<div style="color:var(--muted);font-size:.8rem">No component breakdown for this breadth source</div>';
 }
 
 function renderUptrend(u) {
