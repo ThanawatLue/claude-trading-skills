@@ -6,8 +6,10 @@ and computes freshness metadata for UI banners.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
+
+UTC = timezone.utc
 
 _MARKET_ALIASES = {
     "US": "US",
