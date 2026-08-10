@@ -160,6 +160,7 @@ def _normalize_thai_swing_rows(snapshot: Mapping[str, Any]) -> list[dict[str, An
 def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
+    market = str(snapshot.get("market") or "").upper()
 
     vcp = snapshot.get("vcp") if isinstance(snapshot.get("vcp"), Mapping) else {}
     results = (vcp or {}).get("results") or []
@@ -176,15 +177,17 @@ def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
             rows.append(item)
             seen.add(symbol)
 
-    for row in _normalize_thai_swing_rows(snapshot):
-        symbol = str(row.get("symbol") or "").strip()
-        if not symbol or symbol in seen:
-            continue
-        # Only keep swing names that clear a minimum score before Dual-Check
-        if (_number(row.get("composite_score")) or 0.0) < THAI_SWING_MIN_SCORE:
-            continue
-        rows.append(row)
-        seen.add(symbol)
+    # Thai swing candidates are TH-only (US snapshots may still contain the file).
+    if market in {"TH", "THA"}:
+        for row in _normalize_thai_swing_rows(snapshot):
+            symbol = str(row.get("symbol") or "").strip()
+            if not symbol or symbol in seen:
+                continue
+            # Only keep swing names that clear a minimum score before Dual-Check
+            if (_number(row.get("composite_score")) or 0.0) < THAI_SWING_MIN_SCORE:
+                continue
+            rows.append(row)
+            seen.add(symbol)
     return rows
 
 

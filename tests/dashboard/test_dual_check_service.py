@@ -123,6 +123,29 @@ def test_rank_rejects_weak_confluence() -> None:
     assert "confluence_weak" in reasons or "day_bias_weak" in reasons
 
 
+def test_thai_swing_not_included_for_us_market() -> None:
+    snap = {
+        "market": "US",
+        "exposure": {"recommendation": "NEW_ENTRY_ALLOWED"},
+        "vcp": {"results": []},
+        "thai_swing": {
+            "dip_buy": [
+                {
+                    "symbol": "KBANK.BK",
+                    "score": 90,
+                    "price": 140,
+                    "sma50": 135,
+                    "plan": {"entry": 139},
+                }
+            ],
+            "momentum": [],
+        },
+    }
+    out = rank_candidates(snap, hold_style="intraday", require_verified_earnings=False)
+    assert out["summary"]["evaluated"] == 0
+    assert out["summary"]["sources"]["thai_swing"] == 0
+
+
 def test_thai_swing_included_and_th_requires_verified_earnings() -> None:
     snap = {
         "market": "TH",
