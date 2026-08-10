@@ -122,12 +122,12 @@ def _from_fmp(symbol: str) -> dict[str, Any] | None:
             resp = requests.get(
                 url,
                 params={"from": start, "to": end, "apikey": api_key, "symbol": query_sym},
-                timeout=12,
+                timeout=6,
             )
             if resp.status_code != 200:
                 # fallback older endpoint
                 url2 = f"https://financialmodelingprep.com/api/v3/historical/earning_calendar/{query_sym}"
-                resp = requests.get(url2, params={"apikey": api_key}, timeout=12)
+                resp = requests.get(url2, params={"apikey": api_key}, timeout=6)
             if resp.status_code != 200:
                 continue
             payload = resp.json()

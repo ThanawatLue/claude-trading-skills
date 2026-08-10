@@ -197,6 +197,7 @@ def evaluate_candidate(
     earnings_lookup: EarningsLookup | None,
     bars_lookup: BarsLookup | None = None,
     require_verified_earnings: bool = False,
+    defer_earnings: bool = False,
 ) -> dict[str, Any]:
     symbol = str(row.get("symbol") or "").strip()
     score = _number(row.get("composite_score")) or 0.0
@@ -256,40 +257,45 @@ def evaluate_candidate(
 
     earnings_info: Mapping[str, Any] | None = None
     if hold_style == "overnight":
-        if earnings_lookup is not None and symbol:
-            try:
-                earnings_info = earnings_lookup(symbol)
-            except Exception as exc:  # pragma: no cover - defensive
-                gates["earnings"] = _gate(
-                    "fail", f"earnings lookup error: {exc}", "earnings_lookup_error"
-                )
-                reject_reasons.append("earnings_lookup_error")
-                earnings_info = None
-        days = None
-        verified = False
-        if isinstance(earnings_info, Mapping):
-            days = _number(earnings_info.get("days_to_earnings"))
-            verified = bool(earnings_info.get("verified")) or bool(earnings_info.get("date"))
-        if "earnings" not in gates:
-            if require_verified_earnings and not verified:
-                gates["earnings"] = _gate(
-                    "fail",
-                    "earnings date unverified for overnight hold",
-                    "earnings_unverified",
-                )
-                reject_reasons.append("earnings_unverified")
-            elif days is None or days > EARNINGS_MIN_DAYS:
-                detail = "no upcoming earnings" if days is None else f"earnings in {int(days)} days"
-                if not verified and days is None:
-                    detail = "no upcoming earnings (unverified)"
-                gates["earnings"] = _gate("pass", detail)
-            else:
-                gates["earnings"] = _gate(
-                    "fail",
-                    f"earnings in {int(days)} days",
-                    "earnings_within_7_days",
-                )
-                reject_reasons.append("earnings_within_7_days")
+        if defer_earnings:
+            gates["earnings"] = _gate("pending", "Earnings check deferred until other gates pass")
+        else:
+            if earnings_lookup is not None and symbol:
+                try:
+                    earnings_info = earnings_lookup(symbol)
+                except Exception as exc:  # pragma: no cover - defensive
+                    gates["earnings"] = _gate(
+                        "fail", f"earnings lookup error: {exc}", "earnings_lookup_error"
+                    )
+                    reject_reasons.append("earnings_lookup_error")
+                    earnings_info = None
+            days = None
+            verified = False
+            if isinstance(earnings_info, Mapping):
+                days = _number(earnings_info.get("days_to_earnings"))
+                verified = bool(earnings_info.get("verified")) or bool(earnings_info.get("date"))
+            if "earnings" not in gates:
+                if require_verified_earnings and not verified:
+                    gates["earnings"] = _gate(
+                        "fail",
+                        "earnings date unverified for overnight hold",
+                        "earnings_unverified",
+                    )
+                    reject_reasons.append("earnings_unverified")
+                elif days is None or days > EARNINGS_MIN_DAYS:
+                    detail = (
+                        "no upcoming earnings" if days is None else f"earnings in {int(days)} days"
+                    )
+                    if not verified and days is None:
+                        detail = "no upcoming earnings (unverified)"
+                    gates["earnings"] = _gate("pass", detail)
+                else:
+                    gates["earnings"] = _gate(
+                        "fail",
+                        f"earnings in {int(days)} days",
+                        "earnings_within_7_days",
+                    )
+                    reject_reasons.append("earnings_within_7_days")
     else:
         gates["earnings"] = _gate(
             "unavailable",
@@ -354,19 +360,126 @@ def rank_candidates(
     regime_allowed = recommendation == "NEW_ENTRY_ALLOWED"
 
     canslim_by_symbol = _canslim_index(snapshot)
+    rows = _candidate_rows(snapshot)
+    # Overnight earnings lookups are expensive (yfinance/FMP). First pass every
+    # candidate without network earnings; only look up symbols that clear the
+    # remaining Dual-Check gates.
+    defer_earnings = hold_style == "overnight" and earnings_lookup is not None
     evaluated: list[dict[str, Any]] = []
-    for row in _candidate_rows(snapshot):
+    for row in rows:
         evaluated.append(
             evaluate_candidate(
                 row,
                 regime_allowed=regime_allowed,
                 hold_style=hold_style,
                 canslim_by_symbol=canslim_by_symbol,
-                earnings_lookup=earnings_lookup,
+                earnings_lookup=None if defer_earnings else earnings_lookup,
                 bars_lookup=bars_lookup,
                 require_verified_earnings=require_verified_earnings,
+                defer_earnings=defer_earnings,
             )
         )
+
+    if defer_earnings:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        pending_idxs = [i for i, item in enumerate(evaluated) if not item.get("reject_reasons")]
+        # Cap live earnings fan-out so ranked-candidates stays interactive.
+        pending_idxs = pending_idxs[:12]
+
+        def _fetch(symbol: str):
+            try:
+                return symbol, earnings_lookup(symbol) if earnings_lookup else None, None
+            except Exception as exc:  # pragma: no cover - defensive
+                return symbol, None, exc
+
+        fetched: dict[str, tuple[Mapping[str, Any] | None, Exception | None]] = {}
+        if pending_idxs and earnings_lookup is not None:
+            with ThreadPoolExecutor(max_workers=min(6, len(pending_idxs))) as pool:
+                futs = {
+                    pool.submit(_fetch, str(evaluated[i].get("symbol") or "")): i
+                    for i in pending_idxs
+                }
+                try:
+                    for fut in as_completed(futs, timeout=45):
+                        symbol, info, err = fut.result()
+                        fetched[symbol] = (info, err)
+                except TimeoutError:
+                    # Mark unfinished symbols as timed out below via missing fetched entry.
+                    pass
+
+        checked = {str(evaluated[i].get("symbol") or "") for i in pending_idxs}
+        for item in evaluated:
+            symbol = str(item.get("symbol") or "")
+            if item.get("reject_reasons"):
+                item["gates"]["earnings"] = _gate(
+                    "unavailable",
+                    "Skipped earnings lookup; other Dual-Check gates already failed",
+                )
+                item["passed"] = False
+                continue
+            if symbol not in checked:
+                item["gates"]["earnings"] = _gate(
+                    "unavailable",
+                    "Earnings lookup capped; open chart or refresh later",
+                )
+                item["reject_reasons"] = list(item.get("reject_reasons") or []) + [
+                    "earnings_lookup_capped"
+                ]
+                item["passed"] = False
+                continue
+            info, err = fetched.get(symbol, (None, TimeoutError("earnings lookup timed out")))
+            if err is not None and symbol not in fetched:
+                item["gates"]["earnings"] = _gate(
+                    "fail", "earnings lookup timed out", "earnings_lookup_error"
+                )
+                item["reject_reasons"] = list(item.get("reject_reasons") or []) + [
+                    "earnings_lookup_error"
+                ]
+                item["passed"] = False
+                continue
+            if err is not None:
+                item["gates"]["earnings"] = _gate(
+                    "fail", f"earnings lookup error: {err}", "earnings_lookup_error"
+                )
+                item["reject_reasons"] = list(item.get("reject_reasons") or []) + [
+                    "earnings_lookup_error"
+                ]
+                item["passed"] = False
+                continue
+            earnings_info = info
+            days = None
+            verified = False
+            if isinstance(earnings_info, Mapping):
+                item["earnings"] = dict(earnings_info)
+                days = _number(earnings_info.get("days_to_earnings"))
+                verified = bool(earnings_info.get("verified")) or bool(earnings_info.get("date"))
+            if require_verified_earnings and not verified:
+                item["gates"]["earnings"] = _gate(
+                    "fail",
+                    "earnings date unverified for overnight hold",
+                    "earnings_unverified",
+                )
+                item["reject_reasons"] = list(item.get("reject_reasons") or []) + [
+                    "earnings_unverified"
+                ]
+                item["passed"] = False
+            elif days is None or days > EARNINGS_MIN_DAYS:
+                detail = "no upcoming earnings" if days is None else f"earnings in {int(days)} days"
+                if not verified and days is None:
+                    detail = "no upcoming earnings (unverified)"
+                item["gates"]["earnings"] = _gate("pass", detail)
+                item["passed"] = not item.get("reject_reasons")
+            else:
+                item["gates"]["earnings"] = _gate(
+                    "fail",
+                    f"earnings in {int(days)} days",
+                    "earnings_within_7_days",
+                )
+                item["reject_reasons"] = list(item.get("reject_reasons") or []) + [
+                    "earnings_within_7_days"
+                ]
+                item["passed"] = False
 
     evaluated.sort(key=lambda item: item.get("composite_score") or 0.0, reverse=True)
     passed = [item for item in evaluated if item.get("passed")]
