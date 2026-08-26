@@ -69,16 +69,28 @@ def _build_mock_response(rows: int):
     return response
 
 
+def _requests_module_for(client_module):
+    """Resolve module that owns requests.Session for patch targets (shim-safe)."""
+    import inspect
+
+    impl = inspect.getmodule(client_module.FMPClient)
+    if impl is not None and hasattr(impl, "requests"):
+        return impl
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    import scripts.lib.fmp_client as shared
+
+    return shared
+
+
 @pytest.mark.parametrize("client_path", FMP_CLIENT_FILES)
 def test_get_historical_prices_truncates_to_days(client_path, monkeypatch):
     """Every fmp_client copy must truncate `historical` to `days=N` rows, most-recent-first."""
-    import inspect
-
     monkeypatch.setenv("FMP_API_KEY", "test_key")
     module = _load_fmp_module(client_path)
 
     mock_response = _build_mock_response(5)
-    impl_mod = inspect.getmodule(module.FMPClient) or module
+    impl_mod = _requests_module_for(module)
     with patch.object(impl_mod.requests.Session, "get", return_value=mock_response):
         client = module.FMPClient(api_key="test_key")
         # Disable retries to keep the test fast.

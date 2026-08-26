@@ -21,6 +21,7 @@ import pytest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 FMP_CLIENT_FILES = [
+    "scripts/lib/fmp_client.py",
     "skills/canslim-screener/scripts/fmp_client.py",
     "skills/earnings-trade-analyzer/scripts/fmp_client.py",
     "skills/ftd-detector/scripts/fmp_client.py",
@@ -30,6 +31,20 @@ FMP_CLIENT_FILES = [
     "skills/vcp-screener/scripts/fmp_client.py",
     "skills/ibd-distribution-day-monitor/scripts/fmp_client.py",
 ]
+
+
+def _requests_module_for(client_module):
+    """Resolve module that owns requests.Session for patch targets (shim-safe)."""
+    import inspect
+
+    impl = inspect.getmodule(client_module.FMPClient)
+    if impl is not None and hasattr(impl, "requests"):
+        return impl
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    import scripts.lib.fmp_client as shared
+
+    return shared
 
 
 def _load_fmp_module(rel_path: str):
@@ -75,7 +90,8 @@ def test_get_historical_prices_truncates_to_days(client_path, monkeypatch):
     module = _load_fmp_module(client_path)
 
     mock_response = _build_mock_response(5)
-    with patch.object(module.requests.Session, "get", return_value=mock_response):
+    impl_mod = _requests_module_for(module)
+    with patch.object(impl_mod.requests.Session, "get", return_value=mock_response):
         client = module.FMPClient(api_key="test_key")
         # Disable retries to keep the test fast.
         if hasattr(client, "max_retries"):
