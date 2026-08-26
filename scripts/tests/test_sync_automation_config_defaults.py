@@ -15,13 +15,18 @@ def test_sync_preserves_state_overrides(tmp_path: Path) -> None:
 auto_paper:
   execute: false
   fingerprint_block: true
+  min_expected_net_r: 0.05
+  require_dual_check: true
   source_rules:
     thai-swing-dip:
       min_score: 85
       max_new_per_run: 1
+      max_hold_days: 4
+      time_stop_min_r: -0.3
 paper_exit_rules:
   thai-swing-dip:
     max_hold_days: 4
+    time_stop_min_r: -0.3
 """.strip(),
         encoding="utf-8",
     )
@@ -30,9 +35,16 @@ paper_exit_rules:
 auto_paper:
   execute: true
   account_size: 30000
+  fingerprint_block: false
+  min_expected_net_r: 0.0
   source_rules:
     thai-swing-dip:
       target_r: 1.0
+      max_hold_days: 2
+      time_stop_min_r: 0.2
+paper_exit_rules:
+  thai-swing-dip:
+    max_hold_days: 2
 """.strip(),
         encoding="utf-8",
     )
@@ -42,8 +54,11 @@ auto_paper:
     assert merged["auto_paper"]["execute"] is True
     assert merged["auto_paper"]["account_size"] == 30000
     assert merged["auto_paper"]["fingerprint_block"] is True
+    assert merged["auto_paper"]["min_expected_net_r"] == 0.05
     assert merged["auto_paper"]["source_rules"]["thai-swing-dip"]["min_score"] == 85
     assert merged["auto_paper"]["source_rules"]["thai-swing-dip"]["target_r"] == 1.0
+    assert merged["auto_paper"]["source_rules"]["thai-swing-dip"]["max_hold_days"] == 4
+    assert merged["auto_paper"]["source_rules"]["thai-swing-dip"]["time_stop_min_r"] == -0.3
     assert merged["paper_exit_rules"]["thai-swing-dip"]["max_hold_days"] == 4
     saved = yaml.safe_load(state.read_text(encoding="utf-8"))
     assert saved["auto_paper"]["execute"] is True
