@@ -174,3 +174,22 @@ def test_resolve_regime_policy_defaults() -> None:
     assert auto_paper_gates.resolve_regime_policy(None)["allow_open"] is False
     assert auto_paper_gates.resolve_regime_policy("NEW_ENTRY_ALLOWED")["risk_scale"] == 1.0
     assert auto_paper_gates.resolve_regime_policy("CASH_PRIORITY")["allow_open"] is False
+
+
+def test_evaluate_fingerprint_block_thresholds() -> None:
+    blocked, reason = auto_paper_gates.evaluate_fingerprint_block(
+        {"closed_trades": 2, "win_rate": 0.0, "avg_realized_r": -0.7},
+        min_closed=2,
+        min_win_rate=0.4,
+        max_avg_realized_r=-0.25,
+    )
+    assert blocked is True
+    assert reason is not None
+    assert reason.startswith("fingerprint_weak_win_rate")
+
+    blocked, reason = auto_paper_gates.evaluate_fingerprint_block(
+        {"closed_trades": 1, "win_rate": 0.0, "avg_realized_r": -1.0},
+        min_closed=2,
+    )
+    assert blocked is False
+    assert reason is None

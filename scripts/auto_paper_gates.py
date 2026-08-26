@@ -152,6 +152,78 @@ def evaluate_signal_dual_check(
     return result
 
 
+def summarize_symbol_source_stats(
+    conn: sqlite3.Connection,
+    *,
+    market: str | None = None,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Aggregate closed paper stats keyed by (symbol_upper, normalized_source)."""
+    where = ["status != 'open'"]
+    params: list[Any] = []
+    if market:
+        where.append("market = ?")
+        params.append(market.upper())
+    try:
+        rows = conn.execute(
+            f"""SELECT symbol, source, realized_r
+                FROM paper_trade
+                WHERE {" AND ".join(where)}""",
+            params,
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+
+    buckets: dict[tuple[str, str], list[float]] = {}
+    for row in rows:
+        symbol = str(row["symbol"] or "").upper()
+        source = str(row["source"] or "manual").strip().lower().replace(" ", "-")
+        if not symbol:
+            continue
+        buckets.setdefault((symbol, source), []).append(float(row["realized_r"] or 0.0))
+
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for key, values in buckets.items():
+        wins = sum(1 for value in values if value > 0)
+        losses = sum(1 for value in values if value < 0)
+        closed = len(values)
+        avg_r = sum(values) / closed if closed else 0.0
+        out[key] = {
+            "closed_trades": closed,
+            "wins": wins,
+            "losses": losses,
+            "win_rate": (wins / closed) if closed else None,
+            "avg_realized_r": avg_r,
+        }
+    return out
+
+
+def evaluate_fingerprint_block(
+    stats: Mapping[str, Any] | None,
+    *,
+    min_closed: int = 2,
+    min_win_rate: float = 0.4,
+    max_avg_realized_r: float = -0.25,
+) -> tuple[bool, str | None]:
+    """Return (blocked, reason) for a symbol/source paper fingerprint."""
+    if not stats:
+        return False, None
+    closed = int(stats.get("closed_trades") or 0)
+    if closed < int(min_closed):
+        return False, None
+    win_rate = stats.get("win_rate")
+    avg_r = stats.get("avg_realized_r")
+    if win_rate is not None and float(win_rate) < float(min_win_rate):
+        return True, (
+            f"fingerprint_weak_win_rate:{float(win_rate):.2f}<{float(min_win_rate):.2f}(n={closed})"
+        )
+    if avg_r is not None and float(avg_r) <= float(max_avg_realized_r):
+        return True, (
+            f"fingerprint_negative_expectancy:{float(avg_r):.2f}<={float(max_avg_realized_r):.2f}"
+            f"(n={closed})"
+        )
+    return False, None
+
+
 def load_regime_recommendation(
     reports_dir: str | Path,
     market: str | None = None,

@@ -1,5 +1,10 @@
 # Copy to state/automation_config.yaml and adjust.
 # Live broker execution is intentionally unsupported.
+#
+# Week-1 hardening (2026-08):
+# - dip time-stop relaxed (4d / only if R <= -0.3)
+# - fingerprint block for weak symbol/source histories
+# - per-source quotas + higher dip min_score
 
 market: TH
 db_path: state/market_cache.db
@@ -24,6 +29,10 @@ auto_paper:
   require_regime_gate: true
   hold_style: overnight
   dual_check_bars: true
+  fingerprint_block: true
+  fingerprint_min_closed: 2
+  fingerprint_min_win_rate: 0.4
+  fingerprint_max_avg_realized_r: -0.25
   min_score: 70
   max_new_positions: 2
   max_open_positions: 5
@@ -32,6 +41,7 @@ auto_paper:
   max_position_pct: 10
   max_portfolio_heat_pct: 2
   dynamic_decision: true
+  min_expected_net_r: 0.05
   preserve_signal_plan: true
   regime_policy:
     NEW_ENTRY_ALLOWED:
@@ -43,21 +53,51 @@ auto_paper:
     CASH_PRIORITY:
       allow_open: false
       risk_scale: 0.0
+  source_rules:
+    thai-swing-dip:
+      min_score: 85
+      max_new_per_run: 1
+      max_open: 2
+      target_r: 1.0
+      stop_pct_cap: 2.5
+      take_profit_r: 1.0
+      max_hold_days: 4
+      time_stop_min_r: -0.3
+      trail_after_r: 1.0
+      trail_stop_r: 0.0
+    thai-swing-momentum:
+      min_score: 80
+      max_new_per_run: 1
+      max_open: 2
+      target_r: 0.9
+      stop_pct_cap: 4.0
+      take_profit_r: 1.0
+      max_hold_days: 3
+      time_stop_min_r: 0.0
+      trail_after_r: 1.0
+      trail_stop_r: 0.0
+    vcp-screener:
+      min_score: 75
+      max_new_per_run: 1
+      target_r: 1.5
+      stop_pct_cap: 5.0
 
 paper_exit_rules:
-  vcp-screener:
-    take_profit_r: 1.5
-    max_hold_days: 7
-    time_stop_min_r: 0.5
-    trail_after_r: 1.0
-    trail_stop_r: 0.0
   thai-swing-dip:
     take_profit_r: 1.0
-    max_hold_days: 2
+    max_hold_days: 4
+    time_stop_min_r: -0.3
     trail_after_r: 1.0
     trail_stop_r: 0.0
   thai-swing-momentum:
     take_profit_r: 1.0
     max_hold_days: 3
+    time_stop_min_r: 0.0
+    trail_after_r: 1.0
+    trail_stop_r: 0.0
+  vcp-screener:
+    take_profit_r: 1.5
+    max_hold_days: 7
+    time_stop_min_r: 0.5
     trail_after_r: 1.0
     trail_stop_r: 0.0

@@ -79,6 +79,10 @@ class AutoPaperConfig:
     hold_style: str = "overnight"
     require_verified_earnings: bool | None = None
     dual_check_bars: bool = True
+    fingerprint_block: bool = True
+    fingerprint_min_closed: int = 2
+    fingerprint_min_win_rate: float = 0.4
+    fingerprint_max_avg_realized_r: float = -0.25
 
 
 def _as_of(config: AutoPaperConfig) -> date:
@@ -133,6 +137,68 @@ def _source_min_score(signal: sqlite3.Row, config: AutoPaperConfig) -> float:
 
 def _source_max_age_days(signal: sqlite3.Row, config: AutoPaperConfig) -> int:
     return int(_source_rule(signal, config).get("max_age_days", config.max_age_days))
+
+
+def _source_enabled(signal: sqlite3.Row, config: AutoPaperConfig) -> bool:
+    enabled = _source_rule(signal, config).get("enabled", True)
+    return bool(enabled)
+
+
+def _source_max_new_per_run(signal: sqlite3.Row, config: AutoPaperConfig) -> int | None:
+    rule = _source_rule(signal, config)
+    if "max_new_per_run" not in rule:
+        return None
+    return int(rule["max_new_per_run"])
+
+
+def _source_max_open(signal: sqlite3.Row, config: AutoPaperConfig) -> int | None:
+    rule = _source_rule(signal, config)
+    if "max_open" not in rule:
+        return None
+    return int(rule["max_open"])
+
+
+def _normalize_source(source: str | None) -> str:
+    return str(source or "manual").strip().lower().replace(" ", "-")
+
+
+def _open_source_counts(conn: sqlite3.Connection, market: str | None = None) -> dict[str, int]:
+    where = "WHERE status = 'open'"
+    params: list[Any] = []
+    if market:
+        where += " AND market = ?"
+        params.append(market.upper())
+    try:
+        rows = conn.execute(f"SELECT source FROM paper_trade {where}", params).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = _normalize_source(row["source"])
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _fingerprint_reason(
+    conn: sqlite3.Connection,
+    symbol: str,
+    source_skill: str | None,
+    config: AutoPaperConfig,
+    cache: dict[tuple[str, str], dict[str, Any]] | None = None,
+) -> str | None:
+    if not config.fingerprint_block:
+        return None
+    index = cache
+    if index is None:
+        index = auto_paper_gates.summarize_symbol_source_stats(conn, market=config.market)
+    key = (symbol.upper(), _normalize_source(source_skill))
+    blocked, reason = auto_paper_gates.evaluate_fingerprint_block(
+        index.get(key),
+        min_closed=config.fingerprint_min_closed,
+        min_win_rate=config.fingerprint_min_win_rate,
+        max_avg_realized_r=config.fingerprint_max_avg_realized_r,
+    )
+    return reason if blocked else None
 
 
 def _entry_session_is_valid(signal: sqlite3.Row, config: AutoPaperConfig) -> bool:
@@ -446,7 +512,14 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
 
     open_positions = _open_positions(conn, config.market)
     open_symbols = {row["symbol"].upper() for row in open_positions}
+    open_by_source = _open_source_counts(conn, config.market)
     planned_heat = sum(float(row["initial_risk"] or 0) for row in open_positions)
+    selected_by_source: dict[str, int] = {}
+    fingerprint_index = (
+        auto_paper_gates.summarize_symbol_source_stats(conn, market=config.market)
+        if config.fingerprint_block
+        else {}
+    )
 
     cutoff = _as_of(config) - timedelta(days=config.max_age_days)
     where = ["raw_score >= ?", "signal_date >= ?"]
@@ -471,6 +544,9 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
         score = row["raw_score"]
         capacity = _open_capacity_for_score(config, score)
         signal_date = date.fromisoformat(row["signal_date"])
+        source_key = _normalize_source(row["source_skill"])
+        if not _source_enabled(row, config):
+            continue
         if score is None or float(score) < _source_min_score(row, config):
             continue
         if signal_date < _as_of(config) - timedelta(days=_source_max_age_days(row, config)):
@@ -482,6 +558,14 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
         if symbol in reserved_symbols:
             continue
         if capacity is not None and len(reserved_symbols) >= capacity:
+            continue
+        max_open = _source_max_open(row, config)
+        if max_open is not None and open_by_source.get(source_key, 0) >= max_open:
+            continue
+        max_new = _source_max_new_per_run(row, config)
+        if max_new is not None and selected_by_source.get(source_key, 0) >= max_new:
+            continue
+        if _fingerprint_reason(conn, symbol, row["source_skill"], config, cache=fingerprint_index):
             continue
         dual = _dual_check_for_row(conn, row, config)
         if dual is not None and not dual.get("passed"):
@@ -509,6 +593,7 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
         out.append(candidate)
         planned_heat += candidate["initial_risk"]
         reserved_symbols.add(symbol)
+        selected_by_source[source_key] = selected_by_source.get(source_key, 0) + 1
     out.sort(
         key=lambda item: (
             float(item.get("decision_score") or 0),
@@ -566,9 +651,16 @@ def explain_candidates(
     ).fetchall()
     open_positions = _open_positions(conn, config.market)
     open_symbols = {row["symbol"].upper() for row in open_positions}
+    open_by_source = _open_source_counts(conn, config.market)
     planned_heat = sum(float(row["initial_risk"] or 0) for row in open_positions)
     selected_symbols: set[str] = set()
+    selected_by_source: dict[str, int] = {}
     linked = _linked_signals(conn)
+    fingerprint_index = (
+        auto_paper_gates.summarize_symbol_source_stats(conn, market=config.market)
+        if config.fingerprint_block
+        else {}
+    )
 
     passed: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
@@ -578,8 +670,11 @@ def explain_candidates(
         score = row["raw_score"]
         signal_date = date.fromisoformat(row["signal_date"])
         age_days = (_as_of(config) - signal_date).days
+        source_key = _normalize_source(row["source_skill"])
         source_min_score = _source_min_score(row, config)
         source_max_age = _source_max_age_days(row, config)
+        if not _source_enabled(row, config):
+            reasons.append("source_disabled")
         if config.require_regime_gate and not regime.get("allow_open"):
             reasons.append(regime.get("reason") or "regime_blocks_new_entries")
         if score is None or float(score) < source_min_score:
@@ -606,6 +701,17 @@ def explain_candidates(
         capacity = _open_capacity_for_score(config, score)
         if capacity is not None and len(open_symbols) + len(selected_symbols) >= capacity:
             reasons.append(f"open capacity {capacity} reached")
+        max_open = _source_max_open(row, config)
+        if max_open is not None and open_by_source.get(source_key, 0) >= max_open:
+            reasons.append(f"source open cap {max_open} reached")
+        max_new = _source_max_new_per_run(row, config)
+        if max_new is not None and selected_by_source.get(source_key, 0) >= max_new:
+            reasons.append(f"source max_new_per_run {max_new} reached")
+        fp_reason = _fingerprint_reason(
+            conn, symbol, row["source_skill"], config, cache=fingerprint_index
+        )
+        if fp_reason:
+            reasons.append(fp_reason)
         dual = _dual_check_for_row(conn, row, config)
         if dual is not None and not dual.get("passed"):
             reasons.extend(
@@ -647,6 +753,7 @@ def explain_candidates(
             candidate["dual_check"] = base.get("dual_check")
         passed.append(candidate)
         selected_symbols.add(symbol)
+        selected_by_source[source_key] = selected_by_source.get(source_key, 0) + 1
         planned_heat += candidate["initial_risk"]
 
     selected = passed[: config.max_new_positions]

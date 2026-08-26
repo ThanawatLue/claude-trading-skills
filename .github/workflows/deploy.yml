@@ -78,6 +78,9 @@ jobs:
 
             mkdir -p logs reports/daily-signal-pipeline state
             chmod +x scripts/run_gcp_daily_pipeline.sh scripts/setup_gcp_cron.sh
+            "$PROJECT_DIR/.venv/bin/python" scripts/sync_automation_config_defaults.py \
+              --template "$PROJECT_DIR/config/automation_config.template.yaml" \
+              --state "$PROJECT_DIR/state/automation_config.yaml"
 
             SERVICE_NAME="${DASHBOARD_SERVICE_INPUT:-dashboard.service}"
             DASHBOARD_PORT=80

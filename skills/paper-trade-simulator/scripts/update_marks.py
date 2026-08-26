@@ -43,8 +43,9 @@ SETUP_AWARE_SOURCES = frozenset(
 DEFAULT_SOURCE_RULES = {
     "thai-swing-dip": {
         "take_profit_r": 1.0,
-        "max_hold_days": 2,
-        "time_stop_min_r": 0.2,
+        # Longer hold; only time-stop when clearly underwater (not near flat).
+        "max_hold_days": 4,
+        "time_stop_min_r": -0.3,
         "trail_after_r": 1.0,
         "trail_stop_r": 0.0,
     },

@@ -549,3 +549,146 @@ def test_dynamic_decision_passes_trace_to_open_fn(tmp_path: Path) -> None:
     assert result["opened"] == 1
     assert calls[0]["decision_trace"]["version"] == "dynamic-v1"
     assert calls[0]["decision_trace"]["execution"]["preserve_signal_plan"] is True
+
+
+def test_fingerprint_block_skips_weak_symbol_history(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        import sys
+
+        sys.path.insert(0, str(auto_paper.PAPER_SCRIPT_DIR))
+        try:
+            import paper_trade
+
+            conn.executescript(paper_trade.SCHEMA)
+            for idx, realized_r in enumerate((-0.8, -0.5)):
+                conn.execute(
+                    """INSERT INTO paper_trade
+                       (symbol, market, side, status, entry_price, entry_at, shares,
+                        stop_price, target_price, initial_risk, source, realized_r)
+                       VALUES ('LOSER.BK', 'TH', 'long', 'closed_stop', 10,
+                               '2026-06-01T00:00:00+00:00', 100, 9, 12, 100,
+                               'thai-swing-dip', ?)""",
+                    (realized_r,),
+                )
+        finally:
+            if str(auto_paper.PAPER_SCRIPT_DIR) in sys.path:
+                sys.path.remove(str(auto_paper.PAPER_SCRIPT_DIR))
+
+        _register(
+            conn,
+            signal_id="sig_loser",
+            symbol="LOSER.BK",
+            score=90,
+            signal_date="2026-07-10",
+            entry=10,
+            stop=9,
+            target=12,
+            source="thai-swing-dip",
+            market="TH",
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            fingerprint_block=True,
+            fingerprint_min_closed=2,
+            fingerprint_min_win_rate=0.4,
+            dry_run=True,
+        )
+
+        candidates = auto_paper.eligible_signals(conn, config)
+        diagnostics = auto_paper.explain_candidates(conn, config)
+
+    assert candidates == []
+    assert any(
+        str(reason).startswith("fingerprint_") for reason in diagnostics["skipped"][0]["reasons"]
+    )
+
+
+def test_source_max_new_per_run_limits_dip_quota(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        _register(
+            conn,
+            signal_id="sig_dip_a",
+            symbol="DIPA.BK",
+            score=92,
+            signal_date="2026-07-10",
+            entry=10,
+            stop=9,
+            target=12,
+            source="thai-swing-dip",
+            market="TH",
+        )
+        _register(
+            conn,
+            signal_id="sig_dip_b",
+            symbol="DIPB.BK",
+            score=91,
+            signal_date="2026-07-10",
+            entry=10,
+            stop=9,
+            target=12,
+            source="thai-swing-dip",
+            market="TH",
+        )
+        _register(
+            conn,
+            signal_id="sig_mom",
+            symbol="MOM.BK",
+            score=88,
+            signal_date="2026-07-10",
+            entry=10,
+            stop=9,
+            target=12,
+            source="thai-swing-momentum",
+            market="TH",
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            max_new_positions=3,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            fingerprint_block=False,
+            source_rules={
+                "thai-swing-dip": {"max_new_per_run": 1, "min_score": 85},
+                "thai-swing-momentum": {"max_new_per_run": 1, "min_score": 80},
+            },
+            dry_run=True,
+        )
+
+        candidates = auto_paper.eligible_signals(conn, config)
+
+    sources = [row["source_skill"] for row in candidates]
+    assert sources.count("thai-swing-dip") == 1
+    assert "thai-swing-momentum" in sources
+
+
+def test_source_disabled_blocks_opens(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        _register(
+            conn,
+            signal_id="sig_off",
+            symbol="OFF.BK",
+            score=95,
+            signal_date="2026-07-10",
+            entry=10,
+            stop=9,
+            target=12,
+            source="thai-swing-dip",
+            market="TH",
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            fingerprint_block=False,
+            source_rules={"thai-swing-dip": {"enabled": False}},
+            dry_run=True,
+        )
+        diagnostics = auto_paper.explain_candidates(conn, config)
+
+    assert diagnostics["selected"] == []
+    assert "source_disabled" in diagnostics["skipped"][0]["reasons"]
