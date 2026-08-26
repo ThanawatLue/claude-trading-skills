@@ -1020,7 +1020,7 @@ class TestFMPClient:
             client._rate_limited_get("https://example.com/api/v3/test")
             raise AssertionError("Should have raised ApiCallBudgetExceeded")
         except ApiCallBudgetExceeded as e:
-            assert "budget exhausted" in str(e).lower()
+            assert "budget exceeded" in str(e).lower()
 
 
 class TestFMPHistoricalNormalizer:

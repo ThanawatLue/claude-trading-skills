@@ -340,9 +340,7 @@ def close_position(
         side = row["side"]
         entry = row["entry_price"]
         shares = row["shares"]
-        initial_risk_per_share = (
-            (entry - row["stop_price"]) if side == "long" else (row["stop_price"] - entry)
-        )
+        initial_risk = float(row["initial_risk"] or 0)
 
         if side == "long":
             gross_pnl = (exit_price - entry) * shares
@@ -352,7 +350,7 @@ def close_position(
         exit_cost = exit_price * shares * (row["transaction_cost_bps"] or 0.0) / 10_000
         pnl = gross_pnl - entry_cost - exit_cost
 
-        realized_r = pnl / (initial_risk_per_share * shares) if initial_risk_per_share > 0 else 0
+        realized_r = pnl / initial_risk if initial_risk > 0 else 0
         now = _now_iso()
         days_held = (
             datetime.fromisoformat(now).replace(tzinfo=None)
