@@ -80,7 +80,16 @@ def _base_config(tmp_path: Path) -> dict:
             "output_dir": str(tmp_path / "reports"),
             "horizons": [5],
             "analysis": {"enabled": False},
-            "auto_paper": {"enabled": True, "execute": False, "min_score": 70},
+            "exposure": {"enabled": False},
+            "expectancy_calibration": {"enabled": False},
+            "auto_paper": {
+                "enabled": True,
+                "execute": False,
+                "min_score": 70,
+                "require_dual_check": False,
+                "require_regime_gate": False,
+                "kill_switch": False,
+            },
         },
     )
 

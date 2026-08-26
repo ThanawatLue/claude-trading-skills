@@ -80,6 +80,12 @@ The Yahoo Finance client migration follows this sequence. FMP clients should
 follow the same pattern, but each skill's endpoint behavior and fallback policy
 must be preserved by contract tests before deduplication.
 
+Shared FMP baseline lives at `scripts/lib/fmp_client.py`. These skills already
+shim to it: `pead-screener`, `earnings-trade-analyzer`,
+`ibd-distribution-day-monitor`. Remaining skill-local FMP copies should migrate
+behind the same shim once their skill-specific methods are folded into the
+shared client or a thin subclass.
+
 ## Verification commands
 
 ```powershell

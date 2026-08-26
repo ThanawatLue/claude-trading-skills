@@ -29,7 +29,7 @@ from trading_core.clock import isoformat_seconds, utc_now
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts import decision_engine, signal_ledger
+from scripts import auto_paper_gates, decision_engine, signal_ledger
 
 PAPER_SCRIPT_DIR = PROJECT_ROOT / "skills" / "paper-trade-simulator" / "scripts"
 if str(PAPER_SCRIPT_DIR) not in sys.path:
@@ -70,6 +70,15 @@ class AutoPaperConfig:
     preserve_signal_plan: bool = False
     dry_run: bool = True
     execution_mode: str | None = None
+    enabled: bool = True
+    kill_switch: bool = False
+    require_dual_check: bool = False
+    require_regime_gate: bool = False
+    regime_recommendation: str | None = None
+    regime_policy: dict[str, dict[str, Any]] = field(default_factory=dict)
+    hold_style: str = "overnight"
+    require_verified_earnings: bool | None = None
+    dual_check_bars: bool = True
 
 
 def _as_of(config: AutoPaperConfig) -> date:
@@ -157,20 +166,53 @@ def _open_positions(conn: sqlite3.Connection, market: str | None = None) -> list
         return []
 
 
+def _regime_state(config: AutoPaperConfig) -> dict[str, Any]:
+    if not config.require_regime_gate and not config.regime_recommendation:
+        return {
+            "recommendation": config.regime_recommendation,
+            "allow_open": True,
+            "risk_scale": 1.0,
+            "reason": None,
+            "regime_allowed": True,
+        }
+    resolved = auto_paper_gates.resolve_regime_policy(
+        config.regime_recommendation, config.regime_policy or None
+    )
+    if not config.require_regime_gate and config.regime_recommendation is None:
+        resolved = {
+            "recommendation": None,
+            "allow_open": True,
+            "risk_scale": 1.0,
+            "reason": None,
+        }
+    resolved["regime_allowed"] = str(resolved.get("recommendation") or "") == "NEW_ENTRY_ALLOWED"
+    return resolved
+
+
+def _effective_risk_per_trade_pct(config: AutoPaperConfig) -> float | None:
+    if config.risk_per_trade_pct is None:
+        return None
+    scale = float(_regime_state(config).get("risk_scale") or 1.0)
+    return float(config.risk_per_trade_pct) * scale
+
+
 def _risk_sized_shares(entry: float, stop: float, config: AutoPaperConfig) -> int:
     """Return a board-lot size constrained by account risk and position value."""
-    if not config.account_size or not config.risk_per_trade_pct:
-        return config.shares
-    risk_per_share = entry - stop
-    if risk_per_share <= 0:
-        return 0
-    risk_budget = config.account_size * config.risk_per_trade_pct / 100
-    shares = int(risk_budget // risk_per_share)
-    if config.max_position_pct:
-        position_cap = config.account_size * config.max_position_pct / 100
-        shares = min(shares, int(position_cap // entry))
-    lot = max(1, int(config.board_lot_size))
-    return (shares // lot) * lot
+    risk_pct = _effective_risk_per_trade_pct(config)
+    if config.account_size is not None and risk_pct is not None:
+        if risk_pct <= 0:
+            return 0
+        risk_per_share = entry - stop
+        if risk_per_share <= 0:
+            return 0
+        risk_budget = config.account_size * risk_pct / 100
+        shares = int(risk_budget // risk_per_share)
+        if config.max_position_pct:
+            position_cap = config.account_size * config.max_position_pct / 100
+            shares = min(shares, int(position_cap // entry))
+        lot = max(1, int(config.board_lot_size))
+        return (shares // lot) * lot
+    return config.shares
 
 
 def _candidate_from_prices(
@@ -200,7 +242,38 @@ def _candidate_from_prices(
             round(initial_risk / config.account_size * 100, 3) if config.account_size else None
         ),
         "transaction_cost_bps": config.transaction_cost_bps,
+        "risk_scale": _regime_state(config).get("risk_scale"),
+        "regime_recommendation": _regime_state(config).get("recommendation"),
     }
+
+
+def _require_verified_earnings(config: AutoPaperConfig) -> bool:
+    if config.require_verified_earnings is not None:
+        return bool(config.require_verified_earnings)
+    return (config.market or "").upper() in {"TH", "THA"}
+
+
+def _dual_check_for_row(
+    conn: sqlite3.Connection,
+    row: sqlite3.Row,
+    config: AutoPaperConfig,
+) -> dict[str, Any] | None:
+    if not config.require_dual_check:
+        return None
+    # Regime open/size policy is enforced separately via `_regime_state`.
+    # Dual-Check here validates setup quality (state, pivot, RS, earnings, etc.).
+    bars_lookup = auto_paper_gates.bars_lookup_from_conn(conn) if config.dual_check_bars else None
+    return auto_paper_gates.evaluate_signal_dual_check(
+        symbol=row["symbol"],
+        raw_score=row["raw_score"],
+        source_skill=row["source_skill"],
+        payload=_payload(row),
+        regime_allowed=True,
+        hold_style=config.hold_style,
+        bars_lookup=bars_lookup,
+        earnings_lookup=None,
+        require_verified_earnings=_require_verified_earnings(config),
+    )
 
 
 def _would_exceed_heat(open_heat: float, candidate_risk: float, config: AutoPaperConfig) -> bool:
@@ -362,6 +435,15 @@ def _decision_trace(
 
 
 def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[dict[str, Any]]:
+    if auto_paper_gates.is_kill_switch_active(
+        enabled=config.enabled, kill_switch=config.kill_switch
+    ):
+        return []
+
+    regime = _regime_state(config)
+    if config.require_regime_gate and not regime.get("allow_open"):
+        return []
+
     open_positions = _open_positions(conn, config.market)
     open_symbols = {row["symbol"].upper() for row in open_positions}
     planned_heat = sum(float(row["initial_risk"] or 0) for row in open_positions)
@@ -401,12 +483,21 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
             continue
         if capacity is not None and len(reserved_symbols) >= capacity:
             continue
+        dual = _dual_check_for_row(conn, row, config)
+        if dual is not None and not dual.get("passed"):
+            continue
         prices = _derive_prices(row, config)
         if prices is None:
             continue
         candidate = _candidate_from_prices(row, config, prices)
         if candidate is None:
             continue
+        if dual is not None:
+            candidate["dual_check"] = {
+                "passed": dual.get("passed"),
+                "reject_reasons": dual.get("reject_reasons") or [],
+                "gates": dual.get("gates") or {},
+            }
         trace = _decision_trace(conn, row, candidate, config)
         candidate["decision_trace"] = trace
         candidate["decision_score"] = trace["components"]["decision_score"]
@@ -440,6 +531,24 @@ def explain_candidates(
     dashboard can show why promising signals were skipped without opening paper
     positions.
     """
+    if auto_paper_gates.is_kill_switch_active(
+        enabled=config.enabled, kill_switch=config.kill_switch
+    ):
+        return {
+            "selected": [],
+            "skipped": [
+                {
+                    "signal_id": None,
+                    "symbol": None,
+                    "reasons": ["kill_switch_active"],
+                }
+            ],
+            "passed_before_position_limit": 0,
+            "cutoff_date": (_as_of(config) - timedelta(days=config.max_age_days)).isoformat(),
+            "kill_switch": True,
+        }
+
+    regime = _regime_state(config)
     cutoff = _as_of(config) - timedelta(days=config.max_age_days)
     where = []
     params: list[Any] = []
@@ -471,6 +580,8 @@ def explain_candidates(
         age_days = (_as_of(config) - signal_date).days
         source_min_score = _source_min_score(row, config)
         source_max_age = _source_max_age_days(row, config)
+        if config.require_regime_gate and not regime.get("allow_open"):
+            reasons.append(regime.get("reason") or "regime_blocks_new_entries")
         if score is None or float(score) < source_min_score:
             threshold_label = (
                 f"source minimum {source_min_score:g}"
@@ -495,6 +606,11 @@ def explain_candidates(
         capacity = _open_capacity_for_score(config, score)
         if capacity is not None and len(open_symbols) + len(selected_symbols) >= capacity:
             reasons.append(f"open capacity {capacity} reached")
+        dual = _dual_check_for_row(conn, row, config)
+        if dual is not None and not dual.get("passed"):
+            reasons.extend(
+                f"dual_check:{code}" for code in (dual.get("reject_reasons") or ["failed"])
+            )
         base = {
             "signal_id": row["signal_id"],
             "symbol": row["symbol"],
@@ -504,6 +620,12 @@ def explain_candidates(
             "signal_date": row["signal_date"],
             "age_days": age_days,
         }
+        if dual is not None:
+            base["dual_check"] = {
+                "passed": dual.get("passed"),
+                "reject_reasons": dual.get("reject_reasons") or [],
+                "gates": dual.get("gates") or {},
+            }
         prices = _derive_prices(row, config)
         candidate = _candidate_from_prices(row, config, prices) if prices else None
         trace = _decision_trace(conn, row, candidate, config) if candidate is not None else None
@@ -521,6 +643,8 @@ def explain_candidates(
         if reasons:
             skipped.append({**base, "reasons": reasons})
             continue
+        if dual is not None and candidate is not None:
+            candidate["dual_check"] = base.get("dual_check")
         passed.append(candidate)
         selected_symbols.add(symbol)
         planned_heat += candidate["initial_risk"]
@@ -550,6 +674,8 @@ def explain_candidates(
         "skipped": skipped[:limit],
         "passed_before_position_limit": len(passed),
         "cutoff_date": cutoff.isoformat(),
+        "regime": regime,
+        "kill_switch": False,
     }
 
 
@@ -634,6 +760,33 @@ def run_auto_paper(
     config: AutoPaperConfig,
     open_fn: Callable[..., dict[str, Any]] = open_position,
 ) -> dict[str, Any]:
+    kill_active = auto_paper_gates.is_kill_switch_active(
+        enabled=config.enabled, kill_switch=config.kill_switch
+    )
+    regime = _regime_state(config)
+    if kill_active:
+        return {
+            "execution_mode": config.execution_mode or ("dry_run" if config.dry_run else "paper"),
+            "dry_run": config.dry_run,
+            "eligible": 0,
+            "opened": 0,
+            "candidates": [],
+            "opened_links": [],
+            "kill_switch": True,
+            "skipped_reason": "kill_switch_active",
+            "regime": regime,
+            "config": {
+                "market": config.market,
+                "enabled": config.enabled,
+                "kill_switch": config.kill_switch,
+                "require_dual_check": config.require_dual_check,
+                "require_regime_gate": config.require_regime_gate,
+                "regime_recommendation": config.regime_recommendation,
+                "execution_mode": config.execution_mode
+                or ("dry_run" if config.dry_run else "paper"),
+            },
+        }
+
     candidates = eligible_signals(conn, config)
     opened = []
     for candidate in candidates:
@@ -658,7 +811,26 @@ def run_auto_paper(
             decision_trace=candidate.get("decision_trace"),
         )
         link_signal_to_paper(conn, candidate["signal_id"], int(row["id"]))
-        opened.append({"signal_id": candidate["signal_id"], "paper_trade_id": row["id"]})
+        memory = None
+        try:
+            from scripts import paper_memory_bridge
+
+            memory = paper_memory_bridge.sync_open(
+                conn,
+                signal_id=candidate["signal_id"],
+                entry_price=float(candidate["entry"]),
+                entry_date=str(candidate["signal_date"]),
+                shares=int(candidate["shares"]),
+            )
+        except Exception as exc:  # pragma: no cover - never block paper opens
+            memory = {"ok": False, "skipped": True, "reason": f"bridge_error:{exc}"}
+        opened.append(
+            {
+                "signal_id": candidate["signal_id"],
+                "paper_trade_id": row["id"],
+                "memory": memory,
+            }
+        )
 
     return {
         "execution_mode": config.execution_mode or ("dry_run" if config.dry_run else "paper"),
@@ -667,6 +839,8 @@ def run_auto_paper(
         "opened": len(opened),
         "candidates": candidates,
         "opened_links": opened,
+        "kill_switch": False,
+        "regime": regime,
         "config": {
             "market": config.market,
             "min_score": config.min_score,
@@ -683,6 +857,7 @@ def run_auto_paper(
             "fee_model": config.fee_model,
             "account_size": config.account_size,
             "risk_per_trade_pct": config.risk_per_trade_pct,
+            "effective_risk_per_trade_pct": _effective_risk_per_trade_pct(config),
             "max_position_pct": config.max_position_pct,
             "max_portfolio_heat_pct": config.max_portfolio_heat_pct,
             "board_lot_size": config.board_lot_size,
@@ -691,6 +866,12 @@ def run_auto_paper(
             "min_expected_net_r": config.min_expected_net_r,
             "cooldown_after_loss_days": config.cooldown_after_loss_days,
             "preserve_signal_plan": config.preserve_signal_plan,
+            "enabled": config.enabled,
+            "kill_switch": config.kill_switch,
+            "require_dual_check": config.require_dual_check,
+            "require_regime_gate": config.require_regime_gate,
+            "regime_recommendation": config.regime_recommendation,
+            "hold_style": config.hold_style,
             "execution_mode": config.execution_mode or ("dry_run" if config.dry_run else "paper"),
             "source_rules": config.source_rules,
             "as_of": _as_of(config).isoformat(),

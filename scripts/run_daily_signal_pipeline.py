@@ -40,7 +40,7 @@ from trading_core.jobs import JobRunStore
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts import auto_paper, signal_ledger
+from scripts import auto_paper, auto_paper_gates, expectancy_calibrator, signal_ledger
 from scripts.fee_model import effective_transaction_cost_bps
 
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "state" / "automation_config.yaml"
@@ -71,6 +71,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "auto_paper": {
         "enabled": True,
         "execute": False,
+        "kill_switch": False,
+        "require_dual_check": True,
+        "require_regime_gate": True,
+        "regime_recommendation": None,
+        "hold_style": "overnight",
+        "dual_check_bars": True,
         "min_score": 70.0,
         "max_age_days": 10,
         "max_new_positions": 2,
@@ -99,11 +105,25 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "max_position_pct": 10.0,
         "max_portfolio_heat_pct": 2.0,
         "board_lot_size": 100,
+        "regime_policy": {
+            "NEW_ENTRY_ALLOWED": {"allow_open": True, "risk_scale": 1.0},
+            "REDUCE_ONLY": {"allow_open": True, "risk_scale": 0.5},
+            "CASH_PRIORITY": {"allow_open": False, "risk_scale": 0.0},
+        },
         "source_rules": {
             "thai-swing-dip": {"target_r": 1.0, "stop_pct_cap": 2.5},
             "thai-swing-momentum": {"target_r": 0.9, "stop_pct_cap": 4.0},
             "vcp-screener": {"target_r": 1.5, "stop_pct_cap": 5.0},
         },
+    },
+    "exposure": {
+        "reports_dir": "reports",
+        "enabled": True,
+    },
+    "expectancy_calibration": {
+        "enabled": True,
+        "apply": False,
+        "min_closed": 20,
     },
 }
 
@@ -184,6 +204,13 @@ def _build_auto_config(
         if fee_model
         else float(paper.get("transaction_cost_bps", 0.0))
     )
+    exposure_cfg = config.get("exposure") or {}
+    regime_recommendation = paper.get("regime_recommendation")
+    if regime_recommendation is None and exposure_cfg.get("enabled", True):
+        reports_dir = _as_path(exposure_cfg.get("reports_dir") or "reports")
+        regime_recommendation = auto_paper_gates.load_regime_recommendation(
+            reports_dir, config.get("market")
+        )
     return auto_paper.AutoPaperConfig(
         market=config.get("market"),
         min_score=float(paper.get("min_score", 70.0)),
@@ -230,6 +257,19 @@ def _build_auto_config(
         as_of=as_of,
         dry_run=dry_run,
         execution_mode=execution_mode,
+        enabled=bool(paper.get("enabled", True)),
+        kill_switch=bool(paper.get("kill_switch", False)),
+        require_dual_check=bool(paper.get("require_dual_check", False)),
+        require_regime_gate=bool(paper.get("require_regime_gate", False)),
+        regime_recommendation=str(regime_recommendation) if regime_recommendation else None,
+        regime_policy=paper.get("regime_policy") or {},
+        hold_style=str(paper.get("hold_style") or "overnight"),
+        require_verified_earnings=(
+            bool(paper["require_verified_earnings"])
+            if paper.get("require_verified_earnings") is not None
+            else None
+        ),
+        dual_check_bars=bool(paper.get("dual_check_bars", True)),
     )
 
 
@@ -256,12 +296,15 @@ def write_reports(result: dict[str, Any], output_dir: str | Path) -> dict[str, s
         f"- Ingested signal files: {result['ingest']['signals']['files']} files, {result['ingest']['signals']['inserted']} inserted, {result['ingest']['signals']['updated']} updated",
         f"- Outcomes updated: {result['outcomes']['outcomes_updated']} rows, {result['outcomes']['complete_outcomes']} complete",
         f"- Auto-paper: {result['auto_paper']['eligible']} eligible, {result['auto_paper']['opened']} opened, dry_run={result['auto_paper']['dry_run']}",
+        f"- Kill switch: {result['auto_paper'].get('kill_switch', False)}",
+        f"- Regime: {(result['auto_paper'].get('regime') or {}).get('recommendation') or 'n/a'}",
         f"- Ledger signals: {result['signals']['total']}",
         f"- Completed signals: {result['signals']['completed_signals']}",
         "",
         "## Notes",
         "",
         "- Auto-paper opens simulated positions only.",
+        "- Dual-Check + regime gates apply when enabled in automation_config.",
         "- Real-money execution is intentionally outside this pipeline.",
     ]
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -302,6 +345,28 @@ def run_pipeline(
             signal_ingest = signal_ledger.ingest_signal_files(conn, _resolve_signal_files(config))
             ingest_result = {"theses": thesis_ingest, "signals": signal_ingest}
             outcome_result = signal_ledger.update_outcomes(conn, horizons=horizons, market=market)
+
+            cal_cfg = config.get("expectancy_calibration") or {}
+            calibration_result: dict[str, Any] = {"enabled": False}
+            if cal_cfg.get("enabled", True):
+                paper_cfg = config.get("auto_paper") or {}
+                calibration_result = expectancy_calibrator.run_calibration(
+                    conn,
+                    market=market,
+                    source_rules=paper_cfg.get("source_rules") or {},
+                    default_min_score=float(paper_cfg.get("min_score", 70.0)),
+                    min_closed=int(cal_cfg.get("min_closed", 20)),
+                    apply=bool(cal_cfg.get("apply", False)),
+                )
+                if calibration_result.get("applied_source_rules") is not None:
+                    config.setdefault("auto_paper", {})["source_rules"] = calibration_result[
+                        "applied_source_rules"
+                    ]
+                out_dir = _as_path(config.get("output_dir", DEFAULT_REPORT_DIR))
+                cal_path = out_dir / f"expectancy_calibration_{run_date.isoformat()}.json"
+                expectancy_calibrator.write_calibration_report(calibration_result, cal_path)
+                calibration_result["report"] = str(cal_path)
+
             auto_config = _build_auto_config(config, as_of=run_date)
             if open_fn is None:
                 auto_result = auto_paper.run_auto_paper(conn, auto_config)
@@ -319,6 +384,7 @@ def run_pipeline(
             "analysis": analysis_result,
             "ingest": ingest_result,
             "outcomes": outcome_result,
+            "expectancy_calibration": calibration_result,
             "auto_paper": auto_result,
             "signals": signal_counts,
             "outcome_summary": outcome_summary,

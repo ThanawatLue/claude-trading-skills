@@ -26,9 +26,15 @@ def resolve_execution_mode(config: dict[str, Any]) -> str:
 
     enabled = bool(config.get("enabled", True))
     execute = bool(config.get("execute", False))
-    if not enabled or not execute:
+    if not enabled or not execute or bool(config.get("kill_switch", False)):
         return "dry_run"
     return "paper"
+
+
+def is_kill_switch_active(config: dict[str, Any]) -> bool:
+    """Return True when automation must not open new positions."""
+
+    return bool(config.get("kill_switch", False)) or not bool(config.get("enabled", True))
 
 
 def normalize_execution_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -38,8 +44,10 @@ def normalize_execution_config(config: dict[str, Any]) -> dict[str, Any]:
     mode = resolve_execution_mode(normalized)
     normalized["execution_mode"] = mode
     normalized["real_money_enabled"] = False
+    normalized["kill_switch"] = bool(normalized.get("kill_switch", False))
     paper = normalized.get("auto_paper")
     if isinstance(paper, dict):
         paper["execution_mode"] = mode
         paper["execute"] = mode == "paper"
+        paper["kill_switch"] = bool(paper.get("kill_switch", normalized["kill_switch"]))
     return normalized

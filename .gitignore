@@ -33,6 +33,23 @@ logs/
 reports/
 reviews/
 
+# Screener / analysis dumps accidentally written to repo root
+*_screener_*.json
+*_screener_*.md
+market_breadth_*.json
+market_breadth_*.md
+market_breadth_history.json
+canslim_screener_*.json
+canslim_screener_*.md
+
+# One-shot local patch / scratch scripts at repo root
+/fix_*.py
+/patch_*.py
+/test_stats.py
+git_diff_output.txt
+claude-trading-skills.zip
+localtunnel-*.log
+
 # Per-symbol runtime state (e.g. parabolic-short SSR carryover files).
 # Kept out of commits so production state never leaks into the repo.
 state/

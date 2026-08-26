@@ -21,6 +21,7 @@ import pytest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 FMP_CLIENT_FILES = [
+    "scripts/lib/fmp_client.py",
     "skills/canslim-screener/scripts/fmp_client.py",
     "skills/earnings-trade-analyzer/scripts/fmp_client.py",
     "skills/ftd-detector/scripts/fmp_client.py",
@@ -71,11 +72,14 @@ def _build_mock_response(rows: int):
 @pytest.mark.parametrize("client_path", FMP_CLIENT_FILES)
 def test_get_historical_prices_truncates_to_days(client_path, monkeypatch):
     """Every fmp_client copy must truncate `historical` to `days=N` rows, most-recent-first."""
+    import inspect
+
     monkeypatch.setenv("FMP_API_KEY", "test_key")
     module = _load_fmp_module(client_path)
 
     mock_response = _build_mock_response(5)
-    with patch.object(module.requests.Session, "get", return_value=mock_response):
+    impl_mod = inspect.getmodule(module.FMPClient) or module
+    with patch.object(impl_mod.requests.Session, "get", return_value=mock_response):
         client = module.FMPClient(api_key="test_key")
         # Disable retries to keep the test fast.
         if hasattr(client, "max_retries"):
