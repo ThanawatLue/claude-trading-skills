@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import check_alpaca_connection
+import requests
 
 
 class TestCheckAlpacaConnection(unittest.TestCase):

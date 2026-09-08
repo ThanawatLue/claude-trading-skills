@@ -318,8 +318,6 @@ def test_check_mode_fails_when_target_missing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-
-
 def test_main_fails_when_workflows_dir_missing(tmp_path: Path) -> None:
     rc = main(
         [

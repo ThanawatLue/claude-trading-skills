@@ -21,23 +21,23 @@ def find_year_ago_quarter_index(income_statements: list[dict], base_index: int) 
     Falls back to base_index + 4 if no matches found or errors occur.
     """
     from datetime import datetime, timedelta
-    
+
     if base_index >= len(income_statements):
         return base_index + 4
-        
+
     base_date_str = income_statements[base_index].get("date")
     if not base_date_str:
         return base_index + 4
-        
+
     try:
         base_date = datetime.strptime(base_date_str[:10], "%Y-%m-%d")
     except ValueError:
         return base_index + 4
-        
+
     target_date = base_date - timedelta(days=365)
     best_index = base_index + 4
     best_diff = float("inf")
-    
+
     for i in range(base_index + 1, len(income_statements)):
         date_str = income_statements[i].get("date")
         if not date_str:
@@ -46,13 +46,13 @@ def find_year_ago_quarter_index(income_statements: list[dict], base_index: int) 
             date_val = datetime.strptime(date_str[:10], "%Y-%m-%d")
         except ValueError:
             continue
-            
+
         diff = abs((base_date - date_val).days - 365)
         # We want it to be reasonably close to 365 days, e.g. within 60 days
         if diff < 60 and diff < best_diff:
             best_diff = diff
             best_index = i
-            
+
     return best_index
 
 
@@ -345,7 +345,7 @@ def detect_earnings_acceleration(income_statements: list[dict]) -> dict:
             "interpretation": "Insufficient data for trend analysis",
         }
     recent_year_ago_eps = _get_eps(income_statements[recent_year_ago_idx])
-    
+
     if recent_year_ago_eps == 0:
         recent_growth = 500.0 if recent_eps > 0 else 0.0
     else:
@@ -364,7 +364,7 @@ def detect_earnings_acceleration(income_statements: list[dict]) -> dict:
             "interpretation": "Insufficient data for trend analysis",
         }
     prior_year_ago_eps = _get_eps(income_statements[prior_year_ago_idx])
-    
+
     if prior_year_ago_eps == 0:
         prior_growth = 500.0 if prior_eps > 0 else 0.0
     else:

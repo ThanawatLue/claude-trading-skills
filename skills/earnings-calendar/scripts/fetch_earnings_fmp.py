@@ -117,7 +117,9 @@ class FMPEarningsCalendar:
         url = f"{self.BASE_URL}/profile/{symbols_str}"
         params = {"apikey": self.api_key}
 
-        print(f"✓ Fetching profiles for {len(symbols)} companies (batch request)...", file=sys.stderr)
+        print(
+            f"✓ Fetching profiles for {len(symbols)} companies (batch request)...", file=sys.stderr
+        )
 
         try:
             # Use self.session.get as recommended for consistency and efficiency
@@ -139,13 +141,20 @@ class FMPEarningsCalendar:
                     if isinstance(profile, dict) and "symbol" in profile:
                         profiles[profile["symbol"]] = profile
             else:
-                print(f"  ⚠️  Warning: Unexpected response format for profiles: {data}", file=sys.stderr)
-
+                print(
+                    f"  ⚠️  Warning: Unexpected response format for profiles: {data}",
+                    file=sys.stderr,
+                )
 
         except requests.exceptions.Timeout:
-            print("❌ ERROR: Request timeout during profile fetch. Please try again.", file=sys.stderr)
+            print(
+                "❌ ERROR: Request timeout during profile fetch. Please try again.", file=sys.stderr
+            )
         except requests.exceptions.ConnectionError:
-            print("❌ ERROR: Connection error during profile fetch. Check your internet connection.", file=sys.stderr)
+            print(
+                "❌ ERROR: Connection error during profile fetch. Check your internet connection.",
+                file=sys.stderr,
+            )
         except Exception as e:
             print(f"❌ ERROR: Unexpected error during profile fetch: {str(e)}", file=sys.stderr)
 

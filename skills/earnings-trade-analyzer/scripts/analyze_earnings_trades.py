@@ -38,9 +38,9 @@ from calculators.ma200_calculator import calculate_ma200_position
 from calculators.pre_earnings_trend_calculator import calculate_pre_earnings_trend
 from calculators.volume_trend_calculator import calculate_volume_trend
 from fmp_client import ApiCallBudgetExceeded, FMPClient
-from yf_client import YFClient
 from report_generator import generate_json_report, generate_markdown_report
 from scorer import calculate_composite_score
+from yf_client import YFClient
 
 
 def normalize_timing(time_value):
@@ -156,15 +156,19 @@ def main():
 
     # Data client — yfinance by default; FMP when --api-key or FMP_API_KEY is set
     import os
+
     fmp_key = args.api_key or os.environ.get("FMP_API_KEY")
     if fmp_key:
         try:
             client = FMPClient(api_key=fmp_key, max_api_calls=args.max_api_calls)
-            
+
             # test if API key is exhausted or invalid
             client.get_historical_prices("^GSPC", 1)
             if getattr(client, "rate_limit_reached", False):
-                print("⚠️  FMP API rate limit reached or key invalid. Falling back to Yahoo Finance.", file=sys.stderr)
+                print(
+                    "⚠️  FMP API rate limit reached or key invalid. Falling back to Yahoo Finance.",
+                    file=sys.stderr,
+                )
                 client = YFClient()
             else:
                 print("Using FMP API client.", file=sys.stderr)

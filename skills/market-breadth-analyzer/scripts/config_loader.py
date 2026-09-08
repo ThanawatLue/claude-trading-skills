@@ -1,6 +1,7 @@
 import json
 import os
 
+
 def load_config(skill_root_path: str = "skills/market-breadth-analyzer/") -> dict:
     """Loads the configuration from config.json."""
     config_path = os.path.join(skill_root_path, "config.json")
@@ -16,32 +17,19 @@ def load_config(skill_root_path: str = "skills/market-breadth-analyzer/") -> dic
                 "cycle_position": 0.20,
                 "bearish_signal": 0.15,
                 "historical_percentile": 0.10,
-                "divergence": 0.10
+                "divergence": 0.10,
             },
             "calculator_params": {
-                "ma_crossover_calculator": {
-                    "short_period": 8,
-                    "long_period": 200
-                },
-                "peak_trough_calculator": {
-                    "lookback_period": 60
-                },
-                "divergence_calculator": {
-                    "short_window": 20,
-                    "long_window": 60
-                }
+                "ma_crossover_calculator": {"short_period": 8, "long_period": 200},
+                "peak_trough_calculator": {"lookback_period": 60},
+                "divergence_calculator": {"short_window": 20, "long_window": 60},
             },
-            "report_generator": {
-                "recent_days_summary": 5
-            },
-            "market_breadth_analyzer": {
-                "required_columns": ["Date", "Symbol", "Close", "Volume"]
-            }
+            "report_generator": {"recent_days_summary": 5},
+            "market_breadth_analyzer": {"required_columns": ["Date", "Symbol", "Close", "Volume"]},
         }
-        with open(config_path, 'w') as f:
+        with open(config_path, "w") as f:
             json.dump(default_config, f, indent=2)
         return default_config
-    
-    with open(config_path, 'r') as f:
-        return json.load(f)
 
+    with open(config_path) as f:
+        return json.load(f)

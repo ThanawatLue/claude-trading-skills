@@ -31,7 +31,7 @@ _config_path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "config", "industry_to_sector.json"
 )
 try:
-    with open(_config_path, "r") as f:
+    with open(_config_path) as f:
         INDUSTRY_TO_SECTOR = json.load(f)
 except FileNotFoundError:
     print(
@@ -131,7 +131,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Enable automatic theme discovery for unmatched industries",
-)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +209,7 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _add_sector_info(industries: list[dict]) -> list[dict]:
     """Add sector field to each industry dict from INDUSTRY_TO_SECTOR mapping."""

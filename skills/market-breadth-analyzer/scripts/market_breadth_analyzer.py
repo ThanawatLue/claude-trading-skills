@@ -92,27 +92,29 @@ def main():
     else:
         _run_us_analysis(args)
 
+
 def _run_thai_analysis(args):
     """Live calculation for Thai market breadth using SET50."""
     print("Step 1: Fetching SET50 Data from Yahoo Finance")
     print("-" * 70)
-    
+
     # We need YFClient here
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../vcp-screener/scripts"))
     from yf_client import YFClient
+
     client = YFClient()
-    
+
     constituents = client.get_thai_constituents()
-    symbols = [c['symbol'] for c in constituents]
-    
+    symbols = [c["symbol"] for c in constituents]
+
     print(f"  Fetching history for {len(symbols)} stocks...", end=" ", flush=True)
     histories = client.get_batch_historical(symbols, days=260)
     print(f"OK ({len(histories)} stocks)")
-    
+
     print("  Fetching SET Index (^SET.BK)...", end=" ", flush=True)
     set_idx = client.get_historical_prices("^SET.BK", days=260)
     print("OK")
-    
+
     print("\nStep 2: Calculating Thai Breadth Components (Daily Timeseries)")
     print("-" * 70)
 
@@ -121,62 +123,74 @@ def _run_thai_analysis(args):
     for sym, hist in histories.items():
         if not hist:
             continue
-        valid_bars = sorted([h for h in hist if h.get('close') is not None and h.get('date')], key=lambda x: x['date'])
+        valid_bars = sorted(
+            [h for h in hist if h.get("close") is not None and h.get("date")],
+            key=lambda x: x["date"],
+        )
         if not valid_bars:
             continue
-        
-        closes = [b['close'] for b in valid_bars]
+
+        closes = [b["close"] for b in valid_bars]
         features = {}
         for idx in range(len(valid_bars)):
             bar = valid_bars[idx]
-            dt_str = bar['date']
-            
+            dt_str = bar["date"]
+
             # SMAs ending at idx (inclusive)
-            sma50 = sum(closes[max(0, idx-49):idx+1]) / min(50, idx+1) if idx >= 0 else 0
-            sma150 = sum(closes[max(0, idx-149):idx+1]) / min(150, idx+1) if idx >= 0 else 0
-            sma200 = sum(closes[max(0, idx-199):idx+1]) / min(200, idx+1) if idx >= 0 else 0
-            
-            features[dt_str] = (bar['close'], sma50, sma150, sma200)
+            sma50 = sum(closes[max(0, idx - 49) : idx + 1]) / min(50, idx + 1) if idx >= 0 else 0
+            sma150 = sum(closes[max(0, idx - 149) : idx + 1]) / min(150, idx + 1) if idx >= 0 else 0
+            sma200 = sum(closes[max(0, idx - 199) : idx + 1]) / min(200, idx + 1) if idx >= 0 else 0
+
+            features[dt_str] = (bar["close"], sma50, sma150, sma200)
         stock_features[sym] = features
 
     # Sort available dates for each stock to allow fast bisect lookup
     stock_dates = {sym: sorted(features.keys()) for sym, features in stock_features.items()}
 
     # 2. Get master dates from SET Index
-    set_bars = sorted([b for b in set_idx.get('historical', []) if b.get('close') is not None and b.get('date')], key=lambda x: x['date'])
+    set_bars = sorted(
+        [b for b in set_idx.get("historical", []) if b.get("close") is not None and b.get("date")],
+        key=lambda x: x["date"],
+    )
     if not set_bars:
         print("ERROR: No SET Index history found.")
         sys.exit(1)
 
     import bisect
+
     raw_breadth_data = []
 
     # Calculate daily breadth index
     for bar in set_bars:
-        date_str = bar['date']
+        date_str = bar["date"]
         above_50_count = 0
         above_150_count = 0
         above_200_count = 0
         total_active_stocks = 0
-        
+
         for sym, dates in stock_dates.items():
             idx = bisect.bisect_right(dates, date_str)
             if idx > 0:
-                last_date = dates[idx-1]
+                last_date = dates[idx - 1]
                 close, sma50, sma150, sma200 = stock_features[sym][last_date]
-                if close > sma50: above_50_count += 1
-                if close > sma150: above_150_count += 1
-                if close > sma200: above_200_count += 1
+                if close > sma50:
+                    above_50_count += 1
+                if close > sma150:
+                    above_150_count += 1
+                if close > sma200:
+                    above_200_count += 1
                 total_active_stocks += 1
-                
+
         if total_active_stocks > 0:
-            raw_breadth_data.append({
-                "date": date_str,
-                "pct_50": (above_50_count / total_active_stocks) * 100,
-                "pct_150": (above_150_count / total_active_stocks) * 100,
-                "pct_200": (above_200_count / total_active_stocks) * 100,
-                "set_close": bar['close']
-            })
+            raw_breadth_data.append(
+                {
+                    "date": date_str,
+                    "pct_50": (above_50_count / total_active_stocks) * 100,
+                    "pct_150": (above_150_count / total_active_stocks) * 100,
+                    "pct_200": (above_200_count / total_active_stocks) * 100,
+                    "set_close": bar["close"],
+                }
+            )
 
     if len(raw_breadth_data) < 20:
         print("ERROR: Too few data points for timeseries calculations.")
@@ -186,48 +200,64 @@ def _run_thai_analysis(args):
     detail_rows = []
     for i in range(20, len(raw_breadth_data)):
         # Calculate 8MA as average of last 8 days (scaled 0.0 - 1.0)
-        ma8 = sum(r["pct_50"] for r in raw_breadth_data[i-7:i+1]) / 800.0
-        ma150 = sum(r["pct_150"] for r in raw_breadth_data[i-7:i+1]) / 800.0
-        ma200 = sum(r["pct_200"] for r in raw_breadth_data[i-7:i+1]) / 800.0
-        
+        ma8 = sum(r["pct_50"] for r in raw_breadth_data[i - 7 : i + 1]) / 800.0
+        ma150 = sum(r["pct_150"] for r in raw_breadth_data[i - 7 : i + 1]) / 800.0
+        ma200 = sum(r["pct_200"] for r in raw_breadth_data[i - 7 : i + 1]) / 800.0
+
         # 200MA Trend based on last 5 days
-        prev_ma200 = sum(r["pct_200"] for r in raw_breadth_data[i-12:i-4]) / 800.0 if i >= 12 else ma200
+        prev_ma200 = (
+            sum(r["pct_200"] for r in raw_breadth_data[i - 12 : i - 4]) / 800.0
+            if i >= 12
+            else ma200
+        )
         trend = 1 if ma200 > prev_ma200 else -1
-        
+
         # Bearish signal crossover in the last 5 days
         bearish_signal = False
-        for j in range(max(20, i-4), i+1):
-            j_curr_ma8 = sum(r["pct_50"] for r in raw_breadth_data[j-7:j+1]) / 800.0
-            j_curr_ma200 = sum(r["pct_200"] for r in raw_breadth_data[j-7:j+1]) / 800.0
-            j_prev_ma8 = sum(r["pct_50"] for r in raw_breadth_data[j-8:j]) / 800.0
-            j_prev_ma200 = sum(r["pct_200"] for r in raw_breadth_data[j-8:j]) / 800.0
+        for j in range(max(20, i - 4), i + 1):
+            j_curr_ma8 = sum(r["pct_50"] for r in raw_breadth_data[j - 7 : j + 1]) / 800.0
+            j_curr_ma200 = sum(r["pct_200"] for r in raw_breadth_data[j - 7 : j + 1]) / 800.0
+            j_prev_ma8 = sum(r["pct_50"] for r in raw_breadth_data[j - 8 : j]) / 800.0
+            j_prev_ma200 = sum(r["pct_200"] for r in raw_breadth_data[j - 8 : j]) / 800.0
             if j_curr_ma8 < j_curr_ma200 and j_prev_ma8 >= j_prev_ma200:
                 bearish_signal = True
                 break
 
-        detail_rows.append({
-            "Date": raw_breadth_data[i]["date"],
-            "Breadth_Index_8MA": ma8,
-            "Breadth_Index_200MA": ma200,
-            "Breadth_200MA_Trend": trend,
-            "Bearish_Signal": bearish_signal,
-            "S&P500_Price": raw_breadth_data[i]["set_close"],
-            "Is_Peak": False,
-            "Is_Trough": False,
-            "Is_Trough_8MA_Below_04": False
-        })
+        detail_rows.append(
+            {
+                "Date": raw_breadth_data[i]["date"],
+                "Breadth_Index_8MA": ma8,
+                "Breadth_Index_200MA": ma200,
+                "Breadth_200MA_Trend": trend,
+                "Bearish_Signal": bearish_signal,
+                "S&P500_Price": raw_breadth_data[i]["set_close"],
+                "Is_Peak": False,
+                "Is_Trough": False,
+                "Is_Trough_8MA_Below_04": False,
+            }
+        )
 
     # Calculate peaks and troughs with 2-day lag
     for i in range(4, len(detail_rows)):
         val = [r["Breadth_Index_8MA"] for r in detail_rows]
         # Peak
-        if val[i-2] > val[i-4] and val[i-2] > val[i-3] and val[i-2] > val[i-1] and val[i-2] > val[i]:
-            detail_rows[i-2]["Is_Peak"] = True
+        if (
+            val[i - 2] > val[i - 4]
+            and val[i - 2] > val[i - 3]
+            and val[i - 2] > val[i - 1]
+            and val[i - 2] > val[i]
+        ):
+            detail_rows[i - 2]["Is_Peak"] = True
         # Trough
-        if val[i-2] < val[i-4] and val[i-2] < val[i-3] and val[i-2] < val[i-1] and val[i-2] < val[i]:
-            detail_rows[i-2]["Is_Trough"] = True
-            if val[i-2] < 0.40:
-                detail_rows[i-2]["Is_Trough_8MA_Below_04"] = True
+        if (
+            val[i - 2] < val[i - 4]
+            and val[i - 2] < val[i - 3]
+            and val[i - 2] < val[i - 1]
+            and val[i - 2] < val[i]
+        ):
+            detail_rows[i - 2]["Is_Trough"] = True
+            if val[i - 2] < 0.40:
+                detail_rows[i - 2]["Is_Trough_8MA_Below_04"] = True
 
     # 4. Feed calculated timeseries to the 6 calculators
     comp1 = calculate_breadth_level_trend(detail_rows)
@@ -235,10 +265,7 @@ def _run_thai_analysis(args):
     comp3 = calculate_cycle_position(detail_rows)
     comp4 = calculate_bearish_signal(detail_rows)
     # Mock summary with defaults as yf has no summary CSV
-    dummy_summary = {
-        "Average Peaks (200MA)": "0.75",
-        "Average Troughs (8MA < 0.4)": "0.25"
-    }
+    dummy_summary = {"Average Peaks (200MA)": "0.75", "Average Troughs (8MA < 0.4)": "0.25"}
     comp5 = calculate_historical_percentile(detail_rows, dummy_summary)
     comp6 = calculate_divergence(detail_rows)
 
@@ -250,11 +277,12 @@ def _run_thai_analysis(args):
         "historical_percentile": comp5["score"],
         "divergence": comp6["score"],
     }
-    
+
     data_availability = {k: True for k in component_scores}
     from scorer import calculate_composite_score
+
     composite = calculate_composite_score(component_scores, data_availability)
-    
+
     # Generate Reports
     latest_r = detail_rows[-1]
     analysis = {
@@ -262,7 +290,7 @@ def _run_thai_analysis(args):
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "data_source": "Yahoo Finance (Live SET50 Calculation)",
             "market": "TH",
-            "total_stocks": len(histories)
+            "total_stocks": len(histories),
         },
         "composite": composite,
         "components": {
@@ -274,17 +302,28 @@ def _run_thai_analysis(args):
             "divergence": comp6,
         },
         "key_levels": {
-            "SET Index": {"value": f"{latest_r['S&P500_Price']:.2f}", "significance": "Current SET Index Level"},
-            "SMA8 (50)": {"value": f"{latest_r['Breadth_Index_8MA']:.4f}", "significance": "Smooth 8-day MA of % stocks above SMA50"},
-            "SMA8 (200)": {"value": f"{latest_r['Breadth_Index_200MA']:.4f}", "significance": "Smooth 8-day MA of % stocks above SMA200"}
-        }
+            "SET Index": {
+                "value": f"{latest_r['S&P500_Price']:.2f}",
+                "significance": "Current SET Index Level",
+            },
+            "SMA8 (50)": {
+                "value": f"{latest_r['Breadth_Index_8MA']:.4f}",
+                "significance": "Smooth 8-day MA of % stocks above SMA50",
+            },
+            "SMA8 (200)": {
+                "value": f"{latest_r['Breadth_Index_200MA']:.4f}",
+                "significance": "Smooth 8-day MA of % stocks above SMA200",
+            },
+        },
     }
-    
+
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     json_file = os.path.join(args.output_dir, f"market_breadth_{timestamp}.json")
     from report_generator import generate_json_report
+
     generate_json_report(analysis, json_file)
     print(f"\nStep 3: Thai Market Analysis Complete (Score: {composite['composite_score']})")
+
 
 def _run_us_analysis(args):
     """Standard analysis for US market using CSV data."""

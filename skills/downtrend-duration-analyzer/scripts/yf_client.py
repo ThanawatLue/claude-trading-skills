@@ -7,16 +7,13 @@ Replaces FMP endpoints with free yfinance data:
 
 from __future__ import annotations
 
-import io
 import warnings
-from datetime import datetime
 
 import pandas as pd
 import requests
 import yfinance as yf
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
-
 
 _WIKI_SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 _WIKI_HEADERS = {
@@ -109,9 +106,7 @@ def fetch_sp500_list(sector: str | None = None, limit: int | None = None) -> lis
     return records
 
 
-def fetch_historical_prices(
-    symbol: str, from_date: str, to_date: str
-) -> pd.DataFrame:
+def fetch_historical_prices(symbol: str, from_date: str, to_date: str) -> pd.DataFrame:
     """Download daily OHLCV for *symbol* between from_date and to_date.
 
     Returns a DataFrame with columns: date, open, high, low, close, volume
@@ -139,7 +134,7 @@ def fetch_historical_prices(
 
         raw = raw.reset_index()
         raw.rename(columns={"index": "date", "Date": "date"}, inplace=True)
-        
+
         if "date" not in raw.columns:
             return pd.DataFrame()
 

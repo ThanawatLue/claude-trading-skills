@@ -332,19 +332,21 @@ class TestPaperTrade(unittest.TestCase):
                 del sys.modules["tv_client"]
 
     def test_update_marks_closes_short_profit_target(self):
-        with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
-            paper_trade.open_position(
-                symbol="MOMO.BK",
-                market="TH",
-                shares=100,
-                entry=100.0,
-                stop=96.0,
-                target=108.0,
-                source="thai-swing-momentum",
-            )
+        rules = {"thai-swing-momentum": {"take_profit_r": 1.0}}
+        with patch("update_marks._load_exit_rules", return_value=rules):
+            with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+                paper_trade.open_position(
+                    symbol="MOMO.BK",
+                    market="TH",
+                    shares=100,
+                    entry=100.0,
+                    stop=96.0,
+                    target=108.0,
+                    source="thai-swing-momentum",
+                )
 
-        with patch("update_marks._fetch_price", return_value=104.2):
-            results = update_marks.update_all()
+            with patch("update_marks._fetch_price", return_value=104.2):
+                results = update_marks.update_all()
 
         self.assertEqual(results[0]["action"], "auto_closed_short_target")
         positions = paper_trade.list_positions(status_filter="closed")
@@ -353,21 +355,23 @@ class TestPaperTrade(unittest.TestCase):
         self.assertAlmostEqual(positions[0]["realized_r"], 1.0)
 
     def test_update_marks_closes_time_stop(self):
-        with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
-            paper_trade.open_position(
-                symbol="SLOW.BK",
-                market="TH",
-                shares=100,
-                entry=100.0,
-                stop=96.0,
-                target=108.0,
-                source="thai-swing-momentum",
-            )
+        rules = {"thai-swing-momentum": {"max_hold_days": 3, "time_stop_min_r": 0.0}}
+        with patch("update_marks._load_exit_rules", return_value=rules):
+            with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+                paper_trade.open_position(
+                    symbol="SLOW.BK",
+                    market="TH",
+                    shares=100,
+                    entry=100.0,
+                    stop=96.0,
+                    target=108.0,
+                    source="thai-swing-momentum",
+                )
 
-        with patch("update_marks._now_iso", return_value="2026-07-05T09:00:00+00:00"):
-            with patch("paper_trade._now_iso", return_value="2026-07-05T09:00:00+00:00"):
-                with patch("update_marks._fetch_price", return_value=99.0):
-                    results = update_marks.update_all()
+            with patch("update_marks._now_iso", return_value="2026-07-05T09:00:00+00:00"):
+                with patch("paper_trade._now_iso", return_value="2026-07-05T09:00:00+00:00"):
+                    with patch("update_marks._fetch_price", return_value=99.0):
+                        results = update_marks.update_all()
 
         self.assertEqual(results[0]["action"], "auto_closed_time")
         positions = paper_trade.list_positions(status_filter="closed")

@@ -13,9 +13,9 @@ Bubble-O-Meter: 米国株式市場のバブル度を多面的に評価するス�
 """
 
 import argparse
+import gettext
 import json
 from datetime import datetime
-import gettext
 
 # Initialize gettext for internationalization (i18n)
 _ = gettext.gettext
@@ -41,22 +41,18 @@ LANGUAGE_DATA = {
         "indicator_desc_valuation_disconnect": "Fundamental explanations replaced by narratives",
         "indicator_name_breadth_expansion": "Breadth & Correlation",
         "indicator_desc_breadth_expansion": "Even low-quality stocks rise across the board",
-
         "phase_normal": "Normal",
         "phase_caution": "Caution",
         "phase_euphoria": "Euphoria",
         "phase_critical": "Critical",
-
         "risk_low": "Low",
         "risk_medium": "Medium",
         "risk_high": "High",
         "risk_extremely_high": "Extremely High",
-
         "action_normal": "Continue normal investment strategy",
         "action_caution": "Start partial profit-taking, reduce new position sizing",
         "action_euphoria": "Accelerate stair-step profit-taking, tighten ATR trailing stops, reduce total risk budget by 30-50%",
         "action_critical": "Significant profit-taking or full hedge, halt new entries, consider short positions after reversal confirmation",
-
         "minsky_displacement": "1. Displacement (Trigger) - Legitimate innovation & early investment",
         "minsky_extended_displacement_early_boom": "1.5. Extended Displacement/Early Boom - Early expansion",
         "minsky_boom": "2. Boom (Expansion) - Accelerating prices, increasing participation",
@@ -65,7 +61,6 @@ LANGUAGE_DATA = {
         "minsky_peak_euphoria_profit_taking": "4. Peak Euphoria/Profit Taking (Reversal imminent) - Extreme exuberance",
         "minsky_critical_late_profit_taking": "4.5. Critical/Late Profit Taking - Extreme risk",
         "minsky_panic": "5. Panic (Reversal) - Full reversal / Liquidation cascade",
-
         "guidelines_title": "Bubble Scoring Guidelines",
         "guidelines_mass_penetration": """
 ### 1. Mass Penetration
@@ -149,22 +144,18 @@ LANGUAGE_DATA = {
         "indicator_desc_valuation_disconnect": "ファンダ説明が物語一辺倒に",
         "indicator_name_breadth_expansion": "相関と幅",
         "indicator_desc_breadth_expansion": "低質銘柄まで全面高",
-
         "phase_normal": "正常域",
         "phase_caution": "警戒域",
         "phase_euphoria": "熱狂域",
         "phase_critical": "臨界域",
-
         "risk_low": "低",
         "risk_medium": "中",
         "risk_high": "高",
         "risk_extremely_high": "極めて高",
-
         "action_normal": "通常通りの投資戦略を継続",
         "action_caution": "部分利確の開始、新規ポジションのサイズ縮小",
         "action_euphoria": "階段状利確の加速、ATRトレーリングストップ厳格化、総リスク予算30-50%削減",
         "action_critical": "大幅な利確またはフルヘッジ、新規参入停止、反転確認後のショートポジション検討",
-
         "minsky_displacement": "1. Displacement (きっかけ・初期拡張) - Legitimate innovation & early investment",
         "minsky_extended_displacement_early_boom": "1.5. Extended Displacement/Early Boom - Early expansion",
         "minsky_boom": "2. Boom (拡張期) - Accelerating prices, increasing participation",
@@ -173,7 +164,6 @@ LANGUAGE_DATA = {
         "minsky_peak_euphoria_profit_taking": "4. Peak Euphoria/Profit Taking (熱狂ピーク・利確開始) - Reversal imminent",
         "minsky_critical_late_profit_taking": "4.5. Critical/Late Profit Taking - Extreme risk",
         "minsky_panic": "5. Panic (パニック) - Full reversal / Liquidation cascade",
-
         "guidelines_title": "バブルスコアリング・ガイドライン",
         "guidelines_mass_penetration": """
 ### 1. 大衆浸透度 (Mass Penetration)
@@ -236,7 +226,7 @@ LANGUAGE_DATA = {
         "status_high": "🔴高",
         "status_medium": "🟡中",
         "status_low": "🟢低",
-    }
+    },
 }
 
 
@@ -365,7 +355,13 @@ class BubbleScorer:
         # Total scores up to 12 (Euphoria phase)
         if total <= 12:
             # Stronger signs of euphoria
-            if mass_pen >= 1 or media >= 2 or leverage >= 1 or valuation_disc >= 1 or new_issuance >= 1:
+            if (
+                mass_pen >= 1
+                or media >= 2
+                or leverage >= 1
+                or valuation_disc >= 1
+                or new_issuance >= 1
+            ):
                 return self.lang_data["minsky_euphoria"]
             else:
                 # If in euphoria total range but core euphoria indicators are not strong
@@ -374,12 +370,16 @@ class BubbleScorer:
         # 4. Profit Taking (利確開始) and 5. Panic (パニック)
         # Total scores > 12 (Critical phase)
         # These phases are harder to distinguish solely by score, but can be inferred from extreme indicators.
-        if total > 12: # Critical range (13-19)
+        if total > 12:  # Critical range (13-19)
             # If mass penetration, media, and other key indicators are at their peak
-            if mass_pen >= 2 and media >= 2 and (leverage >= 2 or valuation_disc >= 2 or new_issuance >= 2):
+            if (
+                mass_pen >= 2
+                and media >= 2
+                and (leverage >= 2 or valuation_disc >= 2 or new_issuance >= 2)
+            ):
                 return self.lang_data["minsky_peak_euphoria_profit_taking"]
-            elif total >= 16: # Very high total score, implying widespread issues
-                 return self.lang_data["minsky_panic"]
+            elif total >= 16:  # Very high total score, implying widespread issues
+                return self.lang_data["minsky_panic"]
             else:
                 return self.lang_data["minsky_critical_late_profit_taking"]
 
@@ -388,7 +388,13 @@ class BubbleScorer:
         details = []
         for key, value in scores.items():
             indicator = self.indicators.get(key, {})
-            status = self.lang_data["status_high"] if value == 2 else self.lang_data["status_medium"] if value == 1 else self.lang_data["status_low"]
+            status = (
+                self.lang_data["status_high"]
+                if value == 2
+                else self.lang_data["status_medium"]
+                if value == 1
+                else self.lang_data["status_low"]
+            )
             details.append(
                 {
                     "indicator": indicator.get("name", key),
@@ -439,7 +445,9 @@ Minsky{_("Phase")}: {result["minsky_phase"]}
 {"=" * 60}
 """
         for detail in result["detailed_indicators"]:
-            output += f"\n{detail['status']} {detail['indicator']}: {detail['score']}/2{_('points')}\n"
+            output += (
+                f"\n{detail['status']} {detail['indicator']}: {detail['score']}/2{_('points')}\n"
+            )
             output += f"   └─ {detail['description']}\n"
 
         output += f"\n{'=' * 60}\n"
@@ -474,15 +482,20 @@ def manual_assessment(lang: str) -> dict[str, int]:
 
 def main():
     parser = argparse.ArgumentParser(description=_("US Market Bubble Evaluation - Bubble-O-Meter"))
-    parser.add_argument("--manual", action="store_true", help=_("Interactive manual assessment mode"))
+    parser.add_argument(
+        "--manual", action="store_true", help=_("Interactive manual assessment mode")
+    )
     parser.add_argument(
         "--scores",
         type=str,
-        help=_('JSON formatted score string (e.g., \'{"mass_penetration":2,"media_saturation":1,...}\')'),
+        help=_(
+            'JSON formatted score string (e.g., \'{"mass_penetration":2,"media_saturation":1,...}\')'
+        ),
     )
-    parser.add_argument("--output", choices=["text", "json"], default="text", help=_("Output format"))
+    parser.add_argument(
+        "--output", choices=["text", "json"], default="text", help=_("Output format")
+    )
     parser.add_argument("--lang", choices=["en", "ja"], default="en", help=_("Output language"))
-
 
     args = parser.parse_args()
     scorer = BubbleScorer(lang=args.lang)
@@ -490,16 +503,17 @@ def main():
     # Use gettext to set the current language for _() calls outside the class
     current_lang = args.lang
     try:
-        local_translation = gettext.translation('bubble_scorer',
-                                                localedir='skills/us-market-bubble-detector/locale',
-                                                languages=[current_lang])
+        local_translation = gettext.translation(
+            "bubble_scorer",
+            localedir="skills/us-market-bubble-detector/locale",
+            languages=[current_lang],
+        )
         local_translation.install()
         global _
         _ = local_translation.gettext
     except Exception:
         # Fallback if translation files are not found or configured
         pass
-
 
     # スコアの取得
     if args.manual:

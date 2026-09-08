@@ -4,21 +4,19 @@ Tests for generate_histogram_html.py
 Tests HTML generation and data processing for visualization.
 """
 
+import sys
+import unittest
+from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 from generate_histogram_html import (
     find_latest_json,
     generate_html,
     generate_sector_options,
-    main # Import main for integration tests
+    main,  # Import main for integration tests
 )
-import pandas as pd
-import numpy as np
-import unittest
-from unittest.mock import patch
-import sys
-from io import StringIO
-from pathlib import Path
-import json
 
 
 class TestGenerateSectorOptions:
@@ -202,7 +200,7 @@ class TestMainIntegration(unittest.TestCase):
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
     @patch("json.load")
     @patch("pathlib.Path.mkdir")
-    @patch("pathlib.Path.exists", return_value=True) # Mock exists for the input directory
+    @patch("pathlib.Path.exists", return_value=True)  # Mock exists for the input directory
     @patch("pathlib.Path.write_text")
     def test_main_function_execution(
         self,
@@ -243,10 +241,12 @@ class TestMainIntegration(unittest.TestCase):
             # Simulate command-line arguments
             test_args = [
                 "generate_histogram_html.py",
-                "--input", "/mock/path/downtrend_analysis_*.json",
-                "--output-dir", "test_reports"
+                "--input",
+                "/mock/path/downtrend_analysis_*.json",
+                "--output-dir",
+                "test_reports",
             ]
-            with patch.object(sys, 'argv', test_args):
+            with patch.object(sys, "argv", test_args):
                 main()
 
             # Assertions
@@ -268,4 +268,4 @@ class TestMainIntegration(unittest.TestCase):
             self.assertIn("HTML visualization saved to:", output)
 
         finally:
-            sys.stdout = old_stdout # Restore stdout
+            sys.stdout = old_stdout  # Restore stdout

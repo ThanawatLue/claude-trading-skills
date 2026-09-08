@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import fmp_price_adapter  # noqa: E402
 import thesis_store  # noqa: E402
-import fmp_price_adapter # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +306,7 @@ if __name__ == "__main__":
             args.thesis_id,
             args.state_dir,
             price_adapter=price_adapter,
-            journal_dir=args.journal_dir
+            journal_dir=args.journal_dir,
         )
         print(f"Postmortem generated: {path}")
     elif args.command == "summary":

@@ -344,11 +344,14 @@ def main(argv: list[str] | None = None) -> int:
     api_key = resolve_api_key(args.api_key, config)
     if api_key:
         client = build_fmp_client(api_key=api_key)
-        
+
         # Test if API key is exhausted or invalid
         client.get_historical_prices("^GSPC", 1)
         if getattr(client, "rate_limit_reached", False):
-            print("⚠️  FMP API rate limit reached or key invalid. Falling back to Yahoo Finance.", file=sys.stderr)
+            print(
+                "⚠️  FMP API rate limit reached or key invalid. Falling back to Yahoo Finance.",
+                file=sys.stderr,
+            )
             client = build_yf_client()
         else:
             print("Using FMP API client.")

@@ -21,8 +21,10 @@ from pathlib import Path
 # Add project root to sys.path for importing scripts.lib.tv_client
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from scripts.lib.tv_client import (
-    get_us_breadth,
     clean_for_json,
+    get_us_breadth,
+)
+from scripts.lib.tv_client import (
     is_available as tv_available,
 )
 
@@ -49,12 +51,7 @@ def composite_score(b: dict) -> tuple[float, str]:
     nhl_balance = ((nh - nl) / total) * 100 + 50
     nhl_balance = max(0.0, min(100.0, nhl_balance))
 
-    score = (
-        p50 * _W_SMA50
-        + p200 * _W_SMA200
-        + ad_balance * _W_AD
-        + nhl_balance * _W_NHL
-    )
+    score = p50 * _W_SMA50 + p200 * _W_SMA200 + ad_balance * _W_AD + nhl_balance * _W_NHL
     score = round(max(0.0, min(100.0, score)), 2)
 
     if score >= 70:
@@ -128,8 +125,9 @@ def to_markdown(b: dict, score: float, regime: str, ts: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="US market breadth analyzer (TV)")
     parser.add_argument("--output-dir", default="reports/", help="Output directory")
-    parser.add_argument("--min-price", type=float, default=5.0,
-                        help="Minimum price filter (default: 5.0 USD)")
+    parser.add_argument(
+        "--min-price", type=float, default=5.0, help="Minimum price filter (default: 5.0 USD)"
+    )
     args = parser.parse_args()
 
     if not tv_available():
@@ -179,7 +177,7 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(b, score, regime, ts))
 
-    print(f"\nReports:")
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

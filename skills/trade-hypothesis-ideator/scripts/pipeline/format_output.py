@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from difflib import SequenceMatcher
 from typing import Any
 
-import json
-import os
-
 _current_dir = os.path.dirname(__file__)
 _config_path = os.path.join(_current_dir, "../../config/banned_phrases.json")
 
-with open(_config_path, "r", encoding="utf-8") as f:
+with open(_config_path, encoding="utf-8") as f:
     BANNED_PHRASES = json.load(f)
 
 _REQUIRED_CARD_FIELDS = (

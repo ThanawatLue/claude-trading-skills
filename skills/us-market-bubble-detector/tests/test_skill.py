@@ -1,7 +1,7 @@
 import json
 import os
-import sys
 import subprocess
+import sys
 import unittest
 import unittest.mock
 
@@ -11,14 +11,15 @@ class TestSkill(unittest.TestCase):
         env = dict(os.environ)
         env["PYTHONIOENCODING"] = "utf-8"
         return subprocess.run(
-            [sys.executable, "skills/us-market-bubble-detector/scripts/bubble_scorer.py"] + extra_args,
+            [sys.executable, "skills/us-market-bubble-detector/scripts/bubble_scorer.py"]
+            + extra_args,
             capture_output=True,
             encoding="utf-8",
             env=env,
-            input=input_data
+            input=input_data,
         )
 
-    @unittest.mock.patch('builtins.input', side_effect=['0'] * 8)
+    @unittest.mock.patch("builtins.input", side_effect=["0"] * 8)
     def test_manual_mode_output_format(self, mock_input):
         print("\nRunning manual mode test with mocked inputs (all 0s).")
         process = self._run_scorer(["--manual"])

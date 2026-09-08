@@ -23,8 +23,10 @@ from pathlib import Path
 # Add project root to sys.path for importing scripts.lib.tv_client
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from scripts.lib.tv_client import (
-    get_us_stocks,
     clean_for_json,
+    get_us_stocks,
+)
+from scripts.lib.tv_client import (
     is_available as tv_available,
 )
 
@@ -80,24 +82,26 @@ def compute_sector_stats(stocks: list[dict], min_stocks_per_sector: int = 5) -> 
             key=lambda s: s.get("perf_3m") or -999,
             reverse=True,
         )[:3]
-        sectors.append({
-            "sector": sec,
-            "n_stocks": len(group),
-            "median_perf_1m": round(p1m, 2),
-            "median_perf_3m": round(p3m, 2),
-            "median_perf_6m": round(p6m, 2),
-            "median_perf_y": round(py, 2),
-            "momentum_score": _momentum_score(p1m, p3m, p6m, py),
-            "top_stocks": [
-                {
-                    "symbol": s["symbol"],
-                    "name": s.get("name", s["symbol"]),
-                    "perf_3m": round(s.get("perf_3m") or 0, 2),
-                    "price": s.get("price"),
-                }
-                for s in top3
-            ],
-        })
+        sectors.append(
+            {
+                "sector": sec,
+                "n_stocks": len(group),
+                "median_perf_1m": round(p1m, 2),
+                "median_perf_3m": round(p3m, 2),
+                "median_perf_6m": round(p6m, 2),
+                "median_perf_y": round(py, 2),
+                "momentum_score": _momentum_score(p1m, p3m, p6m, py),
+                "top_stocks": [
+                    {
+                        "symbol": s["symbol"],
+                        "name": s.get("name", s["symbol"]),
+                        "perf_3m": round(s.get("perf_3m") or 0, 2),
+                        "price": s.get("price"),
+                    }
+                    for s in top3
+                ],
+            }
+        )
 
     # Rank by momentum score (descending)
     sectors.sort(key=lambda s: s["momentum_score"], reverse=True)
@@ -128,17 +132,23 @@ def to_markdown(sectors: list[dict], universe_size: int, ts: str) -> str:
     # Top 5 sectors with top stocks
     lines += ["", "## Top 5 Sectors — Leading Stocks", ""]
     for s in sectors[:5]:
-        lines.append(f"### {s['rank']}. {s['sector']}  ({_emoji(s['momentum_score'])} {s['momentum_score']:+.1f})")
+        lines.append(
+            f"### {s['rank']}. {s['sector']}  ({_emoji(s['momentum_score'])} {s['momentum_score']:+.1f})"
+        )
         for ts_ in s["top_stocks"]:
             price = ts_.get("price") or 0
-            lines.append(f"- **{ts_['symbol']}** {ts_['name']} — 3M: {ts_['perf_3m']:+.1f}% @ ${price:.2f}")
+            lines.append(
+                f"- **{ts_['symbol']}** {ts_['name']} — 3M: {ts_['perf_3m']:+.1f}% @ ${price:.2f}"
+            )
         lines.append("")
 
     # Bottom 3 sectors (avoid list)
     if len(sectors) > 5:
         lines += ["## Bottom 3 Sectors (Avoid / Short Candidates)", ""]
         for s in sectors[-3:]:
-            lines.append(f"- {s['rank']}. **{s['sector']}** — Momentum {s['momentum_score']:+.1f}  (1M {s['median_perf_1m']:+.1f}%, 3M {s['median_perf_3m']:+.1f}%)")
+            lines.append(
+                f"- {s['rank']}. **{s['sector']}** — Momentum {s['momentum_score']:+.1f}  (1M {s['median_perf_1m']:+.1f}%, 3M {s['median_perf_3m']:+.1f}%)"
+            )
         lines.append("")
 
     lines += [
@@ -151,7 +161,7 @@ def to_markdown(sectors: list[dict], universe_size: int, ts: str) -> str:
         "- **Per-sector aggregation:** Median return (resistant to outliers)",
         f"- **Momentum score:** {_W_1M:.0%}×1M + {_W_3M:.0%}×3M + {_W_6M:.0%}×6M + {_W_Y:.0%}×1Y",
         "- **Color code:** 🟢 ≥ +10  |  🟡 0 to +10  |  🔴 < 0",
-        f"- **Minimum stocks per sector:** 5 (sectors with fewer constituents excluded)",
+        "- **Minimum stocks per sector:** 5 (sectors with fewer constituents excluded)",
     ]
     return "\n".join(lines)
 
@@ -161,10 +171,18 @@ def main():
 
     parser = argparse.ArgumentParser(description="Generate US sector rotation heatmap")
     parser.add_argument("--output-dir", default="reports/", help="Output directory")
-    parser.add_argument("--min-stocks", type=int, default=5,
-                        help="Minimum stocks per sector to include (default: 5)")
-    parser.add_argument("--limit", type=int, default=4000,
-                        help="Max stocks to fetch from TradingView (default: 4000)")
+    parser.add_argument(
+        "--min-stocks",
+        type=int,
+        default=5,
+        help="Minimum stocks per sector to include (default: 5)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=4000,
+        help="Max stocks to fetch from TradingView (default: 4000)",
+    )
     parser.add_argument(
         "--w-1m",
         type=float,
@@ -223,7 +241,8 @@ def main():
 
     # Filter out penny and low liquidity stocks
     filtered = [
-        s for s in stocks
+        s
+        for s in stocks
         if (s.get("price") or 0) >= MIN_STOCK_PRICE
         and (s.get("avgVolume") or 0) >= MIN_STOCK_VOLUME
     ]
@@ -251,7 +270,7 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(sectors, len(filtered), ts))
 
-    print(f"\nReports:")
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

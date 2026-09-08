@@ -311,7 +311,10 @@ class FMPClient:
     def get_thai_constituents(self, index: str = "SET50") -> Optional[list[dict]]:
         """Fetch Thai constituents (SET50/SET100) via TradingView."""
         try:
-            from lib.tv_client import get_thai_set50, get_thai_set100, is_available
+            try:
+                from scripts.lib.tv_client import get_thai_set50, get_thai_set100, is_available
+            except ImportError:
+                from tv_client import get_thai_set50, get_thai_set100, is_available
 
             if is_available():
                 if index == "SET100":

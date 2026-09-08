@@ -4,7 +4,6 @@ import json
 
 from calculate_exposure import (
     US_CRITICAL_INPUTS,
-    TH_CRITICAL_INPUTS,
     WEIGHTS,
     calculate_composite_score,
     determine_bias,

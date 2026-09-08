@@ -29,9 +29,62 @@ filters. SET50/100/HD helpers use market-cap and dividend-yield proxies.
 
 from __future__ import annotations
 
+import json
 import logging
+import time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache" / "tv_client"
+_MEMORY_CACHE: dict[str, tuple[float, list[dict]]] = {}
+
+
+def _get_from_cache(key: str, ttl_seconds: int) -> list[dict] | None:
+    now = time.time()
+    if key in _MEMORY_CACHE:
+        ts, data = _MEMORY_CACHE[key]
+        if now - ts < ttl_seconds:
+            return data
+    cache_file = _CACHE_DIR / f"{key}.json"
+    if cache_file.is_file():
+        try:
+            mtime = cache_file.stat().st_mtime
+            if now - mtime < ttl_seconds:
+                with cache_file.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    _MEMORY_CACHE[key] = (mtime, data)
+                    return data
+        except Exception:
+            pass
+    return None
+
+
+def _save_to_cache(key: str, data: list[dict]) -> None:
+    if not data:
+        return
+    now = time.time()
+    _MEMORY_CACHE[key] = (now, data)
+    try:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file = _CACHE_DIR / f"{key}.json"
+        with cache_file.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def clear_tv_cache() -> None:
+    """Clear in-memory and disk caches for tv_client."""
+    _MEMORY_CACHE.clear()
+    if _CACHE_DIR.is_dir():
+        import shutil
+
+        try:
+            shutil.rmtree(_CACHE_DIR)
+        except Exception:
+            pass
+
 
 _TV_AVAILABLE = False
 try:
@@ -209,9 +262,19 @@ def get_tv_stocks(
     limit: int = 1000,
     min_market_cap: float | None = None,
     min_avg_volume: float | None = None,
+    use_cache: bool = True,
+    cache_ttl_seconds: int = 900,
 ) -> list[dict]:
     """Fetch full market (US or TH) with technicals and fundamentals."""
     market = _normalize_market(market)
+    cache_key = f"{market}_{limit}_{min_market_cap}_{min_avg_volume}"
+
+    if use_cache:
+        cached = _get_from_cache(cache_key, cache_ttl_seconds)
+        if cached is not None:
+            logger.info("TradingView: returned %d cached rows for %s", len(cached), cache_key)
+            return cached
+
     tv_market = "thailand" if market == "TH" else "america"
 
     def build():
@@ -222,16 +285,28 @@ def get_tv_stocks(
             q = q.where(col("average_volume_10d_calc") > min_avg_volume)
         return q
 
-    return _safe_query(build, f"{market}_full", market=market)
+    stocks = _safe_query(build, f"{market}_full", market=market)
+    if stocks and use_cache:
+        _save_to_cache(cache_key, stocks)
+    return stocks
 
 
 def get_thai_stocks(
     limit: int = 1000,
     min_market_cap: float | None = None,
     min_avg_volume: float | None = None,
+    use_cache: bool = True,
+    cache_ttl_seconds: int = 900,
 ) -> list[dict]:
     """Fetch full Thai market (SET + MAI) with technicals and fundamentals."""
-    return get_tv_stocks("TH", limit, min_market_cap, min_avg_volume)
+    return get_tv_stocks(
+        "TH",
+        limit,
+        min_market_cap,
+        min_avg_volume,
+        use_cache=use_cache,
+        cache_ttl_seconds=cache_ttl_seconds,
+    )
 
 
 def get_us_stocks(
@@ -505,3 +580,36 @@ def get_us_breadth(min_price: float = 1.0, limit: int = 4000) -> dict:
     Compute market-breadth snapshot for US market in a single call.
     """
     return get_tv_breadth("US", min_price, limit)
+
+
+def export_tradingview_watchlist(
+    stocks: list[dict] | list[str],
+    output_file: str | Path | None = None,
+    prefix: str = "SET:",
+) -> str:
+    """Format a list of stocks into TradingView Watchlist import text.
+
+    Args:
+        stocks: List of stock dicts (with 'symbol' key) or list of symbol strings.
+        output_file: Optional file path to write to.
+        prefix: Prefix for tickers (default "SET:" for Thai stocks).
+
+    Returns:
+        Comma-separated ticker string (e.g. "SET:DELTA,SET:ADVANC,SET:CPALL").
+    """
+    tickers: list[str] = []
+    for s in stocks:
+        sym = s["symbol"] if isinstance(s, dict) else str(s)
+        sym = sym.strip().upper()
+        if not sym:
+            continue
+        if prefix and not sym.startswith(prefix):
+            sym = f"{prefix}{sym}"
+        tickers.append(sym)
+
+    result = ",".join(tickers)
+    if output_file:
+        out_path = Path(output_file)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(result + "\n", encoding="utf-8")
+    return result

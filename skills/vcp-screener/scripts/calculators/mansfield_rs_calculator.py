@@ -34,8 +34,6 @@ Scoring:
 -   0: RS < -20 (severe underperformance)
 """
 
-from typing import Optional
-
 
 def calculate_mansfield_rs(
     stock_prices: list[dict],
@@ -96,7 +94,9 @@ def calculate_mansfield_rs(
     rs_direction = "flat"
     rs_momentum = 0.0
     if len(valid_ratios) >= 20:
-        rs_ratio_20d_ago_sma = sum(valid_ratios[20:min(20 + sma_period, len(valid_ratios))]) / min(sma_period, len(valid_ratios) - 20)
+        rs_ratio_20d_ago_sma = sum(
+            valid_ratios[20 : min(20 + sma_period, len(valid_ratios))]
+        ) / min(sma_period, len(valid_ratios) - 20)
         if rs_ratio_20d_ago_sma > 0:
             mansfield_rs_20d_ago = ((valid_ratios[20] / rs_ratio_20d_ago_sma) - 1) * 100
             rs_momentum = mansfield_rs - mansfield_rs_20d_ago
@@ -112,7 +112,9 @@ def calculate_mansfield_rs(
     if len(valid_ratios) >= 5:
         # Check if we crossed zero in the last 5 days
         for i in range(1, min(5, len(valid_ratios))):
-            ratio_sma_i = sum(valid_ratios[i:min(i + sma_period, len(valid_ratios))]) / min(sma_period, len(valid_ratios) - i)
+            ratio_sma_i = sum(valid_ratios[i : min(i + sma_period, len(valid_ratios))]) / min(
+                sma_period, len(valid_ratios) - i
+            )
             if ratio_sma_i > 0:
                 prev_mrs = ((valid_ratios[i] / ratio_sma_i) - 1) * 100
                 if mansfield_rs >= 0 and prev_mrs < 0:
@@ -158,7 +160,11 @@ def calculate_mansfield_rs(
     )
 
     if rs_zero_cross:
-        cross_label = "Bullish zero-line crossover ↑" if rs_zero_cross == "bullish_crossover" else "Bearish zero-line crossover ↓"
+        cross_label = (
+            "Bullish zero-line crossover ↑"
+            if rs_zero_cross == "bullish_crossover"
+            else "Bearish zero-line crossover ↓"
+        )
         detail += f" | {cross_label}"
 
     return {

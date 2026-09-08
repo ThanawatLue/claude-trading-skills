@@ -24,7 +24,7 @@ import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -41,7 +41,9 @@ except ImportError:
 
 # ── Cache setup ───────────────────────────────────────────────────────────────
 _HERE = Path(__file__).resolve().parent
-_PROJECT_ROOT = _HERE.parents[2]   # skills/earnings-trade-analyzer/scripts -> skills/<name> -> skills -> trading
+_PROJECT_ROOT = _HERE.parents[
+    2
+]  # skills/earnings-trade-analyzer/scripts -> skills/<name> -> skills -> trading
 sys.path.insert(0, str(_PROJECT_ROOT / "scripts"))
 
 from cache_manager import CacheManager  # noqa: E402
@@ -62,15 +64,17 @@ def _df_to_bars(df) -> list[dict]:
     """Convert a yfinance DataFrame to most-recent-first list[dict]."""
     bars = []
     for dt, row in df.iterrows():
-        bars.append({
-            "date": dt.strftime("%Y-%m-%d"),
-            "open": round(float(row["Open"]), 4),
-            "high": round(float(row["High"]), 4),
-            "low": round(float(row["Low"]), 4),
-            "close": round(float(row["Close"]), 4),
-            "volume": int(row["Volume"]),
-            "adjClose": round(float(row["Close"]), 4),
-        })
+        bars.append(
+            {
+                "date": dt.strftime("%Y-%m-%d"),
+                "open": round(float(row["Open"]), 4),
+                "high": round(float(row["High"]), 4),
+                "low": round(float(row["Low"]), 4),
+                "close": round(float(row["Close"]), 4),
+                "volume": int(row["Volume"]),
+                "adjClose": round(float(row["Close"]), 4),
+            }
+        )
     bars.reverse()  # most-recent first
     return bars
 
@@ -88,7 +92,8 @@ def _fetch_sp500_wikipedia() -> list[str]:
 
         table_match = re.search(
             r'<table[^>]*class="[^"]*wikitable[^"]*"[^>]*>(.*?)</table>',
-            resp.text, re.DOTALL,
+            resp.text,
+            re.DOTALL,
         )
         if not table_match:
             return []
@@ -180,16 +185,106 @@ class YFClient:
         else:
             print("WARN — using built-in top-100 fallback")
             symbols = [
-                "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "GOOG", "BRK-B", "LLY",
-                "AVGO", "JPM", "TSLA", "V", "UNH", "XOM", "MA", "JNJ", "PG", "COST", "HD",
-                "NFLX", "ABBV", "BAC", "WMT", "ORCL", "CRM", "CVX", "MRK", "KO", "AMD",
-                "PEP", "ACN", "LIN", "TMO", "MCD", "CSCO", "ABT", "ADBE", "PM", "GE",
-                "QCOM", "TXN", "DHR", "IBM", "ISRG", "CAT", "INTU", "AMGN", "SPGI", "BKNG",
-                "GS", "VZ", "AXP", "UNP", "CMCSA", "NOW", "LOW", "RTX", "MS", "NEE",
-                "HON", "PFE", "UBER", "AMAT", "T", "BMY", "SYK", "SCHW", "C", "BLK",
-                "ETN", "BA", "DE", "MDT", "ADP", "REGN", "VRTX", "GILD", "BSX", "ADI",
-                "MMC", "MO", "PLD", "TJX", "ZTS", "PANW", "SBUX", "CB", "AMT", "SO",
-                "LRCX", "CME", "CI", "DUK", "COP", "NOC", "WM", "FI", "MCO", "USB",
+                "AAPL",
+                "MSFT",
+                "NVDA",
+                "AMZN",
+                "META",
+                "GOOGL",
+                "GOOG",
+                "BRK-B",
+                "LLY",
+                "AVGO",
+                "JPM",
+                "TSLA",
+                "V",
+                "UNH",
+                "XOM",
+                "MA",
+                "JNJ",
+                "PG",
+                "COST",
+                "HD",
+                "NFLX",
+                "ABBV",
+                "BAC",
+                "WMT",
+                "ORCL",
+                "CRM",
+                "CVX",
+                "MRK",
+                "KO",
+                "AMD",
+                "PEP",
+                "ACN",
+                "LIN",
+                "TMO",
+                "MCD",
+                "CSCO",
+                "ABT",
+                "ADBE",
+                "PM",
+                "GE",
+                "QCOM",
+                "TXN",
+                "DHR",
+                "IBM",
+                "ISRG",
+                "CAT",
+                "INTU",
+                "AMGN",
+                "SPGI",
+                "BKNG",
+                "GS",
+                "VZ",
+                "AXP",
+                "UNP",
+                "CMCSA",
+                "NOW",
+                "LOW",
+                "RTX",
+                "MS",
+                "NEE",
+                "HON",
+                "PFE",
+                "UBER",
+                "AMAT",
+                "T",
+                "BMY",
+                "SYK",
+                "SCHW",
+                "C",
+                "BLK",
+                "ETN",
+                "BA",
+                "DE",
+                "MDT",
+                "ADP",
+                "REGN",
+                "VRTX",
+                "GILD",
+                "BSX",
+                "ADI",
+                "MMC",
+                "MO",
+                "PLD",
+                "TJX",
+                "ZTS",
+                "PANW",
+                "SBUX",
+                "CB",
+                "AMT",
+                "SO",
+                "LRCX",
+                "CME",
+                "CI",
+                "DUK",
+                "COP",
+                "NOC",
+                "WM",
+                "FI",
+                "MCO",
+                "USB",
             ]
         self._sp500_cache = symbols
         return symbols
@@ -242,8 +337,7 @@ class YFClient:
 
         # Filter cached results to the requested window
         window_cached = [
-            r for r in cached_results
-            if from_dt <= date.fromisoformat(r["date"]) <= to_dt
+            r for r in cached_results if from_dt <= date.fromisoformat(r["date"]) <= to_dt
         ]
 
         all_results = window_cached + fresh_results
@@ -265,7 +359,7 @@ class YFClient:
             print(f"  Fetching profiles for {len(missing)} symbols...", flush=True)
             batch_size = 50
             for i in range(0, len(missing), batch_size):
-                batch = missing[i: i + batch_size]
+                batch = missing[i : i + batch_size]
                 try:
                     tickers = yf.Tickers(" ".join(batch))
                     for sym in batch:
@@ -276,8 +370,12 @@ class YFClient:
                             profile = {
                                 "symbol": sym,
                                 "companyName": info.get("longName") or info.get("shortName") or sym,
-                                "mktCap": int(getattr(fi, "market_cap", None) or info.get("marketCap") or 0),
-                                "price": float(getattr(fi, "last_price", None) or info.get("currentPrice") or 0),
+                                "mktCap": int(
+                                    getattr(fi, "market_cap", None) or info.get("marketCap") or 0
+                                ),
+                                "price": float(
+                                    getattr(fi, "last_price", None) or info.get("currentPrice") or 0
+                                ),
                                 "sector": info.get("sector") or "Unknown",
                                 "industry": info.get("industry") or "Unknown",
                                 "exchangeShortName": info.get("exchange") or "NASDAQ",

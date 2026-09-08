@@ -247,7 +247,9 @@ class TestFMPClient:
         assert mock_session_get.call_count == 2
         assert fmp_client.retry_count == 1
 
-    def test_get_rate_limit_persistent(self, fmp_client, mock_session_get, mock_response, monkeypatch):
+    def test_get_rate_limit_persistent(
+        self, fmp_client, mock_session_get, mock_response, monkeypatch
+    ):
         """Test _get handles persistent rate limiting (stops after 2 attempts)."""
         mock_response_429 = mocker.MagicMock(status_code=429)
         mock_session_get.side_effect = [mock_response_429, mock_response_429, mock_response_429]
@@ -276,9 +278,14 @@ class TestFMPClient:
         assert result is None
         mock_session_get.assert_called_once()
 
-    def test_get_historical_prices_stable_success(self, fmp_client, mock_session_get, mock_response, monkeypatch):
+    def test_get_historical_prices_stable_success(
+        self, fmp_client, mock_session_get, mock_response, monkeypatch
+    ):
         """Test get_historical_prices with stable endpoint success."""
-        mock_response.json.return_value = {"symbol": "AAPL", "historical": [{"date": "2023-01-01", "close": 150}]}
+        mock_response.json.return_value = {
+            "symbol": "AAPL",
+            "historical": [{"date": "2023-01-01", "close": 150}],
+        }
         mock_session_get.return_value = mock_response
         monkeypatch.setattr(fmp_client, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True)])
         mocker.patch("time.sleep")
@@ -288,11 +295,27 @@ class TestFMPClient:
         mock_session_get.assert_called_once()
         assert "stable.com" in mock_session_get.call_args[0][0]
 
-    def test_get_historical_prices_v3_success(self, fmp_client, mock_session_get, mock_response, monkeypatch):
+    def test_get_historical_prices_v3_success(
+        self, fmp_client, mock_session_get, mock_response, monkeypatch
+    ):
         """Test get_historical_prices with v3 endpoint fallback success."""
-        mock_response_v3 = mocker.MagicMock(status_code=200, json=lambda: {"historicalStockList": [{"symbol": "AAPL", "historical": [{"date": "2023-01-01", "close": 150}]}]})
-        mock_session_get.side_effect = [mocker.MagicMock(status_code=500), mock_response_v3] # Stable fails, v3 succeeds
-        monkeypatch.setattr(fmp_client, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True), ("https://v3.com", False)])
+        mock_response_v3 = mocker.MagicMock(
+            status_code=200,
+            json=lambda: {
+                "historicalStockList": [
+                    {"symbol": "AAPL", "historical": [{"date": "2023-01-01", "close": 150}]}
+                ]
+            },
+        )
+        mock_session_get.side_effect = [
+            mocker.MagicMock(status_code=500),
+            mock_response_v3,
+        ]  # Stable fails, v3 succeeds
+        monkeypatch.setattr(
+            fmp_client,
+            "_FMP_HIST_ENDPOINTS",
+            [("https://stable.com", True), ("https://v3.com", False)],
+        )
         mocker.patch("time.sleep")
 
         result = fmp_client.get_historical_prices("AAPL")
@@ -300,7 +323,9 @@ class TestFMPClient:
         assert mock_session_get.call_count == 2
         assert "v3.com" in mock_session_get.call_args[0][0]
 
-    def test_get_historical_prices_no_data(self, fmp_client, mock_session_get, mock_response, monkeypatch):
+    def test_get_historical_prices_no_data(
+        self, fmp_client, mock_session_get, mock_response, monkeypatch
+    ):
         """Test get_historical_prices when no historical data is returned."""
         mock_response.json.return_value = {"symbol": "AAPL"}  # Missing 'historical' key
         mock_session_get.return_value = mock_response
@@ -310,16 +335,24 @@ class TestFMPClient:
         result = fmp_client.get_historical_prices("AAPL")
         assert result is None
 
-    def test_get_historical_prices_all_endpoints_fail(self, fmp_client, mock_session_get, monkeypatch, mocker):
+    def test_get_historical_prices_all_endpoints_fail(
+        self, fmp_client, mock_session_get, monkeypatch, mocker
+    ):
         """Test get_historical_prices when all endpoints fail."""
         mock_session_get.return_value = mocker.MagicMock(status_code=500)
-        monkeypatch.setattr(fmp_client, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True), ("https://v3.com", False)])
+        monkeypatch.setattr(
+            fmp_client,
+            "_FMP_HIST_ENDPOINTS",
+            [("https://stable.com", True), ("https://v3.com", False)],
+        )
         mocker.patch("time.sleep")
 
         result = fmp_client.get_historical_prices("AAPL")
         assert result is None
         assert mock_session_get.call_count == 2
-        assert len(fmp_client._disabled_endpoints) == 2 # Both endpoints should be disabled after failures
+        assert (
+            len(fmp_client._disabled_endpoints) == 2
+        )  # Both endpoints should be disabled after failures
 
     def test_get_dividend_history_success(self, fmp_client, mock_session_get, mock_response):
         """Test get_dividend_history success."""
@@ -339,8 +372,15 @@ class TestFMPClient:
 
     def test_get_quote_with_profile_success(self, fmp_client, mock_session_get, mock_response):
         """Test get_quote_with_profile merges data correctly."""
-        mock_response_quote = mocker.MagicMock(status_code=200, json=lambda: [{"symbol": "AAPL", "price": 170, "name": "Apple Inc."}])
-        mock_response_profile = mocker.MagicMock(status_code=200, json=lambda: [{"symbol": "AAPL", "sector": "Technology", "companyName": "Apple Inc. (Profile)"}])
+        mock_response_quote = mocker.MagicMock(
+            status_code=200, json=lambda: [{"symbol": "AAPL", "price": 170, "name": "Apple Inc."}]
+        )
+        mock_response_profile = mocker.MagicMock(
+            status_code=200,
+            json=lambda: [
+                {"symbol": "AAPL", "sector": "Technology", "companyName": "Apple Inc. (Profile)"}
+            ],
+        )
 
         # Mock both calls for quote and profile
         mock_session_get.side_effect = [mock_response_quote, mock_response_profile]
@@ -352,10 +392,14 @@ class TestFMPClient:
         assert result["companyName"] == "Apple Inc. (Profile)"
         assert mock_session_get.call_count == 2
 
-    def test_get_quote_with_profile_profile_fails(self, fmp_client, mock_session_get, mock_response):
+    def test_get_quote_with_profile_profile_fails(
+        self, fmp_client, mock_session_get, mock_response
+    ):
         """Test get_quote_with_profile when profile fetch fails."""
-        mock_response_quote = mocker.MagicMock(status_code=200, json=lambda: [{"symbol": "AAPL", "price": 170, "name": "Apple Inc."}])
-        mock_response_profile_fail = mocker.MagicMock(status_code=500) # Profile fetch fails
+        mock_response_quote = mocker.MagicMock(
+            status_code=200, json=lambda: [{"symbol": "AAPL", "price": 170, "name": "Apple Inc."}]
+        )
+        mock_response_profile_fail = mocker.MagicMock(status_code=500)  # Profile fetch fails
 
         mock_session_get.side_effect = [mock_response_quote, mock_response_profile_fail]
 
@@ -365,6 +409,7 @@ class TestFMPClient:
         assert result["sector"] == "Unknown"  # Should fallback to default
         assert result["companyName"] == "Apple Inc."
         assert mock_session_get.call_count == 2
+
 
 class TestStockAnalyzer:
     """Validate StockAnalyzer's analytical methods."""
@@ -482,10 +527,17 @@ class TestStockAnalyzer:
 
     def test_calculate_payout_ratios_reit(self, analyzer, mocker):
         """Test payout ratios for a REIT, ensuring FFO is used."""
-        cash_flows = [{"netIncome": 100, "depreciationAndAmortization": 20, "dividendsPaid": 30, "freeCashFlow": 80}]
-        mocker.patch.object(analyzer, "calculate_ffo", return_value=120) # Mock FFO for consistency
+        cash_flows = [
+            {
+                "netIncome": 100,
+                "depreciationAndAmortization": 20,
+                "dividendsPaid": 30,
+                "freeCashFlow": 80,
+            }
+        ]
+        mocker.patch.object(analyzer, "calculate_ffo", return_value=120)  # Mock FFO for consistency
         payouts = analyzer.calculate_payout_ratios([], cash_flows, is_reit=True)
-        assert payouts["payout_ratio"] == 25.0 # (30 / 120) * 100
+        assert payouts["payout_ratio"] == 25.0  # (30 / 120) * 100
         assert payouts["fcf_payout_ratio"] == round((30 / 80) * 100, 1)
 
     def test_get_payout_ratio_from_metrics_success(self, analyzer):
@@ -496,7 +548,12 @@ class TestStockAnalyzer:
     def test_analyze_financial_health_healthy(self, analyzer):
         """Test financially healthy scenario."""
         balance_sheet = [
-            {"totalDebt": 100, "totalStockholdersEquity": 200, "totalCurrentAssets": 150, "totalCurrentLiabilities": 100}
+            {
+                "totalDebt": 100,
+                "totalStockholdersEquity": 200,
+                "totalCurrentAssets": 150,
+                "totalCurrentLiabilities": 100,
+            }
         ]
         health = analyzer.analyze_financial_health(balance_sheet)
         assert health["debt_to_equity"] == 0.5
@@ -506,7 +563,12 @@ class TestStockAnalyzer:
     def test_analyze_financial_health_unhealthy(self, analyzer):
         """Test financially unhealthy scenario (high debt, low current ratio)."""
         balance_sheet = [
-            {"totalDebt": 300, "totalStockholdersEquity": 100, "totalCurrentAssets": 80, "totalCurrentLiabilities": 100}
+            {
+                "totalDebt": 300,
+                "totalStockholdersEquity": 100,
+                "totalCurrentAssets": 80,
+                "totalCurrentLiabilities": 100,
+            }
         ]
         health = analyzer.analyze_financial_health(balance_sheet)
         assert health["debt_to_equity"] == 3.0
@@ -516,15 +578,15 @@ class TestStockAnalyzer:
     def test_analyze_growth_metrics_success(self, analyzer):
         """Test revenue and EPS growth metrics."""
         income_stmts = [
-            {"revenue": 150, "eps": 1.5}, # latest
+            {"revenue": 150, "eps": 1.5},  # latest
             {"revenue": 140, "eps": 1.4},
             {"revenue": 130, "eps": 1.3},
-            {"revenue": 100, "eps": 1.0}, # 3 years ago
+            {"revenue": 100, "eps": 1.0},  # 3 years ago
             {"revenue": 90, "eps": 0.9},
         ]
         growth = analyzer.analyze_growth_metrics(income_stmts)
-        assert growth["revenue_cagr_3y"] == round(((150/100)**(1/3) -1) * 100, 2)
-        assert growth["eps_cagr_3y"] == round(((1.5/1.0)**(1/3) -1) * 100, 2)
+        assert growth["revenue_cagr_3y"] == round(((150 / 100) ** (1 / 3) - 1) * 100, 2)
+        assert growth["eps_cagr_3y"] == round(((1.5 / 1.0) ** (1 / 3) - 1) * 100, 2)
 
     def test_calculate_composite_score(self, analyzer):
         """Test composite score calculation with various inputs."""
@@ -576,6 +638,7 @@ class TestStockAnalyzer:
         # Total: 20 + 0 + 3 + 3 + 0 + 5 + 0 + 0 = 31
         assert score == 31.0
 
+
 class TestScriptStructure:
     """Ensure the script file meets structural requirements."""
 
@@ -605,9 +668,7 @@ class TestScriptStructure:
         assert "rsi" in source.lower(), "Script should implement or reference RSI"
 
     @pytest.mark.parametrize("use_finviz", [True, False])
-    def test_full_integration_run(
-        self, mod, tmp_path, monkeypatch, mocker, use_finviz
-    ):
+    def test_full_integration_run(self, mod, tmp_path, monkeypatch, mocker, use_finviz):
         """
         Tests a full run of the main function, mocking API clients and verifying output.
         This acts as an end-to-end integration test for the script's workflow.
@@ -656,7 +717,12 @@ class TestScriptStructure:
             }
         ]
         mock_fmp_client_instance.get_cash_flow.return_value = [
-            {"dividendsPaid": 30, "freeCashFlow": 80, "netIncome": 100, "depreciationAndAmortization": 20}
+            {
+                "dividendsPaid": 30,
+                "freeCashFlow": 80,
+                "netIncome": 100,
+                "depreciationAndAmortization": 20,
+            }
         ]
         mock_fmp_client_instance.get_key_metrics.return_value = [{"payoutRatio": 0.3}]
 
@@ -674,13 +740,27 @@ class TestScriptStructure:
         # Mock StockAnalyzer (already tested, just ensure it's called)
         mocker.patch.object(mod, "StockAnalyzer")
         mod.StockAnalyzer.calculate_cagr.return_value = 15.0
-        mod.StockAnalyzer.analyze_dividend_growth.return_value = (15.0, True, 1.40, 5) # cagr, consistent, annual_div, years_growth
+        mod.StockAnalyzer.analyze_dividend_growth.return_value = (
+            15.0,
+            True,
+            1.40,
+            5,
+        )  # cagr, consistent, annual_div, years_growth
         mod.StockAnalyzer.is_reit.return_value = False
-        mod.StockAnalyzer.calculate_payout_ratios.return_value = {"payout_ratio": 30.0, "fcf_payout_ratio": 37.5}
-        mod.StockAnalyzer.analyze_financial_health.return_value = {"financially_healthy": True, "debt_to_equity": 0.5, "current_ratio": 1.5}
-        mod.StockAnalyzer.analyze_growth_metrics.return_value = {"revenue_cagr_3y": 10.0, "eps_cagr_3y": 10.0}
+        mod.StockAnalyzer.calculate_payout_ratios.return_value = {
+            "payout_ratio": 30.0,
+            "fcf_payout_ratio": 37.5,
+        }
+        mod.StockAnalyzer.analyze_financial_health.return_value = {
+            "financially_healthy": True,
+            "debt_to_equity": 0.5,
+            "current_ratio": 1.5,
+        }
+        mod.StockAnalyzer.analyze_growth_metrics.return_value = {
+            "revenue_cagr_3y": 10.0,
+            "eps_cagr_3y": 10.0,
+        }
         mod.StockAnalyzer.calculate_composite_score.return_value = 95.0
-
 
         # Mock report generation
         mock_generate_markdown_report = mocker.patch.object(mod, "generate_markdown_report")
@@ -723,8 +803,8 @@ class TestScriptStructure:
         # Optionally, check content passed to report generators (more detailed checks could go here)
         assert len(mock_json_dump.call_args[0][0]["stocks"]) == 1
         assert mock_json_dump.call_args[0][0]["stocks"][0]["symbol"] == "AAPL"
-        
-        assert len(mock_generate_markdown_report.call_args[0][0]) == 1 # results list
+
+        assert len(mock_generate_markdown_report.call_args[0][0]) == 1  # results list
         assert mock_generate_markdown_report.call_args[0][0][0]["symbol"] == "AAPL"
 
     @pytest.mark.parametrize("fmp_key_env", [True, False])
@@ -802,10 +882,16 @@ class TestScriptStructure:
         mock_generate_markdown_report.assert_called_once()
 
         # Verify output directory
-        expected_output_dir = str(tmp_path) if output_dir_arg else mod.os.path.join(mod.os.path.dirname(mod.os.path.dirname(mod.os.path.dirname(SCRIPT_PATH))), "logs")
-        
-        json_call_args = mock_json_dump.call_args[0][2] # file path is the 3rd arg to json.dump
-        md_call_args = mock_generate_markdown_report.call_args[0][2] # output_path is the 3rd arg
+        expected_output_dir = (
+            str(tmp_path)
+            if output_dir_arg
+            else mod.os.path.join(
+                mod.os.path.dirname(mod.os.path.dirname(mod.os.path.dirname(SCRIPT_PATH))), "logs"
+            )
+        )
+
+        json_call_args = mock_json_dump.call_args[0][2]  # file path is the 3rd arg to json.dump
+        md_call_args = mock_generate_markdown_report.call_args[0][2]  # output_path is the 3rd arg
 
         assert Path(json_call_args).parent == Path(expected_output_dir)
         assert Path(md_call_args).parent == Path(expected_output_dir)
@@ -832,5 +918,3 @@ class TestScriptStructure:
                 max_candidates=None,
                 finviz_symbols=None,
             )
-
-

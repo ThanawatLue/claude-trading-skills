@@ -381,7 +381,6 @@ def check_dates(
                 )
             )
 
-
     return findings
 
 

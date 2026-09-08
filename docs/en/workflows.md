@@ -24,6 +24,7 @@ Operational workflow manifests for the solo-trader OS. Each workflow names the e
 | [`market-regime-daily`](#market-regime-daily) — Market Regime Daily | daily | 15 | no-api-basic | beginner |
 | [`monthly-performance-review`](#monthly-performance-review) — Monthly Performance Review | monthly | 90 | no-api-basic | intermediate |
 | [`swing-opportunity-daily`](#swing-opportunity-daily) — Swing Opportunity Daily | daily | 30 | fmp-required | intermediate |
+| [`thai-market-daily`](#thai-market-daily) — Thai Market Daily Routine | daily | 20 | no-api-basic | beginner |
 | [`trade-memory-loop`](#trade-memory-loop) — Trade Memory Loop | ad-hoc | 30 | no-api-basic | beginner |
 
 ---
@@ -280,6 +281,66 @@ Operational workflow manifests for the solo-trader OS. Each workflow names the e
 - All orders are placed manually at the broker; no auto-execution.
 
 **Journal destination:** `trader-memory-core`
+
+---
+
+## Thai Market Daily Routine {#thai-market-daily}
+
+**`thai-market-daily`** · daily · ~20 min · no-api-basic · beginner
+
+**When to run:** Run after SET market close (17:00 ICT) to evaluate market breadth, momentum sectors, and screen swing/dividend candidates.
+
+**When NOT to run:** Do not run during market trading hours or before end-of-day data is settled.
+
+**Required skills:** `thai-breadth-analyzer`, `thai-sector-heatmap`, `thai-watchlist-builder`, `vcp-screener`, `paper-trade-simulator`
+
+**Optional skills:** `thai-dividend-screener`
+
+**Artifacts:**
+
+| Artifact | Produced by step | Required | Downstream hints |
+|---|---|---|---|
+| `thai_breadth_report` | 1 | yes | — |
+| `thai_sector_heatmap_report` | 2 | yes | — |
+| `thai_watchlists_report` | 3 | yes | — |
+| `thai_swing_candidates` | 4 | yes | — |
+| `thai_dividend_candidates` | 5 | no | — |
+| `paper_marks_updated` | 6 | yes | — |
+
+**Steps:**
+
+**Step 1: Analyze Thai market breadth** → `thai-breadth-analyzer`
+
+- produces: `thai_breadth_report`
+
+**Step 2: Analyze Thai sector rotation heatmap** → `thai-sector-heatmap`
+
+- produces: `thai_sector_heatmap_report`
+
+**Step 3: Build Thai multi-strategy watchlists** → `thai-watchlist-builder`
+
+- produces: `thai_watchlists_report`
+
+**Step 4: Screen Thai swing trade candidates** → `vcp-screener`
+
+- produces: `thai_swing_candidates`
+
+**Step 5: Screen Thai dividend opportunities** (optional) → `thai-dividend-screener`
+
+- produces: `thai_dividend_candidates`
+
+**Step 6: Update paper trading mark-to-market prices** (decision gate) → `paper-trade-simulator`
+
+- produces: `paper_marks_updated`
+- **Decision:** Are any open paper trade stop-losses or profit targets triggered by today's closes?
+
+**Manual review:**
+
+- Review Thai market breadth for overall health and risk posture.
+- Check top 3 momentum sectors for sector leadership and avoid lagging sectors.
+- Confirm swing trade candidate entry triggers and risk-reward ratios before placing orders.
+
+**Journal destination:** `paper-trade-simulator`
 
 ---
 

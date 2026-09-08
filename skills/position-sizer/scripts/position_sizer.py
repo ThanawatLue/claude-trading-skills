@@ -14,21 +14,22 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 
+
 def get_latest_posture(market: str, reports_dir: str = "reports") -> dict | None:
     """Find and load the latest exposure posture JSON report for the target market."""
     import glob
     from pathlib import Path
-    
+
     base_dir = Path(__file__).resolve().parents[3]
     rep_path = base_dir / reports_dir
     if not rep_path.exists():
         return None
-        
+
     pattern = str(rep_path / "exposure_posture_*.json")
     files = glob.glob(pattern)
     if not files:
         return None
-        
+
     postures = []
     for f in files:
         try:
@@ -39,10 +40,10 @@ def get_latest_posture(market: str, reports_dir: str = "reports") -> dict | None
                     postures.append((f, data))
         except (FileNotFoundError, json.JSONDecodeError):
             continue
-            
+
     if not postures:
         return None
-        
+
     postures.sort(key=lambda x: os.path.basename(x[0]), reverse=True)
     return postures[0][1]
 
@@ -212,7 +213,7 @@ def calculate_position(params: SizingParameters) -> dict:
     posture_ceiling = 100
     risk_multiplier = 1.0
     posture_data = None
-    
+
     if not params.ignore_posture:
         posture_data = get_latest_posture(params.market)
         if posture_data:
@@ -261,7 +262,7 @@ def calculate_position(params: SizingParameters) -> dict:
             "recommendation": posture_rec,
             "exposure_ceiling_pct": posture_ceiling,
             "risk_multiplier": risk_multiplier,
-            "source_timestamp": posture_data.get("generated_at") if posture_data else None
+            "source_timestamp": posture_data.get("generated_at") if posture_data else None,
         }
         return result
 
@@ -336,7 +337,7 @@ def calculate_position(params: SizingParameters) -> dict:
         "recommendation": posture_rec,
         "exposure_ceiling_pct": posture_ceiling,
         "risk_multiplier": risk_multiplier,
-        "source_timestamp": posture_data.get("generated_at") if posture_data else None
+        "source_timestamp": posture_data.get("generated_at") if posture_data else None,
     }
 
     return result
@@ -352,14 +353,16 @@ def generate_markdown_report(result: dict) -> str:
     ]
     if result.get("posture_applied"):
         pa = result["posture_applied"]
-        lines.extend([
-            "## Market Posture Integration",
-            f"- **Market:** {pa['market']}",
-            f"- **Recommendation:** {pa['recommendation']}",
-            f"- **Exposure Ceiling:** {pa['exposure_ceiling_pct']}%",
-            f"- **Risk Multiplier:** {pa['risk_multiplier']}x",
-            ""
-        ])
+        lines.extend(
+            [
+                "## Market Posture Integration",
+                f"- **Market:** {pa['market']}",
+                f"- **Recommendation:** {pa['recommendation']}",
+                f"- **Exposure Ceiling:** {pa['exposure_ceiling_pct']}%",
+                f"- **Risk Multiplier:** {pa['risk_multiplier']}x",
+                "",
+            ]
+        )
     lines.append("## Parameters")
     for k, v in result.get("parameters", {}).items():
         lines.append(f"- **{k}:** {v}")
@@ -481,12 +484,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--market",
         choices=["US", "TH"],
         default="US",
-        help="Market for posture-aware sizing (default: US)"
+        help="Market for posture-aware sizing (default: US)",
     )
     parser.add_argument(
-        "--ignore-posture",
-        action="store_true",
-        help="Disable posture-aware risk scaling"
+        "--ignore-posture", action="store_true", help="Disable posture-aware risk scaling"
     )
     return parser
 

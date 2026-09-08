@@ -5,7 +5,7 @@ Market Analysis Utility Functions for Environment Report
 This script provides common functions for market analysis report creation.
 """
 
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 
@@ -91,13 +91,13 @@ def get_market_status():
     for market_name, market_info in MARKET_TIMEZONES.items():
         market_tz = ZoneInfo(market_info["tz"])
         market_time = utc_now.astimezone(market_tz)
-        
+
         is_trading = False
         # Check for weekdays (Monday=0, Sunday=6) and if within trading hours
         if 0 <= market_time.weekday() <= 4:  # Monday to Friday
             if market_info["open"] <= market_time.time() < market_info["close"]:
                 is_trading = True
-        
+
         if is_trading:
             status_messages.append(f"🟢 {market_name} Market: Trading")
         elif market_time.time() >= market_info["close"] or market_time.weekday() > 4:

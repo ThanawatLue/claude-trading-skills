@@ -49,7 +49,6 @@ def fetch_economic_calendar(from_date: str, to_date: str, api_key: str) -> list[
     # Build query parameters for v3 API
     params = {"from": from_date, "to": to_date, "apikey": api_key}
 
-
     # Construct URL with parameters
     url = f"{base_url}?{urllib.parse.urlencode(params)}"
 

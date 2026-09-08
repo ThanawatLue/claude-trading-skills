@@ -404,7 +404,7 @@ def generate_rationale(
     bias: str,
     scores: dict[str, Optional[int]],
     missing: list[str],
-    market: str = "US"
+    market: str = "US",
 ) -> str:
     """Generate human-readable rationale."""
     parts = []
@@ -574,24 +574,25 @@ def main():
     exposure_ceiling = determine_exposure_ceiling(composite)
     critical_inputs = US_CRITICAL_INPUTS if market == "US" else TH_CRITICAL_INPUTS
     missing_critical = len(set(missing) & critical_inputs)
-    recommendation = determine_recommendation(composite, scores["top_risk"], missing_critical, market)
+    recommendation = determine_recommendation(
+        composite, scores["top_risk"], missing_critical, market
+    )
 
     regime_name = extract_regime_name(regime_data)
     bias = determine_bias(regime_name, scores["theme"], sector_data, institutional_data)
     participation = determine_participation(scores["uptrend"], scores["breadth"], sector_data)
     confidence = determine_confidence(provided, missing, market)
 
-    rationale = generate_rationale(composite, recommendation, participation, bias, scores, missing, market)
+    rationale = generate_rationale(
+        composite, recommendation, participation, bias, scores, missing, market
+    )
 
     # Build result
     now = datetime.now(timezone.utc)
 
     result = {
         "schema_version": "1.0",
-        "metadata": {
-            "generated_at": now.isoformat(),
-            "market": market
-        },
+        "metadata": {"generated_at": now.isoformat(), "market": market},
         "generated_at": now.isoformat(),
         "exposure_ceiling_pct": exposure_ceiling,
         "bias": bias,

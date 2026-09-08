@@ -21,7 +21,7 @@ def _generate_display_map(skills_dir: Path) -> dict[str, str]:
     """Dynamically generate the display name to directory name mapping."""
     display_map: dict[str, str] = {}
     for skill_path in skills_dir.iterdir():
-        if skill_path.is_dir() and not skill_path.name.startswith("_"): # Exclude _meta_ skills
+        if skill_path.is_dir() and not skill_path.name.startswith("_"):  # Exclude _meta_ skills
             skill_md = skill_path / "SKILL.md"
             if skill_md.is_file():
                 fm_name = parse_frontmatter_name(skill_md)
@@ -33,16 +33,51 @@ def _generate_display_map(skills_dir: Path) -> dict[str, str]:
     display_map["monitor breakout entries with stop-loss"] = "_meta_monitor"
     display_map["manage market-neutral positions"] = "_meta_manage"
     display_map["monitor z-score signals and spread convergence"] = "_meta_monitor_zscore"
-    display_map["feed review findings back to kanchi-dividend-sop before any additional buys"] = "_meta_feedback"
+    display_map["feed review findings back to kanchi-dividend-sop before any additional buys"] = (
+        "_meta_feedback"
+    )
     return display_map
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_SKILLS_DIR = _PROJECT_ROOT / "skills"
+
+_DISPLAY_MAP: dict[str, str] = {}
+if _SKILLS_DIR.is_dir():
+    try:
+        _DISPLAY_MAP = _generate_display_map(_SKILLS_DIR)
+    except Exception:
+        pass
 
 # ── Skill output contracts ───────────────────────────────────────────
 
-_SKILL_CONTRACTS: dict[str, dict[str, Any]] = {}  # Will be loaded dynamically
+_SKILL_CONTRACTS: dict[str, dict[str, Any]] = {}
+_contracts_file = (
+    _PROJECT_ROOT
+    / "skills"
+    / "skill-integration-tester"
+    / "references"
+    / "workflow_contracts"
+    / "skill_contracts.json"
+)
+if _contracts_file.is_file():
+    try:
+        with _contracts_file.open("r", encoding="utf-8") as _f:
+            _SKILL_CONTRACTS = json.load(_f)
+    except Exception:
+        pass
+
 
 def _load_skill_contracts(project_root: Path) -> dict[str, Any]:
     """Load skill contracts from a JSON file."""
-    contracts_path = project_root / "skills" / "skill-integration-tester" / "references" / "workflow_contracts" / "skill_contracts.json"
+    contracts_path = (
+        project_root
+        / "skills"
+        / "skill-integration-tester"
+        / "references"
+        / "workflow_contracts"
+        / "skill_contracts.json"
+    )
     try:
         with contracts_path.open("r", encoding="utf-8") as f:
             return json.load(f)
@@ -56,18 +91,39 @@ def _load_skill_contracts(project_root: Path) -> dict[str, Any]:
 
 # ── Handoff contracts (producer → consumer) ──────────────────────────
 
-_HANDOFF_CONTRACTS: dict[tuple[str, str], dict[str, Any]] = {}  # Will be loaded dynamically
+_HANDOFF_CONTRACTS: dict[tuple[str, str], dict[str, Any]] = {}
+_handoff_file = (
+    _PROJECT_ROOT
+    / "skills"
+    / "skill-integration-tester"
+    / "references"
+    / "workflow_contracts"
+    / "handoff_contracts.json"
+)
+if _handoff_file.is_file():
+    try:
+        with _handoff_file.open("r", encoding="utf-8") as _f:
+            _raw = json.load(_f)
+            _HANDOFF_CONTRACTS = {tuple(k.split("_", 1)): v for k, v in _raw.items()}
+    except Exception:
+        pass
+
 
 def _load_handoff_contracts(project_root: Path) -> dict[tuple[str, str], Any]:
     """Load handoff contracts from a JSON file, converting string keys to tuples."""
-    contracts_path = project_root / "skills" / "skill-integration-tester" / "references" / "workflow_contracts" / "handoff_contracts.json"
+    contracts_path = (
+        project_root
+        / "skills"
+        / "skill-integration-tester"
+        / "references"
+        / "workflow_contracts"
+        / "handoff_contracts.json"
+    )
     try:
         with contracts_path.open("r", encoding="utf-8") as f:
             raw_contracts = json.load(f)
             # Convert string keys like "producer_consumer" to tuple keys (producer, consumer)
-            return {
-                tuple(k.split("_", 1)): v for k, v in raw_contracts.items()
-            }
+            return {tuple(k.split("_", 1)): v for k, v in raw_contracts.items()}
     except FileNotFoundError:
         print(f"Error: Handoff contracts file not found at {contracts_path}", file=sys.stderr)
         sys.exit(1)
@@ -234,13 +290,13 @@ def validate_workflow(
         exists = is_meta or check_skill_exists(skill_name, skills_dir)
 
         step_result = {
-        "index": i + 1,
-        "skill_display": step["skill_display"],
-        "skill_name": skill_name,
-        "action": step["action"],
-        "exists": exists,
-        "is_meta": is_meta,
-        "has_contract": skill_name in _SKILL_CONTRACTS,
+            "index": i + 1,
+            "skill_display": step["skill_display"],
+            "skill_name": skill_name,
+            "action": step["action"],
+            "exists": exists,
+            "is_meta": is_meta,
+            "has_contract": skill_name in _SKILL_CONTRACTS,
         }
         result["steps"].append(step_result)
 
@@ -447,22 +503,21 @@ def main(argv: list[str] | None = None) -> int:
     # Resolve project root (script is at skills/<name>/scripts/<file>.py)
     project_root = Path(__file__).resolve().parents[3]
 
-    gemini_md_path = Path(args.gemini_md) if args.gemini_md else project_root / "GEMINI.md"
+    if args.gemini_md:
+        gemini_md_path = Path(args.gemini_md)
+    elif (project_root / "AGENTS.md").is_file():
+        gemini_md_path = project_root / "AGENTS.md"
+    elif (project_root / "CLAUDE.md").is_file():
+        gemini_md_path = project_root / "CLAUDE.md"
+    else:
+        gemini_md_path = project_root / "GEMINI.md"
+
     skills_dir = Path(args.skills_dir) if args.skills_dir else project_root / "skills"
     output_dir = Path(args.output_dir)
 
-    global _DISPLAY_MAP
-    _DISPLAY_MAP = _generate_display_map(skills_dir)
-
-    global _SKILL_CONTRACTS
-    _SKILL_CONTRACTS = _load_skill_contracts(project_root)
-
-    global _HANDOFF_CONTRACTS
-    _HANDOFF_CONTRACTS = _load_handoff_contracts(project_root)
-
     if not gemini_md_path.is_file():
         print(
-            f"Error: GEMINI.md not found at {gemini_md_path}",
+            f"Error: Workflow doc not found at {gemini_md_path}",
             file=sys.stderr,
         )
         return 1
@@ -473,6 +528,15 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+    global _DISPLAY_MAP
+    _DISPLAY_MAP = _generate_display_map(skills_dir)
+
+    global _SKILL_CONTRACTS
+    _SKILL_CONTRACTS = _load_skill_contracts(project_root)
+
+    global _HANDOFF_CONTRACTS
+    _HANDOFF_CONTRACTS = _load_handoff_contracts(project_root)
     # The `resolve_skill_name` function uses `_DISPLAY_MAP`, so we need to ensure
     # it's initialized before `resolve_skill_name` is called.
 

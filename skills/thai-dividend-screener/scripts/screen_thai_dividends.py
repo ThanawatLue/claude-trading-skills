@@ -24,12 +24,32 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from scripts.lib.tv_client import (
-    get_thai_stocks,
-    filter_common_stocks,
-    clean_for_json,
-    is_available as tv_available,
-)
+# Add project root and scripts/lib to sys.path for standalone execution
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "scripts" / "lib")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from scripts.lib.tv_client import (
+        clean_for_json,
+        filter_common_stocks,
+        get_thai_stocks,
+    )
+    from scripts.lib.tv_client import (
+        is_available as tv_available,
+    )
+except ImportError:
+    from tv_client import (
+        clean_for_json,
+        filter_common_stocks,
+        get_thai_stocks,
+    )
+    from tv_client import (
+        is_available as tv_available,
+    )
+
+is_available = tv_available
 
 MIN_AVG_TURNOVER_THB = 10_000_000
 
@@ -74,8 +94,10 @@ def score_stock(
     # Yield score (capped to penalize "yield trap" — anything > 12% suspicious)
     capped_yield = min(yield_, 12)
     # Linear ramp from min_yield (e.g., 3%) to 12% yield
-    if 12 <= min_yield: # Guard against invalid min_yield which would cause division by zero or negative range
-        yield_score = 0.0 # No score if min_yield is too high
+    if (
+        12 <= min_yield
+    ):  # Guard against invalid min_yield which would cause division by zero or negative range
+        yield_score = 0.0  # No score if min_yield is too high
     else:
         yield_score = ((capped_yield - min_yield) / (12 - min_yield)) * 100
     yield_score = max(0, min(100, yield_score))
@@ -103,10 +125,7 @@ def score_stock(
         pullback_score = max(0, 50 - (rsi - 65) * 3)
 
     composite = round(
-        yield_score * 0.40
-        + val_score * 0.20
-        + trend_score * 0.20
-        + pullback_score * 0.20,
+        yield_score * 0.40 + val_score * 0.20 + trend_score * 0.20 + pullback_score * 0.20,
         2,
     )
 
@@ -167,10 +186,12 @@ def main():
 
     parser = argparse.ArgumentParser(description="Thai dividend screener (TV-only)")
     parser.add_argument("--output-dir", default="reports/")
-    parser.add_argument("--min-yield", type=float, default=3.0,
-                        help="Min dividend yield pct (default: 3.0)")
-    parser.add_argument("--min-mcap", type=float, default=5e9,
-                        help="Min market cap THB (default: 5B)")
+    parser.add_argument(
+        "--min-yield", type=float, default=3.0, help="Min dividend yield pct (default: 3.0)"
+    )
+    parser.add_argument(
+        "--min-mcap", type=float, default=5e9, help="Min market cap THB (default: 5B)"
+    )
     parser.add_argument(
         "--min-turnover",
         type=float,
@@ -180,14 +201,16 @@ def main():
     parser.add_argument("--top", type=int, default=30, help="Top N to keep (default: 30)")
     args = parser.parse_args()
 
-    if not tv_available():
+    if not is_available():
         print("ERROR: tradingview-screener not installed.", file=sys.stderr)
         sys.exit(1)
 
     print("=" * 60)
     print("Thai Dividend Screener")
     print("=" * 60)
-    print(f"Filters: yield ≥ {args.min_yield}% · mcap ≥ {args.min_mcap/1e9:.1f}B THB · P/E 4-25 · above SMA200")
+    print(
+        f"Filters: yield ≥ {args.min_yield}% · mcap ≥ {args.min_mcap / 1e9:.1f}B THB · P/E 4-25 · above SMA200"
+    )
     print("Fetching SET universe...", end=" ", flush=True)
     stocks = filter_common_stocks(get_thai_stocks(limit=1500))
     print(f"OK ({len(stocks)} stocks)")
@@ -198,25 +221,27 @@ def main():
         ok, score, metrics = score_stock(s, args.min_yield, args.min_mcap, args.min_turnover)
         if not ok:
             continue
-        results.append({
-            "symbol": s["symbol"],
-            "name": s.get("name", s["symbol"]),
-            "sector": s.get("sector", "Unknown"),
-            "price": _safe(s.get("price")),
-            "marketCap": _safe(s.get("marketCap")),
-            "avg_turnover": _safe(s.get("avg_turnover")),
-            "liquidity_score": _safe(s.get("liquidity_score")),
-            "dividend_yield": _safe(s.get("dividend_yield")),
-            "pe_ratio": _safe(s.get("pe_ratio")),
-            "rsi": _safe(s.get("rsi")),
-            "sma50": _safe(s.get("sma50")),
-            "sma200": _safe(s.get("sma200")),
-            "perf_1m": _safe(s.get("perf_1m")),
-            "perf_y": _safe(s.get("perf_y")),
-            "score": score,
-            "grade": grade(score),
-            "score_breakdown": metrics,
-        })
+        results.append(
+            {
+                "symbol": s["symbol"],
+                "name": s.get("name", s["symbol"]),
+                "sector": s.get("sector", "Unknown"),
+                "price": _safe(s.get("price")),
+                "marketCap": _safe(s.get("marketCap")),
+                "avg_turnover": _safe(s.get("avg_turnover")),
+                "liquidity_score": _safe(s.get("liquidity_score")),
+                "dividend_yield": _safe(s.get("dividend_yield")),
+                "pe_ratio": _safe(s.get("pe_ratio")),
+                "rsi": _safe(s.get("rsi")),
+                "sma50": _safe(s.get("sma50")),
+                "sma200": _safe(s.get("sma200")),
+                "perf_1m": _safe(s.get("perf_1m")),
+                "perf_y": _safe(s.get("perf_y")),
+                "score": score,
+                "grade": grade(score),
+                "score_breakdown": metrics,
+            }
+        )
     results.sort(key=lambda r: r["score"], reverse=True)
     results = results[: args.top]
     print(f"OK ({len(results)} candidates)")
@@ -244,10 +269,12 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(results, len(stocks), ts))
 
-    print(f"\nTop 5:")
+    print("\nTop 5:")
     for r in results[:5]:
-        print(f"  {r['symbol']:12s} yield={r['dividend_yield']:5.2f}% PE={r['pe_ratio']:5.1f} score={r['score']:.1f} ({r['grade']})")
-    print(f"\nReports:")
+        print(
+            f"  {r['symbol']:12s} yield={r['dividend_yield']:5.2f}% PE={r['pe_ratio']:5.1f} score={r['score']:.1f} ({r['grade']})"
+        )
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

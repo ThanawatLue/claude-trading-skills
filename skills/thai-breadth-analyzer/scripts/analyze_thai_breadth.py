@@ -21,16 +21,28 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Import tv_client from the vcp-screener skill
-sys.path.insert(
-    0,
-    str(Path(__file__).resolve().parents[2] / "vcp-screener" / "scripts"),
-)
-from tv_client import (  # noqa: E402
-    get_thai_breadth,
-    clean_for_json,
-    is_available as tv_available,
-)
+# Add project root and scripts/lib to sys.path for standalone execution
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "scripts" / "lib")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from scripts.lib.tv_client import (  # noqa: E402
+        clean_for_json,
+        get_thai_breadth,
+    )
+    from scripts.lib.tv_client import (
+        is_available as tv_available,
+    )
+except ImportError:
+    from tv_client import (  # noqa: E402
+        clean_for_json,
+        get_thai_breadth,
+    )
+    from tv_client import (
+        is_available as tv_available,
+    )
 
 
 # Composite breadth score weights (sum = 1.0)
@@ -56,12 +68,7 @@ def composite_score(b: dict) -> tuple[float, str]:
     nhl_balance = ((nh - nl) / total) * 100 + 50
     nhl_balance = max(0.0, min(100.0, nhl_balance))  # Clamping to 0-100
 
-    score = (
-        p50 * _W_SMA50
-        + p200 * _W_SMA200
-        + ad_balance * _W_AD
-        + nhl_balance * _W_NHL
-    )
+    score = p50 * _W_SMA50 + p200 * _W_SMA200 + ad_balance * _W_AD + nhl_balance * _W_NHL
     score = round(max(0.0, min(100.0, score)), 2)
 
     if score >= 70:
@@ -76,7 +83,11 @@ def composite_score(b: dict) -> tuple[float, str]:
 
 
 def to_markdown(b: dict, score: float, regime: str, ts: str) -> str:
-    sectors = list(b.get("sector_breakdown", {}).items())
+    raw_sectors = b.get("sector_breakdown") or []
+    if isinstance(raw_sectors, dict):
+        sectors = list(raw_sectors.items())
+    else:
+        sectors = list(raw_sectors)
     lines = [
         "# Thai Market Breadth Report",
         f"**Generated:** {ts}  |  **Universe:** {b.get('total_stocks', 0)} SET stocks  |  **Source:** TradingView Screener",
@@ -135,8 +146,9 @@ def to_markdown(b: dict, score: float, regime: str, ts: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Thai SET market breadth analyzer (TV)")
     parser.add_argument("--output-dir", default="reports/", help="Output directory")
-    parser.add_argument("--min-price", type=float, default=1.0,
-                        help="Minimum price filter (default: 1.0 THB)")
+    parser.add_argument(
+        "--min-price", type=float, default=1.0, help="Minimum price filter (default: 1.0 THB)"
+    )
     args = parser.parse_args()
 
     if not tv_available():
@@ -184,7 +196,7 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(b, score, regime, ts))
 
-    print(f"\nReports:")
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

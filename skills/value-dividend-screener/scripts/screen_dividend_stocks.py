@@ -857,9 +857,7 @@ def screen_value_dividend_stocks(
             file=sys.stderr,
         )
         candidates = client.screen_stocks(
-            dividend_yield_min=args.dividend_yield_min,
-            pe_max=args.pe_max,
-            pb_max=args.pb_max
+            dividend_yield_min=args.dividend_yield_min, pe_max=args.pe_max, pb_max=args.pb_max
         )
         print(f"Found {len(candidates)} initial candidates", file=sys.stderr)
 

@@ -94,7 +94,10 @@ def calculate_institutional_sponsorship(
         >>> result = calculate_institutional_sponsorship(holders, profile)
         >>> print(f"I Score: {result['score']}, Holders: {result['num_holders']}, Ownership: {result['ownership_pct']:.1f}%")
     """
-    has_inst_pct = profile and (profile.get("institutionPercent") is not None or profile.get("percentInstitutions") is not None)
+    has_inst_pct = profile and (
+        profile.get("institutionPercent") is not None
+        or profile.get("percentInstitutions") is not None
+    )
 
     # Validate input
     if not institutional_holders and not has_inst_pct:
@@ -126,7 +129,11 @@ def calculate_institutional_sponsorship(
     superinvestor_present = len(superinvestors_found) > 0
 
     # Calculate total shares held by institutions
-    total_shares_held = sum(holder.get("shares", 0) for holder in institutional_holders) if institutional_holders else 0
+    total_shares_held = (
+        sum(holder.get("shares", 0) for holder in institutional_holders)
+        if institutional_holders
+        else 0
+    )
 
     # Calculate ownership percentage (requires shares outstanding from profile)
     ownership_pct = None

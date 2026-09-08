@@ -1,6 +1,8 @@
 """Tests for thai-breadth-analyzer — composite scoring and regime classification."""
+
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -52,7 +54,9 @@ def test_regime_boundary_70():
 
 def test_score_bounded_to_0_100():
     """Even extreme inputs should clamp to [0, 100]."""
-    score, _ = composite_score(_breadth(pct50=100, pct200=100, adv=800, dec=0, hi=200, lo=0, total=800))
+    score, _ = composite_score(
+        _breadth(pct50=100, pct200=100, adv=800, dec=0, hi=200, lo=0, total=800)
+    )
     assert 0 <= score <= 100
     score, _ = composite_score(_breadth(pct50=0, pct200=0, adv=0, dec=800, hi=0, lo=200, total=800))
     assert 0 <= score <= 100
@@ -63,9 +67,10 @@ def test_zero_total_no_crash():
     b = _breadth(total=0, adv=0, dec=0, hi=0, lo=0)
     score, regime = composite_score(b)
     assert isinstance(score, (int, float))
-import unittest.mock
+
+
 import tempfile
-import shutil
+import unittest.mock
 
 # ... (existing imports and tests) ...
 
@@ -94,12 +99,15 @@ def test_main_integration():
 
     # Use a TemporaryDirectory for output files
     with tempfile.TemporaryDirectory() as tmpdir:
-        with unittest.mock.patch("analyze_thai_breadth.get_thai_breadth", return_value=mock_breadth_data):
+        with unittest.mock.patch(
+            "analyze_thai_breadth.get_thai_breadth", return_value=mock_breadth_data
+        ):
             with unittest.mock.patch("analyze_thai_breadth.tv_available", return_value=True):
                 # Mock sys.argv to pass arguments to main()
                 test_args = ["analyze_thai_breadth.py", "--output-dir", tmpdir]
                 with unittest.mock.patch("sys.argv", test_args):
                     from analyze_thai_breadth import main
+
                     main()
 
                 # Assert files were created
@@ -112,7 +120,7 @@ def test_main_integration():
                 assert md_file.exists()
 
                 # Validate JSON content
-                with open(json_file, "r", encoding="utf-8") as f:
+                with open(json_file, encoding="utf-8") as f:
                     data = json.load(f)
                     assert data["market"] == "TH"
                     assert data["composite_score"] > 0
@@ -120,7 +128,7 @@ def test_main_integration():
                     assert data["breadth"]["total_stocks"] == 750
 
                 # Validate Markdown content
-                with open(md_file, "r", encoding="utf-8") as f:
+                with open(md_file, encoding="utf-8") as f:
                     content = f.read()
                     assert "Thai Market Breadth Report" in content
                     assert "Composite Score:" in content
@@ -190,7 +198,7 @@ def test_to_markdown_with_sectors():
 ## Sector Strength (Median 1M Return)
 
 | Sector | 1M % |
-|--------|------
+|--------|------|
 | Energy | +3.50% |
 | Banking | +1.20% |
 | Food | -0.50% |
@@ -204,8 +212,11 @@ def test_to_markdown_with_sectors():
 
 Score bands: ≥70 Strong Bull · 50-70 Healthy Uptrend · 30-50 Mixed · <30 Bear"""
 
-    generated_markdown = to_markdown(sample_breadth_data, sample_score, sample_regime, sample_timestamp)
+    generated_markdown = to_markdown(
+        sample_breadth_data, sample_score, sample_regime, sample_timestamp
+    )
     assert generated_markdown == expected_markdown
+
 
 def test_to_markdown_no_sectors():
     """Test to_markdown function without sector breakdown data."""
@@ -270,6 +281,7 @@ def test_to_markdown_no_sectors():
 
 Score bands: ≥70 Strong Bull · 50-70 Healthy Uptrend · 30-50 Mixed · <30 Bear"""
 
-    generated_markdown = to_markdown(sample_breadth_data, sample_score, sample_regime, sample_timestamp)
+    generated_markdown = to_markdown(
+        sample_breadth_data, sample_score, sample_regime, sample_timestamp
+    )
     assert generated_markdown == expected_markdown
-

@@ -27,8 +27,10 @@ from pathlib import Path
 # Add project root to sys.path for importing scripts.lib.tv_client
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from scripts.lib.tv_client import (
-    get_us_stocks,
     clean_for_json,
+    get_us_stocks,
+)
+from scripts.lib.tv_client import (
     is_available as tv_available,
 )
 
@@ -103,10 +105,7 @@ def score_stock(
         pullback_score = max(0, 50 - (rsi - 65) * 3)
 
     composite = round(
-        yield_score * 0.40
-        + val_score * 0.20
-        + trend_score * 0.20
-        + pullback_score * 0.20,
+        yield_score * 0.40 + val_score * 0.20 + trend_score * 0.20 + pullback_score * 0.20,
         2,
     )
 
@@ -160,8 +159,12 @@ def main():
     parser = argparse.ArgumentParser(description="US dividend stock screener (TV)")
     parser.add_argument("--output-dir", default="reports/", help="Output directory")
     parser.add_argument("--min-yield", type=float, default=3.0, help="Min dividend yield %%")
-    parser.add_argument("--min-mcap", type=float, default=1_000_000_000, help="Min market cap (USD)")
-    parser.add_argument("--min-turnover", type=float, default=MIN_AVG_TURNOVER_USD, help="Min avg turnover (USD)")
+    parser.add_argument(
+        "--min-mcap", type=float, default=1_000_000_000, help="Min market cap (USD)"
+    )
+    parser.add_argument(
+        "--min-turnover", type=float, default=MIN_AVG_TURNOVER_USD, help="Min avg turnover (USD)"
+    )
     parser.add_argument("--top", type=int, default=30, help="Max candidates in output")
     args = parser.parse_args()
 
@@ -187,9 +190,9 @@ def main():
             candidates.append(c)
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
-    top_candidates = candidates[:args.top]
+    top_candidates = candidates[: args.top]
 
-    print(f"\nScreener Results:")
+    print("\nScreener Results:")
     print(f"  Passed filters: {len(candidates)} / {len(stocks)} stocks")
     print(f"  Selecting top: {len(top_candidates)}")
 
@@ -228,7 +231,7 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(top_candidates, len(stocks), ts, args.min_yield))
 
-    print(f"\nReports:")
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

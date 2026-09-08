@@ -29,12 +29,30 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from tv_client import (
-    get_thai_stocks,
-    filter_common_stocks,
-    clean_for_json,
-    is_available as tv_available,
-)
+# Add project root and scripts/lib to sys.path for standalone execution
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "scripts" / "lib")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from scripts.lib.tv_client import (
+        clean_for_json,
+        filter_common_stocks,
+        get_thai_stocks,
+    )
+    from scripts.lib.tv_client import (
+        is_available as tv_available,
+    )
+except ImportError:
+    from tv_client import (
+        clean_for_json,
+        filter_common_stocks,
+        get_thai_stocks,
+    )
+    from tv_client import (
+        is_available as tv_available,
+    )
 
 MIN_AVG_TURNOVER_THB = 20_000_000
 
@@ -73,10 +91,10 @@ MEAN_REVERSION_MIN_PERF_Y = 0
 MEAN_REVERSION_MAX_SMA50_DIST = 0.08
 
 
-
 # ---------------------------------------------------------------------------
 # Bucket filters and scorers
 # ---------------------------------------------------------------------------
+
 
 def _safe_num(v):
     """Coerce None/NaN to 0 for arithmetic."""
@@ -108,7 +126,7 @@ def in_growth(s: dict) -> tuple[bool, float]:
         return False, 0.0
     if price < sma50 or price < sma200:
         return False, 0.0
-    if p3m < 10:
+    if p3m <= 10:
         return False, 0.0
     if p1m <= 0:
         return False, 0.0
@@ -265,8 +283,8 @@ def to_markdown(buckets: dict, universe_size: int, ts: str, top_n: int) -> str:
     ]
     for name in ["growth", "value", "momentum", "mean_reversion"]:
         b = buckets.get(name, [])
-        avg = round(sum(r["score"] for r in b) / len(b), 1) if b else 0
-        lines.append(f"| **{name.upper()}** | {len(b)} | {avg} |")
+        avg = round(sum(r["score"] for r in b) / len(b), 1) if b else 0.0
+        lines.append(f"| {name.upper().replace('_', '-')} | {len(b)} | {avg:.1f} |")
     lines.append("")
 
     titles = {
@@ -277,7 +295,7 @@ def to_markdown(buckets: dict, universe_size: int, ts: str, top_n: int) -> str:
     }
 
     for name, title in titles.items():
-        b = buckets.get(name, [])
+        b = sorted(buckets.get(name, []), key=lambda r: r.get("score", 0), reverse=True)
         lines += [f"## {title}", ""]
         if not b:
             lines += ["_No candidates passed the filters._", ""]
@@ -299,8 +317,6 @@ def to_markdown(buckets: dict, universe_size: int, ts: str, top_n: int) -> str:
 
 
 def main():
-
-
     if sys.platform.startswith("win"):
         try:
             sys.stdout.reconfigure(encoding="utf-8")
@@ -347,10 +363,10 @@ def main():
         "min_avg_turnover": args.min_turnover,
         "counts": counts,
         "criteria": {
-            "growth": f"Above SMA50/200 · perf_3m≥{GROWTH_MIN_PERF_3M}% · perf_1m>{GROWTH_MIN_PERF_1M} · RSI {GROWTH_RSI_MIN}-{GROWTH_RSI_MAX} · mcap≥{GROWTH_MIN_MARKET_CAP/1_000_000_000}B THB · price≥{GROWTH_MIN_PRICE}฿",
-            "value":  f"Above SMA200 · P/E {VALUE_MIN_PE_RATIO}-{VALUE_MAX_PE_RATIO} · yield≥{VALUE_MIN_DIVIDEND_YIELD}% · perf_y>{VALUE_MIN_PERF_Y} · mcap≥{VALUE_MIN_MARKET_CAP/1_000_000_000}B THB · price≥{VALUE_MIN_PRICE}฿",
-            "momentum": f"RSI {MOMENTUM_RSI_MIN}-{MOMENTUM_RSI_MAX} · perf_1m≥{MOMENTUM_MIN_PERF_1M}% · vol≥{MOMENTUM_VOLUME_RATIO}×avg · within {MOMENTUM_MAX_DIST_FROM_HIGH52*100}% of 52w high · price≥{MOMENTUM_MIN_PRICE}฿",
-            "mean_reversion": f"Above SMA200 · RSI {MEAN_REVERSION_RSI_MIN}-{MEAN_REVERSION_RSI_MAX} · perf_y>{MEAN_REVERSION_MIN_PERF_Y} · within {MEAN_REVERSION_MAX_SMA50_DIST*100}% of SMA50 · price≥{MEAN_REVERSION_MIN_PRICE}฿",
+            "growth": f"Above SMA50/200 · perf_3m≥{GROWTH_MIN_PERF_3M}% · perf_1m>{GROWTH_MIN_PERF_1M} · RSI {GROWTH_RSI_MIN}-{GROWTH_RSI_MAX} · mcap≥{GROWTH_MIN_MARKET_CAP / 1_000_000_000}B THB · price≥{GROWTH_MIN_PRICE}฿",
+            "value": f"Above SMA200 · P/E {VALUE_MIN_PE_RATIO}-{VALUE_MAX_PE_RATIO} · yield≥{VALUE_MIN_DIVIDEND_YIELD}% · perf_y>{VALUE_MIN_PERF_Y} · mcap≥{VALUE_MIN_MARKET_CAP / 1_000_000_000}B THB · price≥{VALUE_MIN_PRICE}฿",
+            "momentum": f"RSI {MOMENTUM_RSI_MIN}-{MOMENTUM_RSI_MAX} · perf_1m≥{MOMENTUM_MIN_PERF_1M}% · vol≥{MOMENTUM_VOLUME_RATIO}×avg · within {MOMENTUM_MAX_DIST_FROM_HIGH52 * 100}% of 52w high · price≥{MOMENTUM_MIN_PRICE}฿",
+            "mean_reversion": f"Above SMA200 · RSI {MEAN_REVERSION_RSI_MIN}-{MEAN_REVERSION_RSI_MAX} · perf_y>{MEAN_REVERSION_MIN_PERF_Y} · within {MEAN_REVERSION_MAX_SMA50_DIST * 100}% of SMA50 · price≥{MEAN_REVERSION_MIN_PRICE}฿",
         },
         "buckets": buckets,
         "metadata": {"market": "TH", "source": "tradingview"},
@@ -360,10 +376,10 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(buckets, len(stocks), ts, args.top))
 
-    print(f"\nBucket counts:")
+    print("\nBucket counts:")
     for k, n in counts.items():
         print(f"  {k.upper():16s} → {n} candidates")
-    print(f"\nReports:")
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

@@ -28,6 +28,7 @@ dependencies = [
     "requests",
     "beautifulsoup4",
     "lxml",
+    "statsmodels",
 ]
 
 [project.optional-dependencies]
@@ -66,9 +67,15 @@ ignore = [
 # With importlib, a single `pytest` invocation discovers all tests safely.
 # scripts/run_all_tests.sh is kept for backward compatibility.
 addopts = "--import-mode=importlib"
-pythonpath = ["src", "."]
+pythonpath = ["src", ".", "scripts/lib"]
+python_files = ["test_*.py", "*_test.py", "integration_test_*.py"]
 testpaths = [
     "tests",
+    "skills/thai-breadth-analyzer/scripts/tests",
+    "skills/thai-dividend-screener/scripts/tests",
+    "skills/thai-sector-heatmap/scripts/tests",
+    "skills/thai-watchlist-builder/scripts/tests",
+    "skills/paper-trade-simulator/scripts/tests",
     "skills/backtest-expert/scripts/tests",
     "skills/dual-axis-skill-reviewer/scripts/tests",
     "skills/ftd-detector/scripts/tests",
@@ -91,9 +98,9 @@ testpaths = [
     "skills/trade-hypothesis-ideator/scripts/tests",
     "skills/earnings-calendar/scripts/tests",
     "skills/options-strategy-advisor/scripts/tests",
-    # canslim-screener excluded: requires bs4 (optional dep)
+    # canslim-screener excluded: run standalone via pytest skills/canslim-screener/scripts/tests/
+    "skills/skill-integration-tester/scripts/tests",
     # theme-detector excluded: known pre-existing formula/test drift; run explicitly when working on it
-    # skill-integration-tester excluded: persistent IndentationError, temporarily disabled
     "skills/trader-memory-core/scripts/tests",
     "skills/breadth-chart-analyst/scripts/tests",
     "skills/economic-calendar-fetcher/scripts/tests",
@@ -109,7 +116,9 @@ testpaths = [
     "skills/market-environment-analysis/scripts/tests",
     "skills/sector-analyst/scripts/tests",
     "skills/strategy-pivot-designer/scripts/tests",
-    # pair-trade-screener, portfolio-manager, signal-postmortem: tests/ exists but no test_*.py
+    "skills/pair-trade-screener/scripts/tests",
+    "skills/portfolio-manager/scripts/tests",
+    "skills/signal-postmortem/scripts/tests",
     # Removed ghost paths for deleted skills (relative-strength-momentum-scanner,
     # signal-postmortem-analyzer, moving-average-regime-detector).
     "skills/downtrend-duration-analyzer/scripts/tests",

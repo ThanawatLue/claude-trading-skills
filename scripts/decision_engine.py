@@ -63,7 +63,9 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
     sma20_gap_pct = (price / sma20 - 1) * 100 if price and sma20 else None
     sma200_distance_pct = (price / sma200 - 1) * 100 if price and sma200 else None
     plan_risk_pct = (entry - stop) / entry * 100 if entry and stop and entry > stop else None
-    plan_reward_pct = (target - entry) / entry * 100 if entry and target and target > entry else None
+    plan_reward_pct = (
+        (target - entry) / entry * 100 if entry and target and target > entry else None
+    )
     plan_reward_r = (
         (target - entry) / (entry - stop)
         if entry and stop and target and entry > stop and target > entry
@@ -86,7 +88,9 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
             0.5 * _normalise_range(perf_3m, 0.0, 30.0)
             + 0.5 * _normalise_range(sma50_distance_pct, 0.0, 5.0)
         )
-    components = [x for x in (reversal_score, support_score, pullback_score, trend_score) if x is not None]
+    components = [
+        x for x in (reversal_score, support_score, pullback_score, trend_score) if x is not None
+    ]
     confirmation_score = sum(components) / len(components) if components else None
 
     return {
@@ -101,9 +105,13 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
         "volume": volume,
         "avg_volume": avg_volume,
         "volume_ratio": round(volume_ratio, 4) if volume_ratio is not None else None,
-        "sma50_distance_pct": round(sma50_distance_pct, 4) if sma50_distance_pct is not None else None,
+        "sma50_distance_pct": round(sma50_distance_pct, 4)
+        if sma50_distance_pct is not None
+        else None,
         "sma20_gap_pct": round(sma20_gap_pct, 4) if sma20_gap_pct is not None else None,
-        "sma200_distance_pct": round(sma200_distance_pct, 4) if sma200_distance_pct is not None else None,
+        "sma200_distance_pct": round(sma200_distance_pct, 4)
+        if sma200_distance_pct is not None
+        else None,
         "plan_risk_pct": round(plan_risk_pct, 4) if plan_risk_pct is not None else None,
         "plan_reward_pct": round(plan_reward_pct, 4) if plan_reward_pct is not None else None,
         "plan_reward_r": round(plan_reward_r, 4) if plan_reward_r is not None else None,
@@ -111,7 +119,9 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
         "support_score": support_score,
         "pullback_score": pullback_score,
         "trend_score": trend_score,
-        "confirmation_score": round(confirmation_score, 4) if confirmation_score is not None else None,
+        "confirmation_score": round(confirmation_score, 4)
+        if confirmation_score is not None
+        else None,
     }
 
 
@@ -140,15 +150,15 @@ def evaluate_signal(context: dict[str, Any]) -> dict[str, Any]:
     round_trip_cost_r = round_trip_cost / risk if risk > 0 else 0.0
     net_reward_r = gross_reward_r - round_trip_cost_r
     expected_loss_r = (
-        float(history["avg_loss_r"])
-        if history.get("avg_loss_r") is not None and losses
-        else -1.0
+        float(history["avg_loss_r"]) if history.get("avg_loss_r") is not None and losses else -1.0
     )
     expected_net_r = posterior_win_rate * net_reward_r + (1 - posterior_win_rate) * expected_loss_r
 
     failed: list[str] = []
     confirmation = features.get("confirmation_score")
-    if confirmation is not None and confirmation < float(context.get("min_confirmation_score", 0.6)):
+    if confirmation is not None and confirmation < float(
+        context.get("min_confirmation_score", 0.6)
+    ):
         failed.append("reversal_not_confirmed")
     if expected_net_r < float(context.get("min_expected_net_r", 0.0)):
         failed.append("negative_expected_net_edge")

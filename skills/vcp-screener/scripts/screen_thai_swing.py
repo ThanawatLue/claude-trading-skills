@@ -21,13 +21,32 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from scripts.lib.tv_client import (
-    get_thai_stocks,
-    is_available as tv_available,
-    get_set_memberships,
-    tag_with_memberships,
-    clean_for_json,
-)
+# Add project root and scripts/lib to sys.path for standalone execution
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "scripts" / "lib")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from scripts.lib.tv_client import (
+        clean_for_json,
+        get_set_memberships,
+        get_thai_stocks,
+        tag_with_memberships,
+    )
+    from scripts.lib.tv_client import (
+        is_available as tv_available,
+    )
+except ImportError:
+    from tv_client import (
+        clean_for_json,
+        get_set_memberships,
+        get_thai_stocks,
+        tag_with_memberships,
+    )
+    from tv_client import (
+        is_available as tv_available,
+    )
 
 MIN_PRICE = 2.0
 
@@ -35,8 +54,8 @@ MIN_PRICE = 2.0
 DIP_RSI_MIN = 35
 DIP_RSI_MAX = 52
 DIP_WEEKLY_RSI_MIN = 42
-DIP_MIN_VOL_RATIO = 0.8       # must have real interest — dead-volume dips excluded
-DIP_MIN_REWARD_PCT = 3.0      # reward must be ≥ 3% to cover slippage + commission
+DIP_MIN_VOL_RATIO = 0.8  # must have real interest — dead-volume dips excluded
+DIP_MIN_REWARD_PCT = 3.0  # reward must be ≥ 3% to cover slippage + commission
 
 # Momentum thresholds
 MOM_RSI_MIN = 55
@@ -44,13 +63,14 @@ MOM_RSI_MAX = 72
 MOM_VOL_RATIO_MIN = 1.4
 MOM_WEEKLY_RSI_MIN = 52
 MOM_MAX_FROM_52W_HIGH = 0.12
-MOM_MAX_RISK_PCT = 6.0        # stop too wide → skip for 3-5 day hold
-MOM_MIN_REWARD_PCT = 3.0      # same minimum reward as dip buy
+MOM_MAX_RISK_PCT = 6.0  # stop too wide → skip for 3-5 day hold
+MOM_MIN_REWARD_PCT = 3.0  # same minimum reward as dip buy
 
 
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
+
 
 def score_dip_buy(s: dict) -> float:
     rsi = s.get("rsi") or 0
@@ -132,6 +152,7 @@ def score_momentum(s: dict) -> float:
 # ATR + trade plan
 # ---------------------------------------------------------------------------
 
+
 def fetch_atr(symbol: str, lookback: int = 20) -> dict:
     try:
         import yfinance as yf
@@ -146,9 +167,11 @@ def fetch_atr(symbol: str, lookback: int = 20) -> dict:
 
         n = min(14, len(closes) - 1)
         trs = [
-            max(highs[-(i + 1)] - lows[-(i + 1)],
+            max(
+                highs[-(i + 1)] - lows[-(i + 1)],
                 abs(highs[-(i + 1)] - closes[-(i + 2)]),
-                abs(lows[-(i + 1)] - closes[-(i + 2)]))
+                abs(lows[-(i + 1)] - closes[-(i + 2)]),
+            )
             for i in range(n)
         ]
         atr = sum(trs) / len(trs) if trs else 0
@@ -171,7 +194,7 @@ def build_plan(price: float, strategy: str, atr: float, recent_low: float) -> di
     if (entry - stop) / entry < 0.01:
         stop = entry * 0.97
     risk = entry - stop
-    target = entry + 2.0 * risk   # 2:1 R/R minimum
+    target = entry + 2.0 * risk  # 2:1 R/R minimum
     return {
         "entry": round(entry, 2),
         "stop": round(stop, 2),
@@ -184,6 +207,7 @@ def build_plan(price: float, strategy: str, atr: float, recent_low: float) -> di
 # ---------------------------------------------------------------------------
 # Report generation
 # ---------------------------------------------------------------------------
+
 
 def _row_dip(i: int, s: dict) -> str:
     p = s["_plan"]
@@ -238,7 +262,7 @@ def get_recent_expectancy(source_name: str, lookback: int = 15) -> tuple[float |
     import sqlite3
     import sys
     from pathlib import Path
-    
+
     base_dir = Path(__file__).resolve().parents[3]
     db_path = base_dir / "state" / "market_cache.db"
     if not db_path.exists():
@@ -252,10 +276,10 @@ def get_recent_expectancy(source_name: str, lookback: int = 15) -> tuple[float |
             conn.close()
             return None, 0
         rows = cur.execute(
-            """SELECT realized_r FROM paper_trade 
-               WHERE (source = ? OR source = ?) AND status != 'open' 
+            """SELECT realized_r FROM paper_trade
+               WHERE (source = ? OR source = ?) AND status != 'open'
                ORDER BY exit_at DESC LIMIT ?""",
-            (source_name, source_name.replace("-screener", ""), lookback)
+            (source_name, source_name.replace("-screener", ""), lookback),
         ).fetchall()
         conn.close()
         if not rows:
@@ -265,7 +289,9 @@ def get_recent_expectancy(source_name: str, lookback: int = 15) -> tuple[float |
             return None, 0
         return sum(realized) / len(realized), len(realized)
     except Exception as e:
-        print(f"  [Expectancy Check] Warning: Could not read paper trade stats: {e}", file=sys.stderr)
+        print(
+            f"  [Expectancy Check] Warning: Could not read paper trade stats: {e}", file=sys.stderr
+        )
         return None, 0
 
 
@@ -284,19 +310,27 @@ def build_report(dip: list, mom: list, ts: str, universe: int) -> str:
     if (exp_dip is not None and exp_dip < 0) or (exp_mom is not None and exp_mom < 0):
         L.append("## Strategy Expectancy Calibration Alerts")
         if exp_dip is not None:
-            L.append(f"- **Dip Buy (thai-swing-dip)** Expectancy: **{exp_dip:+.2f}R** ({count_dip} closed trades)")
+            L.append(
+                f"- **Dip Buy (thai-swing-dip)** Expectancy: **{exp_dip:+.2f}R** ({count_dip} closed trades)"
+            )
             if exp_dip < 0:
                 L.append("  > [!WARNING]")
-                L.append("  > **Negative Expectancy:** Consider raising Dip Buy entry parameters or skipping marginal setups.")
+                L.append(
+                    "  > **Negative Expectancy:** Consider raising Dip Buy entry parameters or skipping marginal setups."
+                )
         if exp_mom is not None:
-            L.append(f"- **Momentum (thai-swing-momentum)** Expectancy: **{exp_mom:+.2f}R** ({count_mom} closed trades)")
+            L.append(
+                f"- **Momentum (thai-swing-momentum)** Expectancy: **{exp_mom:+.2f}R** ({count_mom} closed trades)"
+            )
             if exp_mom < 0:
                 L.append("  > [!WARNING]")
-                L.append("  > **Negative Expectancy:** Consider raising momentum score threshold to **85+** and reducing position size.")
+                L.append(
+                    "  > **Negative Expectancy:** Consider raising momentum score threshold to **85+** and reducing position size."
+                )
         L.append("")
         L.append("---")
         L.append("")
-    
+
     L += [
         "",
         "## Strategies",
@@ -374,7 +408,7 @@ def build_report(dip: list, mom: list, ts: str, universe: int) -> str:
 
 import re as _re
 
-_DR_PATTERN = _re.compile(r"^[A-Z]+\d{2}\.BK$")   # e.g. SNOW23.BK, MSFT23.BK, PLTR23.BK
+_DR_PATTERN = _re.compile(r"^[A-Z]+\d{2}\.BK$")  # e.g. SNOW23.BK, MSFT23.BK, PLTR23.BK
 
 
 def _is_dr_or_warrant(symbol: str) -> bool:
@@ -389,13 +423,16 @@ def _is_dr_or_warrant(symbol: str) -> bool:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(description="Thai Swing Trade Screener (3-5 day)")
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--output-dir", default="reports/")
     parser.add_argument("--min-market-cap", type=float, default=2_000_000_000)
     parser.add_argument("--min-avg-volume", type=float, default=200_000)
-    parser.add_argument("--no-atr", action="store_true", help="Skip ATR fetch (faster, less precise stops)")
+    parser.add_argument(
+        "--no-atr", action="store_true", help="Skip ATR fetch (faster, less precise stops)"
+    )
     args = parser.parse_args()
 
     print("=" * 70)
@@ -413,9 +450,10 @@ def main():
         min_avg_volume=args.min_avg_volume,
     )
     stocks = [
-        s for s in stocks
+        s
+        for s in stocks
         if (s.get("price") or 0) >= MIN_PRICE
-        and not s["symbol"].endswith(".R.BK")   # rights/warrants
+        and not s["symbol"].endswith(".R.BK")  # rights/warrants
         and not _is_dr_or_warrant(s["symbol"])  # DR certificates (SNOW23.BK etc.)
     ]
     print(f"  {len(stocks)} stocks after basic filters (excl. DRs/rights/warrants)")
@@ -461,7 +499,8 @@ def main():
         atr_d = s.get("_atr") or {}
         price = s.get("price") or 0
         s["_plan"] = build_plan(
-            price, s["_strategy"],
+            price,
+            s["_strategy"],
             atr_d.get("atr", 0),
             atr_d.get("recent_low", price * 0.95),
         )
@@ -469,18 +508,20 @@ def main():
     # Post-scoring quality filters (applied after plans are built)
     before_dip = len(top_dip)
     before_mom = len(top_mom)
-    top_dip = [
-        s for s in top_dip
-        if s["_plan"]["reward_pct"] >= DIP_MIN_REWARD_PCT
-    ]
+    top_dip = [s for s in top_dip if s["_plan"]["reward_pct"] >= DIP_MIN_REWARD_PCT]
     top_mom = [
-        s for s in top_mom
+        s
+        for s in top_mom
         if s["_plan"]["risk_pct"] <= MOM_MAX_RISK_PCT
         and s["_plan"]["reward_pct"] >= MOM_MIN_REWARD_PCT
     ]
-    print(f"\nPhase 4: Quality filters")
-    print(f"  Dip Buy:  {before_dip} -> {len(top_dip)} (removed {before_dip - len(top_dip)} low-reward)")
-    print(f"  Momentum: {before_mom} -> {len(top_mom)} (removed {before_mom - len(top_mom)} wide-stop or low-reward)")
+    print("\nPhase 4: Quality filters")
+    print(
+        f"  Dip Buy:  {before_dip} -> {len(top_dip)} (removed {before_dip - len(top_dip)} low-reward)"
+    )
+    print(
+        f"  Momentum: {before_mom} -> {len(top_mom)} (removed {before_mom - len(top_mom)} wide-stop or low-reward)"
+    )
 
     # Save
     exp_dip, count_dip = get_recent_expectancy("thai-swing-dip", lookback=15)
@@ -506,15 +547,17 @@ def main():
         "dip_buy": [_ser(s) for s in top_dip],
         "momentum": [_ser(s) for s in top_mom],
         "metadata": {
-            "market": "TH", 
+            "market": "TH",
             "source": "tradingview+yfinance",
             "strategy_expectancy": {
                 "thai-swing-dip": {"expectancy_r": exp_dip, "count": count_dip},
-                "thai-swing-momentum": {"expectancy_r": exp_mom, "count": count_mom}
-            }
+                "thai-swing-momentum": {"expectancy_r": exp_mom, "count": count_mom},
+            },
         },
     }
-    json_path.write_text(json.dumps(clean_for_json(result), ensure_ascii=False, indent=2), encoding="utf-8")
+    json_path.write_text(
+        json.dumps(clean_for_json(result), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     print(f"\nReports: {md_path}")
 
@@ -524,26 +567,32 @@ def main():
         if exp_dip is not None:
             print(f"  Dip Buy (thai-swing-dip): {exp_dip:+.2f}R ({count_dip} closed)")
             if exp_dip < 0:
-                print("    ⚠️ WARNING: Negative expectancy. Focus only on high-conviction pullbacks.")
+                print(
+                    "    ⚠️ WARNING: Negative expectancy. Focus only on high-conviction pullbacks."
+                )
         if exp_mom is not None:
             print(f"  Momentum (thai-swing-momentum): {exp_mom:+.2f}R ({count_mom} closed)")
             if exp_mom < 0:
                 print("    ⚠️ WARNING: Negative expectancy. Suggest raising score threshold to 85+.")
 
     # Console summary
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("DIP BUY:")
     for i, s in enumerate(top_dip[:5], 1):
         p = s["_plan"]
-        print(f"  {i}. {s['symbol']:<12} Score:{s['_score']:>5.1f}  RSI:{s.get('rsi',0):>5.1f}  "
-              f"Entry:{p['entry']:.2f}  Stop:{p['stop']:.2f}  Target:{p['target']:.2f}  Risk:{p['risk_pct']:.1f}%")
+        print(
+            f"  {i}. {s['symbol']:<12} Score:{s['_score']:>5.1f}  RSI:{s.get('rsi', 0):>5.1f}  "
+            f"Entry:{p['entry']:.2f}  Stop:{p['stop']:.2f}  Target:{p['target']:.2f}  Risk:{p['risk_pct']:.1f}%"
+        )
     print("MOMENTUM:")
     for i, s in enumerate(top_mom[:5], 1):
         p = s["_plan"]
         avg_vol = max(s.get("avgVolume") or 1, 1)
         vol_r = (s.get("volume") or 0) / avg_vol
-        print(f"  {i}. {s['symbol']:<12} Score:{s['_score']:>5.1f}  RSI:{s.get('rsi',0):>5.1f}  "
-              f"Vol:{vol_r:.1f}x  Entry:{p['entry']:.2f}  Stop:{p['stop']:.2f}  Target:{p['target']:.2f}  Risk:{p['risk_pct']:.1f}%")
+        print(
+            f"  {i}. {s['symbol']:<12} Score:{s['_score']:>5.1f}  RSI:{s.get('rsi', 0):>5.1f}  "
+            f"Vol:{vol_r:.1f}x  Entry:{p['entry']:.2f}  Stop:{p['stop']:.2f}  Target:{p['target']:.2f}  Risk:{p['risk_pct']:.1f}%"
+        )
 
 
 def _ser(s: dict) -> dict:

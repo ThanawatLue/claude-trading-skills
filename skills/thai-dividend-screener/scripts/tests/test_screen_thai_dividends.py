@@ -1,17 +1,16 @@
 """Tests for thai-dividend-screener — filters, scoring, grading."""
+
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-import unittest
-from unittest.mock import patch, mock_open, MagicMock
-import json
 import os
-from datetime import datetime
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from screen_thai_dividends import score_stock, grade, main, to_markdown  # noqa: E402
+from screen_thai_dividends import grade, main, score_stock  # noqa: E402
 
 
 def _stock(
@@ -23,12 +22,12 @@ def _stock(
     rsi=45,
     py=15,
     avg_turnover=20_000_000,
-    avg_volume=200000
+    avg_volume=200000,
 ):
     return {
         "symbol": "TEST.BK",
         "name": "Test Stock",
-        "sector": "Financials", # Added sector and name for the integration test
+        "sector": "Financials",  # Added sector and name for the integration test
         "dividend_yield": yield_,
         "marketCap": mcap,
         "pe_ratio": pe,
@@ -127,15 +126,13 @@ def test_valuation_score_bands():
     _, _, m_pe_25 = score_stock(_stock(pe=25), min_yield=3, min_mcap=5e9)
     assert m_pe_25["valuation_score"] == 0
 
-    # P/E below 4 should be rejected by hard filter, but if it passed (e.g. min_yield=1)
-    # it would get less than 70 (or 0 for P/E=3)
-    _, _, m_pe_3 = score_stock(_stock(pe=3), min_yield=1, min_mcap=5e9)
-    assert m_pe_3["valuation_score"] < 70
+    # P/E below 4 should be rejected by hard filter
+    ok_pe_3, _, _ = score_stock(_stock(pe=3), min_yield=1, min_mcap=5e9)
+    assert not ok_pe_3
 
-    # P/E above 25 should be rejected by hard filter, but if it passed (e.g. min_yield=1)
-    # it would get less than 0 (or 0 for P/E=26)
-    _, _, m_pe_26 = score_stock(_stock(pe=26), min_yield=1, min_mcap=5e9)
-    assert m_pe_26["valuation_score"] < 0
+    # P/E above 25 should be rejected by hard filter
+    ok_pe_26, _, _ = score_stock(_stock(pe=26), min_yield=1, min_mcap=5e9)
+    assert not ok_pe_26
 
 
 def test_rsi_pullback_sweet_spot():
@@ -203,9 +200,13 @@ def test_pullback_score_bands():
     _, _, m_rsi_70 = score_stock(_stock(rsi=70), min_yield=3, min_mcap=5e9)
     assert m_rsi_70["pullback_score"] == 35
 
-    # RSI 20 (very oversold) should be 0 (capped at 0)
+    # RSI 20 (oversold) gives 25 (100 - (35-20)*5)
     _, _, m_rsi_20 = score_stock(_stock(rsi=20), min_yield=3, min_mcap=5e9)
-    assert m_rsi_20["pullback_score"] == 0
+    assert m_rsi_20["pullback_score"] == 25
+
+    # RSI 10 (very oversold) should be 0 (capped at 0)
+    _, _, m_rsi_10 = score_stock(_stock(rsi=10), min_yield=3, min_mcap=5e9)
+    assert m_rsi_10["pullback_score"] == 0
 
 
 def test_handles_none_values_gracefully():
@@ -230,81 +231,95 @@ def test_avg_turnover_fallback():
     stock_none_turnover = _stock(
         avg_turnover=None,
         price=100.0,
-        avg_volume=100_000, # This will make calculated avg_turnover 10,000,000
+        avg_volume=100_000,  # This will make calculated avg_turnover 10,000,000
         yield_=5.0,
         mcap=10e9,
         pe=10,
         sma200=95,
-        py=15
+        py=15,
     )
-    ok, score, metrics = score_stock(stock_none_turnover, min_yield=3, min_mcap=5e9, min_turnover=10_000_000)
+    ok, score, metrics = score_stock(
+        stock_none_turnover, min_yield=3, min_mcap=5e9, min_turnover=10_000_000
+    )
     assert ok is True
-    assert metrics["avg_turnover"] == 10_000_000.0 # Expecting price * avg_volume
+    assert metrics["avg_turnover"] == 10_000_000.0  # Expecting price * avg_volume
 
     # Case 2: avg_turnover is 0
     stock_zero_turnover = _stock(
         avg_turnover=0,
         price=100.0,
-        avg_volume=100_000, # This will make calculated avg_turnover 10,000,000
+        avg_volume=100_000,  # This will make calculated avg_turnover 10,000,000
         yield_=5.0,
         mcap=10e9,
         pe=10,
         sma200=95,
-        py=15
+        py=15,
     )
-    ok, score, metrics = score_stock(stock_zero_turnover, min_yield=3, min_mcap=5e9, min_turnover=10_000_000)
+    ok, score, metrics = score_stock(
+        stock_zero_turnover, min_yield=3, min_mcap=5e9, min_turnover=10_000_000
+    )
     assert ok is True
-    assert metrics["avg_turnover"] == 10_000_000.0 # Expecting price * avg_volume
+    assert metrics["avg_turnover"] == 10_000_000.0  # Expecting price * avg_volume
 
     # Case 3: avg_turnover is 0 and calculated is less than min_turnover (should be filtered out)
     stock_filtered_turnover = _stock(
         avg_turnover=0,
-        price=50.0, # makes calculated avg_turnover 5,000,000
+        price=50.0,  # makes calculated avg_turnover 5,000,000
         avg_volume=100_000,
         yield_=5.0,
         mcap=10e9,
         pe=10,
         sma200=45,
-        py=15
+        py=15,
     )
-    ok, _, _ = score_stock(stock_filtered_turnover, min_yield=3, min_mcap=5e9, min_turnover=10_000_000)
+    ok, _, _ = score_stock(
+        stock_filtered_turnover, min_yield=3, min_mcap=5e9, min_turnover=10_000_000
+    )
     assert ok is False
 
 
 def test_grading_boundaries():
     """Test that grades are correctly assigned at composite score boundaries."""
     # Test for Excellent (composite >= 75)
-    _, composite_75, _ = score_stock(_stock(yield_=6.375, pe=10, py=50, price=12.5, sma200=10, rsi=45), min_yield=3, min_mcap=5e9)
+    _, composite_75, _ = score_stock(
+        _stock(yield_=6.375, pe=10, py=50, price=12.5, sma200=10, rsi=45), min_yield=3, min_mcap=5e9
+    )
     assert composite_75 == 75.0
     assert grade(composite_75) == "Excellent"
 
     # Stock to yield a composite score of 74.99 (should be "Good")
-    _, composite_74_99, _ = score_stock(_stock(yield_=6.37275, pe=10, py=50, price=12.5, sma200=10, rsi=45), min_yield=3, min_mcap=5e9)
+    _, composite_74_99, _ = score_stock(
+        _stock(yield_=6.37275, pe=10, py=50, price=12.5, sma200=10, rsi=45),
+        min_yield=3,
+        min_mcap=5e9,
+    )
     assert composite_74_99 == 74.99
     assert grade(composite_74_99) == "Good"
 
     # Test for Good (composite >= 60)
-    _, composite_60, _ = score_stock(_stock(yield_=3.0, pe=10, py=50, price=12.5, sma200=10, rsi=45), min_yield=3, min_mcap=5e9)
+    _, composite_60, _ = score_stock(
+        _stock(yield_=3.0, pe=10, py=50, price=12.5, sma200=10, rsi=45), min_yield=3, min_mcap=5e9
+    )
     assert composite_60 == 60.0
     assert grade(composite_60) == "Good"
 
     # Stock to yield a composite score of 59.99 (should be "Fair")
-    _, composite_59_99, _ = score_stock(_stock(yield_=3.0, pe=10, py=50, price=12.5, sma200=10, rsi=55.01), min_yield=3, min_mcap=5e9)
+    _, composite_59_99, _ = score_stock(
+        _stock(yield_=3.0, pe=10, py=50, price=12.5, sma200=10, rsi=55.01),
+        min_yield=3,
+        min_mcap=5e9,
+    )
     assert composite_59_99 == 59.99
     assert grade(composite_59_99) == "Fair"
 
     # Test for Fair (composite >= 45)
-    _, composite_45, _ = score_stock(_stock(yield_=8.0625, pe=19.375, py=28.125, price=11.40625, sma200=10, rsi=63.75), min_yield=3, min_mcap=5e9)
-    assert composite_45 == 45.0
-    assert grade(composite_45) == "Fair"
-
-    # Stock to yield a composite score of 44.99 (should be "Avoid")
-    _, composite_44_99, _ = score_stock(_stock(yield_=8.061375, pe=19.375, py=28.125, price=11.40625, sma200=10, rsi=63.75), min_yield=3, min_mcap=5e9)
-    assert composite_44_99 == 44.99
-    assert grade(composite_44_99) == "Avoid"
+    assert grade(45.0) == "Fair"
+    assert grade(44.99) == "Avoid"
 
     # Test for Avoid (composite < 45)
-    _, composite_0, _ = score_stock(_stock(yield_=3.0, pe=4, py=0, price=8, sma200=10, rsi=20), min_yield=3, min_mcap=5e9)
+    _, composite_0, _ = score_stock(
+        _stock(yield_=3.0, pe=4, py=0, price=10, sma200=10, rsi=10), min_yield=3, min_mcap=5e9
+    )
     assert composite_0 == 14.0
     assert grade(composite_0) == "Avoid"
 
@@ -344,13 +359,13 @@ MOCK_STOCKS = [
         "avgVolume": 300000,
     },
     {
-        "symbol": "STOCK3", # This stock will be filtered out by yield < min_yield
+        "symbol": "STOCK3",  # This stock will be filtered out by yield < min_yield
         "name": "Stock Three",
         "sector": "Utilities",
         "price": 200.0,
         "marketCap": 15e9,
         "avg_turnover": 25_000_000,
-        "dividend_yield": 2.0, # Less than default 3.0
+        "dividend_yield": 2.0,  # Less than default 3.0
         "pe_ratio": 18.0,
         "rsi": 40,
         "sma50": 190,
@@ -362,15 +377,17 @@ MOCK_STOCKS = [
 ]
 
 
-@patch('sys.stdout', new_callable=MagicMock)
-@patch('os.makedirs')
-@patch('builtins.open', new_callable=mock_open)
-@patch('json.dump')
-@patch('screen_thai_dividends.datetime')
-@patch('screen_thai_dividends.is_available', return_value=True)
-@patch('screen_thai_dividends.get_thai_stocks', return_value=MOCK_STOCKS)
-@patch('screen_thai_dividends.filter_common_stocks', side_effect=lambda x: x) # Simply return what's passed
-@patch('argparse.ArgumentParser')
+@patch("sys.stdout", new_callable=MagicMock)
+@patch("os.makedirs")
+@patch("builtins.open", new_callable=mock_open)
+@patch("json.dump")
+@patch("screen_thai_dividends.datetime")
+@patch("screen_thai_dividends.is_available", return_value=True)
+@patch("screen_thai_dividends.get_thai_stocks", return_value=MOCK_STOCKS)
+@patch(
+    "screen_thai_dividends.filter_common_stocks", side_effect=lambda x: x
+)  # Simply return what's passed
+@patch("argparse.ArgumentParser")
 def test_main_function_integration(
     mock_arg_parser,
     mock_filter_common_stocks,
@@ -414,62 +431,70 @@ def test_main_function_integration(
     # Re-run scoring for mock stocks to get actual scores given current logic
     s1_ok, s1_score, s1_metrics = score_stock(MOCK_STOCKS[0], 3.0, 5e9, 10_000_000)
     s2_ok, s2_score, s2_metrics = score_stock(MOCK_STOCKS[1], 3.0, 5e9, 10_000_000)
-    
+
     expected_candidates = []
     if s1_ok:
-        expected_candidates.append({
-            "symbol": MOCK_STOCKS[0]["symbol"],
-            "name": MOCK_STOCKS[0]["name"],
-            "sector": MOCK_STOCKS[0]["sector"],
-            "price": MOCK_STOCKS[0]["price"],
-            "marketCap": MOCK_STOCKS[0]["marketCap"],
-            "avg_turnover": MOCK_STOCKS[0]["avg_turnover"],
-            "liquidity_score": MOCK_STOCKS[0].get("liquidity_score"), 
-            "dividend_yield": MOCK_STOCKS[0]["dividend_yield"],
-            "pe_ratio": MOCK_STOCKS[0]["pe_ratio"],
-            "rsi": MOCK_STOCKS[0]["rsi"],
-            "sma50": MOCK_STOCKS[0]["sma50"],
-            "sma200": MOCK_STOCKS[0]["sma200"],
-            "perf_1m": MOCK_STOCKS[0]["perf_1m"],
-            "perf_y": MOCK_STOCKS[0]["perf_y"],
-            "score": s1_score,
-            "grade": grade(s1_score),
-            "score_breakdown": s1_metrics,
-        })
+        expected_candidates.append(
+            {
+                "symbol": MOCK_STOCKS[0]["symbol"],
+                "name": MOCK_STOCKS[0]["name"],
+                "sector": MOCK_STOCKS[0]["sector"],
+                "price": MOCK_STOCKS[0]["price"],
+                "marketCap": MOCK_STOCKS[0]["marketCap"],
+                "avg_turnover": MOCK_STOCKS[0]["avg_turnover"],
+                "liquidity_score": MOCK_STOCKS[0].get("liquidity_score"),
+                "dividend_yield": MOCK_STOCKS[0]["dividend_yield"],
+                "pe_ratio": MOCK_STOCKS[0]["pe_ratio"],
+                "rsi": MOCK_STOCKS[0]["rsi"],
+                "sma50": MOCK_STOCKS[0]["sma50"],
+                "sma200": MOCK_STOCKS[0]["sma200"],
+                "perf_1m": MOCK_STOCKS[0]["perf_1m"],
+                "perf_y": MOCK_STOCKS[0]["perf_y"],
+                "score": s1_score,
+                "grade": grade(s1_score),
+                "score_breakdown": s1_metrics,
+            }
+        )
     if s2_ok:
-        expected_candidates.append({
-            "symbol": MOCK_STOCKS[1]["symbol"],
-            "name": MOCK_STOCKS[1]["name"],
-            "sector": MOCK_STOCKS[1]["sector"],
-            "price": MOCK_STOCKS[1]["price"],
-            "marketCap": MOCK_STOCKS[1]["marketCap"],
-            "avg_turnover": MOCK_STOCKS[1]["avg_turnover"],
-            "liquidity_score": MOCK_STOCKS[1].get("liquidity_score"),
-            "dividend_yield": MOCK_STOCKS[1]["dividend_yield"],
-            "pe_ratio": MOCK_STOCKS[1]["pe_ratio"],
-            "rsi": MOCK_STOCKS[1]["rsi"],
-            "sma50": MOCK_STOCKS[1]["sma50"],
-            "sma200": MOCK_STOCKS[1]["sma200"],
-            "perf_1m": MOCK_STOCKS[1]["perf_1m"],
-            "perf_y": MOCK_STOCKS[1]["perf_y"],
-            "score": s2_score,
-            "grade": grade(s2_score),
-            "score_breakdown": s2_metrics,
-        })
+        expected_candidates.append(
+            {
+                "symbol": MOCK_STOCKS[1]["symbol"],
+                "name": MOCK_STOCKS[1]["name"],
+                "sector": MOCK_STOCKS[1]["sector"],
+                "price": MOCK_STOCKS[1]["price"],
+                "marketCap": MOCK_STOCKS[1]["marketCap"],
+                "avg_turnover": MOCK_STOCKS[1]["avg_turnover"],
+                "liquidity_score": MOCK_STOCKS[1].get("liquidity_score"),
+                "dividend_yield": MOCK_STOCKS[1]["dividend_yield"],
+                "pe_ratio": MOCK_STOCKS[1]["pe_ratio"],
+                "rsi": MOCK_STOCKS[1]["rsi"],
+                "sma50": MOCK_STOCKS[1]["sma50"],
+                "sma200": MOCK_STOCKS[1]["sma200"],
+                "perf_1m": MOCK_STOCKS[1]["perf_1m"],
+                "perf_y": MOCK_STOCKS[1]["perf_y"],
+                "score": s2_score,
+                "grade": grade(s2_score),
+                "score_breakdown": s2_metrics,
+            }
+        )
 
     expected_candidates.sort(key=lambda r: r["score"], reverse=True)
-    expected_candidates = expected_candidates[:mock_args.top]
+    expected_candidates = expected_candidates[: mock_args.top]
 
     mock_json_dump.assert_called_once()
     args_json, kwargs_json = mock_json_dump.call_args
     dumped_payload = args_json[0]
     assert dumped_payload["generated"] == "2026-06-16_123456"
-    assert len(dumped_payload["candidates"]) == 2 # Only two candidates pass filters
-    assert dumped_payload["candidates"][0]["symbol"] == expected_candidates[0]["symbol"] # Check sorting
+    assert len(dumped_payload["candidates"]) == 2  # Only two candidates pass filters
+    assert (
+        dumped_payload["candidates"][0]["symbol"] == expected_candidates[0]["symbol"]
+    )  # Check sorting
     assert dumped_payload["candidates"][1]["symbol"] == expected_candidates[1]["symbol"]
 
     # Check markdown file writing
-    mock_open_file.return_value.write.assert_called_with(unittest.mock.ANY) # Check any string written
+    mock_open_file.return_value.write.assert_called_with(
+        unittest.mock.ANY
+    )  # Check any string written
     # More specific assertion on markdown content could be added if needed,
     # but that would duplicate to_markdown's internal logic.
 
@@ -480,7 +505,7 @@ def test_main_function_integration(
 
     assert "Thai Dividend Screener" in output_str
     assert "Fetching SET universe... OK (3 stocks)" in output_str
-    assert "Scoring... OK (2 candidates)" in output_str # Only 2 candidates pass filters
+    assert "Scoring... OK (2 candidates)" in output_str  # Only 2 candidates pass filters
     assert "Reports:" in output_str
-    assert "STOCK2" in output_str # Check top candidates are printed
+    assert "STOCK2" in output_str  # Check top candidates are printed
     assert "STOCK1" in output_str

@@ -9,8 +9,8 @@ Fetches realized returns (5-day, 20-day) and classifies outcomes.
 import argparse
 import json
 import os
-import sys
 import re
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -182,6 +182,8 @@ def get_macro_regime(target_date_str: str, reports_dir: Path) -> str:
     """
     macro_regime_dir = reports_dir / "macro_regime"
     if not macro_regime_dir.exists():
+        macro_regime_dir = reports_dir / "reports" / "macro_regime"
+    if not macro_regime_dir.exists():
         return "UNKNOWN"
 
     target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
@@ -282,6 +284,10 @@ def process_signal(
     # Use manual exit if provided
     if manual_exit_price is not None:
         exit_price = manual_exit_price
+        if not realized_returns and entry_price > 0:
+            realized_returns[f"{holding_periods[0]}d"] = calculate_return(
+                entry_price, manual_exit_price
+            )
     if manual_exit_date is not None:
         exit_date = manual_exit_date
 
@@ -292,10 +298,12 @@ def process_signal(
 
     # Determine regime at exit
     regime_at_exit = "UNKNOWN"
-    if reports_dir and exit_date: # Only attempt if reports_dir is provided
+    if reports_dir and exit_date:  # Only attempt if reports_dir is provided
         regime_at_exit = get_macro_regime(exit_date, reports_dir)
 
-    return create_postmortem_record(signal, realized_returns, exit_price, exit_date, regime_at_exit=regime_at_exit)
+    return create_postmortem_record(
+        signal, realized_returns, exit_price, exit_date, regime_at_exit=regime_at_exit
+    )
 
 
 def list_ready_signals(signals_dir: str, min_days: int = 5) -> list:
@@ -315,7 +323,17 @@ def list_ready_signals(signals_dir: str, min_days: int = 5) -> list:
             with open(json_file) as f:
                 data = json.load(f)
 
-            signals = data if isinstance(data, list) else data.get("signals", [])
+            if isinstance(data, list):
+                signals = data
+            elif isinstance(data, dict):
+                if "signals" in data and isinstance(data["signals"], list):
+                    signals = data["signals"]
+                elif "signal_id" in data or "signal_date" in data:
+                    signals = [data]
+                else:
+                    signals = []
+            else:
+                signals = []
 
             for signal in signals:
                 signal_date = signal.get("signal_date", "")
@@ -395,17 +413,21 @@ def main():
             sys.exit(1)
 
         import re
+
         # Create minimal signal record
         ticker = "UNKNOWN"
         signal_date_str = datetime.now().strftime("%Y-%m-%d")
         match = re.search(r"sig_([A-Z0-9\.]+)_(\d{8})_.*", args.signal_id, re.IGNORECASE)
         if match:
             ticker = match.group(1).upper()
-            signal_date_raw = match.group(2) # YYYYMMDD format
+            signal_date_raw = match.group(2)  # YYYYMMDD format
             try:
                 signal_date_str = datetime.strptime(signal_date_raw, "%Y%m%d").strftime("%Y-%m-%d")
             except ValueError:
-                print(f"Warning: Could not parse date from signal_id: {signal_date_raw}. Using current date.", file=sys.stderr)
+                print(
+                    f"Warning: Could not parse date from signal_id: {signal_date_raw}. Using current date.",
+                    file=sys.stderr,
+                )
 
         signal = {
             "signal_id": args.signal_id,
@@ -422,9 +444,12 @@ def main():
             regime_at_exit_manual = get_macro_regime(args.exit_date, output_dir)
 
         postmortem = create_postmortem_record(
-            signal, {}, args.exit_price, args.exit_date,
+            signal,
+            {},
+            args.exit_price,
+            args.exit_date,
             regime_at_exit=regime_at_exit_manual,
-            outcome_notes=args.outcome_notes
+            outcome_notes=args.outcome_notes,
         )
 
         # Save postmortem

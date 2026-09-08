@@ -147,7 +147,9 @@ class TestGetMarketStatus:
         # Mon Jan 6, 2025 02:00 UTC -> 11:00 JST -> Tokyo Market: Trading
         utc_now = datetime(2025, 1, 6, 2, 0, tzinfo=ZoneInfo("UTC"))
         mock_datetime_module.now.return_value = utc_now
-        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.now.side_effect = (
+            lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        )
         mock_datetime_module.time = time
         mock_datetime_module.strptime = datetime.strptime
 
@@ -159,7 +161,9 @@ class TestGetMarketStatus:
         # Mon Jan 6, 2025 07:00 UTC -> 16:00 JST -> Tokyo Market: Closed
         utc_now = datetime(2025, 1, 6, 7, 0, tzinfo=ZoneInfo("UTC"))
         mock_datetime_module.now.return_value = utc_now
-        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.now.side_effect = (
+            lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        )
         mock_datetime_module.time = time
         mock_datetime_module.strptime = datetime.strptime
 
@@ -171,7 +175,9 @@ class TestGetMarketStatus:
         # Mon Jan 6, 2025 22:00 UTC -> Tue Jan 7, 07:00 JST -> Tokyo Market: Pre-market/After hours
         utc_now = datetime(2025, 1, 6, 22, 0, tzinfo=ZoneInfo("UTC"))
         mock_datetime_module.now.return_value = utc_now
-        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.now.side_effect = (
+            lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        )
         mock_datetime_module.time = time
         mock_datetime_module.strptime = datetime.strptime
 
@@ -183,7 +189,9 @@ class TestGetMarketStatus:
         # Sat Jan 4, 2025 12:00 UTC -> Saturday -> All markets closed
         utc_now = datetime(2025, 1, 4, 12, 0, tzinfo=ZoneInfo("UTC"))
         mock_datetime_module.now.return_value = utc_now
-        mock_datetime_module.now.side_effect = lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        mock_datetime_module.now.side_effect = (
+            lambda tz=None: utc_now if tz is None else utc_now.astimezone(tz)
+        )
         mock_datetime_module.time = time
         mock_datetime_module.strptime = datetime.strptime
 

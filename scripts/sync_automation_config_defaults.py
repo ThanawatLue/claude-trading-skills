@@ -37,6 +37,7 @@ FORCE_TEMPLATE_PATHS = (
     "auto_paper.source_rules.thai-swing-dip.max_open",
     "auto_paper.source_rules.thai-swing-dip.max_hold_days",
     "auto_paper.source_rules.thai-swing-dip.time_stop_min_r",
+    "auto_paper.source_rules.thai-swing-dip.target_r",
     "auto_paper.source_rules.thai-swing-dip.take_profit_r",
     "auto_paper.source_rules.thai-swing-dip.trail_after_r",
     "auto_paper.source_rules.thai-swing-dip.trail_stop_r",
@@ -45,6 +46,16 @@ FORCE_TEMPLATE_PATHS = (
     "auto_paper.source_rules.thai-swing-momentum.max_open",
     "auto_paper.source_rules.thai-swing-momentum.max_hold_days",
     "auto_paper.source_rules.thai-swing-momentum.time_stop_min_r",
+    "auto_paper.source_rules.thai-swing-momentum.target_r",
+    "auto_paper.source_rules.thai-swing-momentum.take_profit_r",
+    "auto_paper.source_rules.thai-swing-momentum.trail_after_r",
+    "auto_paper.source_rules.thai-swing-momentum.trail_stop_r",
+    "auto_paper.source_rules.vcp-screener.target_r",
+    "auto_paper.source_rules.vcp-screener.take_profit_r",
+    "auto_paper.source_rules.vcp-screener.max_hold_days",
+    "auto_paper.source_rules.vcp-screener.time_stop_min_r",
+    "auto_paper.source_rules.vcp-screener.trail_after_r",
+    "auto_paper.source_rules.vcp-screener.trail_stop_r",
 )
 
 

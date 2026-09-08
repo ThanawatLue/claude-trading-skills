@@ -28,8 +28,10 @@ from pathlib import Path
 # Add project root to sys.path for importing scripts.lib.tv_client
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from scripts.lib.tv_client import (
-    get_us_stocks,
     clean_for_json,
+    get_us_stocks,
+)
+from scripts.lib.tv_client import (
     is_available as tv_available,
 )
 
@@ -231,7 +233,12 @@ def to_markdown(buckets: dict[str, list[dict]], min_turnover: float, ts: str) ->
         f"**Generated:** {ts}  |  **Market:** US  |  **Liquidity Floor:** ${min_turnover:,.2f}",
         "",
     ]
-    emojis = {"growth": "🚀 Growth", "value": "💰 Value", "momentum": "🔥 Momentum", "mean_reversion": "🔄 Mean-Reversion"}
+    emojis = {
+        "growth": "🚀 Growth",
+        "value": "💰 Value",
+        "momentum": "🔥 Momentum",
+        "mean_reversion": "🔄 Mean-Reversion",
+    }
     for k, name in emojis.items():
         list_ = buckets.get(k, [])
         lines += [f"## {name} ({len(list_)} candidates)", ""]
@@ -239,7 +246,10 @@ def to_markdown(buckets: dict[str, list[dict]], min_turnover: float, ts: str) ->
             lines.append("No candidates found meeting the filters today.")
             lines.append("")
             continue
-        lines += ["| Ticker | Company | Price | Sector | Score |", "|--------|---------|-------|--------|-------|"]
+        lines += [
+            "| Ticker | Company | Price | Sector | Score |",
+            "|--------|---------|-------|--------|-------|",
+        ]
         for s in list_[:15]:
             lines.append(
                 f"| **{s['symbol']}** | {s['name'][:24]} | ${s['price']:.2f} | "
@@ -308,7 +318,7 @@ def main():
     # Sort each bucket
     for k in buckets:
         buckets[k].sort(key=lambda x: x["score"], reverse=True)
-        buckets[k] = buckets[k][:args.top]
+        buckets[k] = buckets[k][: args.top]
 
     print(f"\nBucket Results (Top {args.top}):")
     print(f"  Growth:         {len(buckets['growth'])} stocks")
@@ -327,10 +337,7 @@ def main():
         "min_avg_turnover": MIN_AVG_TURNOVER_USD,
         "top_per_bucket": args.top,
         "criteria": WATCHLIST_CRITERIA,
-        "buckets": {
-            k: [serialize_candidate(s) for s in v]
-            for k, v in buckets.items()
-        },
+        "buckets": {k: [serialize_candidate(s) for s in v] for k, v in buckets.items()},
         "metadata": {"market": "US", "source": "tradingview"},
     }
 
@@ -339,7 +346,7 @@ def main():
     with open(base + ".md", "w", encoding="utf-8") as f:
         f.write(to_markdown(buckets, MIN_AVG_TURNOVER_USD, ts))
 
-    print(f"\nReports:")
+    print("\nReports:")
     print(f"  {base}.json")
     print(f"  {base}.md")
 

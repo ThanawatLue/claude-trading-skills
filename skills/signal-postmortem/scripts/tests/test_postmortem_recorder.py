@@ -1,23 +1,19 @@
 import json
-import re
-import os
-from pathlib import Path
+import sys
 from datetime import datetime, timedelta
-from unittest.mock import mock_open, patch, MagicMock
+from unittest.mock import patch
+
 import pytest
 from postmortem_recorder import (
     calculate_return,
     classify_outcome,
     create_postmortem_record,
     fetch_price_data,
-    process_signal,
+    get_macro_regime,  # New import
     list_ready_signals,
-    get_macro_regime, # New import
-    get_fmp_api_key # New import
+    process_signal,
 )
-from postmortem_recorder import main as recorder_main # For main function testing
-import requests
-import sys
+from postmortem_recorder import main as recorder_main  # For main function testing
 
 
 class TestCalculateReturn:
@@ -247,11 +243,13 @@ class TestNewPostmortemRecorderFunctions:
     @pytest.fixture
     def mock_fmp_response(self, mocker):
         """Fixture to mock requests.get for FMP API."""
+
         def _mock_fmp(status_code, json_data):
             mock_resp = mocker.Mock()
             mock_resp.status_code = status_code
             mock_resp.json.return_value = json_data
-            mocker.patch('requests.get', return_value=mock_resp)
+            mocker.patch("requests.get", return_value=mock_resp)
+
         return _mock_fmp
 
     @pytest.fixture
@@ -265,9 +263,15 @@ class TestNewPostmortemRecorderFunctions:
     def test_get_macro_regime_found(self, setup_macro_regime_dir):
         reports_dir, macro_regime_dir = setup_macro_regime_dir
         # Create some mock regime files
-        (macro_regime_dir / "macro_regime_2023-01-01_100000.json").write_text(json.dumps({"regime": "RISK_ON"}))
-        (macro_regime_dir / "macro_regime_2023-01-05_100000.json").write_text(json.dumps({"regime": "RISK_OFF"}))
-        (macro_regime_dir / "macro_regime_2023-01-10_100000.json").write_text(json.dumps({"regime": "TRANSITIONAL"}))
+        (macro_regime_dir / "macro_regime_2023-01-01_100000.json").write_text(
+            json.dumps({"regime": "RISK_ON"})
+        )
+        (macro_regime_dir / "macro_regime_2023-01-05_100000.json").write_text(
+            json.dumps({"regime": "RISK_OFF"})
+        )
+        (macro_regime_dir / "macro_regime_2023-01-10_100000.json").write_text(
+            json.dumps({"regime": "TRANSITIONAL"})
+        )
 
         assert get_macro_regime("2023-01-06", reports_dir) == "RISK_OFF"
         assert get_macro_regime("2023-01-01", reports_dir) == "RISK_ON"
@@ -286,8 +290,12 @@ class TestNewPostmortemRecorderFunctions:
 
     def test_get_macro_regime_future_files(self, setup_macro_regime_dir):
         reports_dir, macro_regime_dir = setup_macro_regime_dir
-        (macro_regime_dir / "macro_regime_2023-01-10_100000.json").write_text(json.dumps({"regime": "RISK_ON"}))
-        assert get_macro_regime("2023-01-05", reports_dir) == "UNKNOWN" # Should not pick up future file
+        (macro_regime_dir / "macro_regime_2023-01-10_100000.json").write_text(
+            json.dumps({"regime": "RISK_ON"})
+        )
+        assert (
+            get_macro_regime("2023-01-05", reports_dir) == "UNKNOWN"
+        )  # Should not pick up future file
 
     def test_fetch_price_data_stable_api_success(self, mock_fmp_response):
         mock_fmp_response(200, {"historical": [{"date": "2023-01-01", "close": 100.0}]})
@@ -295,7 +303,14 @@ class TestNewPostmortemRecorderFunctions:
         assert prices == {"2023-01-01": 100.0}
 
     def test_fetch_price_data_v3_api_success(self, mock_fmp_response):
-        mock_fmp_response(200, {"historicalStockList": [{"symbol": "AAPL", "historical": [{"date": "2023-01-01", "close": 100.0}]}]})
+        mock_fmp_response(
+            200,
+            {
+                "historicalStockList": [
+                    {"symbol": "AAPL", "historical": [{"date": "2023-01-01", "close": 100.0}]}
+                ]
+            },
+        )
         prices = fetch_price_data("AAPL", "2023-01-01", "2023-01-01", "fake_key")
         assert prices == {"2023-01-01": 100.0}
 
@@ -307,15 +322,16 @@ class TestNewPostmortemRecorderFunctions:
         assert "Warning: Failed to fetch price data" in captured.err
 
     def test_fetch_price_data_no_requests_module(self, mocker):
-        mocker.patch('postmortem_recorder.HAS_REQUESTS', False)
+        mocker.patch("postmortem_recorder.HAS_REQUESTS", False)
         prices = fetch_price_data("AAPL", "2023-01-01", "2023-01-01", "fake_key")
         assert prices == {}
 
     def test_process_signal_successful_recording(self, mocker, tmp_path):
-        mocker.patch('postmortem_recorder.fetch_price_data', return_value={
-            "2023-01-01": 100.0, "2023-01-06": 105.0, "2023-01-26": 110.0
-        })
-        mocker.patch('postmortem_recorder.get_macro_regime', return_value="RISK_ON")
+        mocker.patch(
+            "postmortem_recorder.fetch_price_data",
+            return_value={"2023-01-01": 100.0, "2023-01-06": 105.0, "2023-01-21": 110.0},
+        )
+        mocker.patch("postmortem_recorder.get_macro_regime", return_value="RISK_ON")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
 
@@ -325,8 +341,8 @@ class TestNewPostmortemRecorderFunctions:
             "signal_date": "2023-01-01",
             "predicted_direction": "LONG",
             "source_skill": "test_skill",
-            "entry_price": 0.0, # Will be fetched
-            "regime": "RISK_ON"
+            "entry_price": 0.0,  # Will be fetched
+            "regime": "RISK_ON",
         }
         postmortem = process_signal(signal, [5, 20], "fake_key", reports_dir=reports_dir)
         assert postmortem is not None
@@ -336,8 +352,8 @@ class TestNewPostmortemRecorderFunctions:
         assert postmortem["regime_at_exit"] == "RISK_ON"
 
     def test_process_signal_manual_exit(self, mocker, tmp_path):
-        mocker.patch('postmortem_recorder.fetch_price_data', return_value={}) # No auto-fetch
-        mocker.patch('postmortem_recorder.get_macro_regime', return_value="RISK_OFF")
+        mocker.patch("postmortem_recorder.fetch_price_data", return_value={})  # No auto-fetch
+        mocker.patch("postmortem_recorder.get_macro_regime", return_value="RISK_OFF")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
 
@@ -348,10 +364,15 @@ class TestNewPostmortemRecorderFunctions:
             "predicted_direction": "SHORT",
             "source_skill": "test_skill",
             "entry_price": 100.0,
-            "regime": "RISK_ON"
+            "regime": "RISK_ON",
         }
         postmortem = process_signal(
-            signal, [5], api_key="fake_key", manual_exit_price=90.0, manual_exit_date="2023-01-05", reports_dir=reports_dir
+            signal,
+            [5],
+            api_key="fake_key",  # pragma: allowlist secret
+            manual_exit_price=90.0,
+            manual_exit_date="2023-01-05",
+            reports_dir=reports_dir,
         )
         assert postmortem is not None
         assert postmortem["outcome_category"] == "TRUE_POSITIVE"
@@ -360,10 +381,13 @@ class TestNewPostmortemRecorderFunctions:
         assert postmortem["regime_at_exit"] == "RISK_OFF"
 
     def test_process_signal_missing_data(self, mocker, capsys, tmp_path):
-        mocker.patch('postmortem_recorder.fetch_price_data', return_value={
-            "2023-01-01": 100.0 # Only entry price available
-        })
-        mocker.patch('postmortem_recorder.get_macro_regime', return_value="UNKNOWN")
+        mocker.patch(
+            "postmortem_recorder.fetch_price_data",
+            return_value={
+                "2023-01-01": 100.0  # Only entry price available
+            },
+        )
+        mocker.patch("postmortem_recorder.get_macro_regime", return_value="UNKNOWN")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
 
@@ -374,13 +398,13 @@ class TestNewPostmortemRecorderFunctions:
             "predicted_direction": "LONG",
             "source_skill": "test_skill",
             "entry_price": 0.0,
-            "regime": "RISK_ON"
+            "regime": "RISK_ON",
         }
         postmortem = process_signal(signal, [5, 20], "fake_key", reports_dir=reports_dir)
         assert postmortem is not None
         # Should default to entry price for exit if no data, leading to NEUTRAL if no returns
         assert postmortem["outcome_category"] == "NEUTRAL"
-        captured = capsys.readouterr()
+        _ = capsys.readouterr()
         # Expecting a warning about no price for 5d or 20d, but current implementation does not print it.
         # It just won't add the return.
         assert "5d" not in postmortem["realized_returns"]
@@ -395,9 +419,9 @@ class TestNewPostmortemRecorderFunctions:
             "predicted_direction": "LONG",
             "source_skill": "test_skill",
             "entry_price": 0.0,
-            "regime": "RISK_ON"
+            "regime": "RISK_ON",
         }
-        postmortem = process_signal(signal, [5], reports_dir=reports_dir) # No api_key
+        postmortem = process_signal(signal, [5], reports_dir=reports_dir)  # No api_key
         assert postmortem is None
         captured = capsys.readouterr()
         assert "Warning: No entry price for TEST on 2023-01-01" in captured.err
@@ -407,8 +431,17 @@ class TestNewPostmortemRecorderFunctions:
         signals_dir.mkdir(parents=True)
 
         # Create mock signal files
-        (signals_dir / "signal_old.json").write_text(json.dumps({"signal_date": "2023-01-01", "signal_id": "old_sig"}))
-        (signals_dir / "signal_recent.json").write_text(json.dumps({"signal_date": (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"), "signal_id": "recent_sig"}))
+        (signals_dir / "signal_old.json").write_text(
+            json.dumps({"signal_date": "2023-01-01", "signal_id": "old_sig"})
+        )
+        (signals_dir / "signal_recent.json").write_text(
+            json.dumps(
+                {
+                    "signal_date": (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
+                    "signal_id": "recent_sig",
+                }
+            )
+        )
         (signals_dir / "signal_invalid.json").write_text("invalid json")
         (signals_dir / "signal_empty.json").write_text(json.dumps({}))
 
@@ -417,8 +450,8 @@ class TestNewPostmortemRecorderFunctions:
         assert ready_signals[0]["signal_id"] == "old_sig"
 
         # Test with no ready signals
-        ready_signals_none = list_ready_signals(str(signals_dir), min_days=0)
-        assert len(ready_signals_none) == 1 # "old_sig" is still old enough for min_days=0 too
+        ready_signals_none = list_ready_signals(str(signals_dir), min_days=5000)
+        assert len(ready_signals_none) == 0
 
     def test_list_ready_signals_empty_dir(self, tmp_path):
         signals_dir = tmp_path / "empty_signals"
@@ -431,36 +464,45 @@ class TestNewPostmortemRecorderFunctions:
         ready_signals = list_ready_signals(str(signals_dir))
         assert len(ready_signals) == 0
 
-    @patch('sys.exit')
-    @patch('builtins.print')
+    @patch("sys.exit")
+    @patch("builtins.print")
     def test_main_list_ready(self, mock_print, mock_exit, mocker, tmp_path):
         signals_dir = tmp_path / "state" / "signals"
         signals_dir.mkdir(parents=True)
-        (signals_dir / "signal_ready.json").write_text(json.dumps({"signal_date": "2023-01-01", "signal_id": "ready_sig"}))
+        (signals_dir / "signal_ready.json").write_text(
+            json.dumps({"signal_date": "2023-01-01", "signal_id": "ready_sig"})
+        )
 
         test_args = ["--list-ready", "--signals-dir", str(signals_dir), "--min-days", "0"]
-        mocker.patch('sys.argv', ['postmortem_recorder.py'] + test_args)
+        mocker.patch("sys.argv", ["postmortem_recorder.py"] + test_args)
         recorder_main()
         mock_print.assert_any_call("Found 1 signals ready for postmortem:")
         mock_print.assert_any_call("  ready_sig: N/A on 2023-01-01")
         mock_exit.assert_not_called()
 
-    @patch('sys.exit')
-    @patch('builtins.print')
+    @patch("sys.exit")
+    @patch("builtins.print")
     def test_main_manual_recording(self, mock_print, mock_exit, mocker, tmp_path):
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "macro_regime" ).mkdir()
-        (reports_dir / "macro_regime" / "macro_regime_2023-01-05_100000.json").write_text(json.dumps({"regime": "RISK_OFF"}))
+        (reports_dir / "macro_regime").mkdir()
+        (reports_dir / "macro_regime" / "macro_regime_2023-01-05_100000.json").write_text(
+            json.dumps({"regime": "RISK_OFF"})
+        )
 
         test_args = [
-            "--signal-id", "sig_AAPL_20230101_XYZ",
-            "--exit-price", "150.0",
-            "--exit-date", "2023-01-05",
-            "--output-dir", str(tmp_path),
-            "--outcome-notes", "Test notes"
+            "--signal-id",
+            "sig_AAPL_20230101_XYZ",
+            "--exit-price",
+            "150.0",
+            "--exit-date",
+            "2023-01-05",
+            "--output-dir",
+            str(tmp_path),
+            "--outcome-notes",
+            "Test notes",
         ]
-        mocker.patch('sys.argv', ['postmortem_recorder.py'] + test_args)
+        mocker.patch("sys.argv", ["postmortem_recorder.py"] + test_args)
         recorder_main()
 
         output_file = tmp_path / "postmortems" / "pm_sig_AAPL_20230101_XYZ.json"
@@ -474,30 +516,56 @@ class TestNewPostmortemRecorderFunctions:
         assert pm["outcome_notes"] == "Test notes"
         assert pm["regime_at_exit"] == "RISK_OFF"
         mock_print.assert_any_call(f"Saved postmortem: {output_file}")
-        mock_print.assert_any_call("Outcome: NEUTRAL") # No returns in this minimal signal
+        mock_print.assert_any_call("Outcome: NEUTRAL")  # No returns in this minimal signal
         mock_exit.assert_not_called()
 
-    @patch('sys.exit')
-    @patch('builtins.print')
+    @patch("sys.exit")
+    @patch("builtins.print")
     def test_main_batch_processing(self, mock_print, mock_exit, mocker, tmp_path):
         signals_file = tmp_path / "signals.json"
-        signals_file.write_text(json.dumps([
-            {"signal_id": "sig_MSFT_20230101_A", "ticker": "MSFT", "signal_date": "2023-01-01", "predicted_direction": "LONG", "entry_price": 100.0, "regime": "RISK_ON"},
-            {"signal_id": "sig_GOOG_20230102_B", "ticker": "GOOG", "signal_date": "2023-01-02", "predicted_direction": "SHORT", "entry_price": 200.0, "regime": "RISK_OFF"}
-        ]))
+        signals_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "signal_id": "sig_MSFT_20230101_A",
+                        "ticker": "MSFT",
+                        "signal_date": "2023-01-01",
+                        "predicted_direction": "LONG",
+                        "entry_price": 100.0,
+                        "regime": "RISK_ON",
+                    },
+                    {
+                        "signal_id": "sig_GOOG_20230102_B",
+                        "ticker": "GOOG",
+                        "signal_date": "2023-01-02",
+                        "predicted_direction": "SHORT",
+                        "entry_price": 200.0,
+                        "regime": "RISK_OFF",
+                    },
+                ]
+            )
+        )
 
-        mocker.patch('postmortem_recorder.fetch_price_data', side_effect=[
-            {"2023-01-01": 100.0, "2023-01-06": 105.0}, # For MSFT (5d)
-            {"2023-01-02": 200.0, "2023-01-07": 190.0}  # For GOOG (5d)
-        ])
-        mocker.patch('postmortem_recorder.get_macro_regime', return_value="RISK_ON") # Simplistic for test
+        mocker.patch(
+            "postmortem_recorder.fetch_price_data",
+            side_effect=[
+                {"2023-01-01": 100.0, "2023-01-06": 105.0},  # For MSFT (5d)
+                {"2023-01-02": 200.0, "2023-01-07": 190.0},  # For GOOG (5d)
+            ],
+        )
+        mocker.patch(
+            "postmortem_recorder.get_macro_regime", return_value="RISK_ON"
+        )  # Simplistic for test
 
         test_args = [
-            "--signals-file", str(signals_file),
-            "--api-key", "fake_key",
-            "--output-dir", str(tmp_path)
+            "--signals-file",
+            str(signals_file),
+            "--api-key",
+            "fake_key",
+            "--output-dir",
+            str(tmp_path),
         ]
-        mocker.patch('sys.argv', ['postmortem_recorder.py'] + test_args)
+        mocker.patch("sys.argv", ["postmortem_recorder.py"] + test_args)
         recorder_main()
 
         msft_output = tmp_path / "postmortems" / "pm_sig_MSFT_20230101_A.json"
@@ -512,27 +580,33 @@ class TestNewPostmortemRecorderFunctions:
 
         with open(goog_output) as f:
             goog_pm = json.load(f)
-        assert goog_pm["outcome_category"] == "TRUE_POSITIVE" # Short, price went down
+        assert goog_pm["outcome_category"] == "TRUE_POSITIVE"  # Short, price went down
         assert goog_pm["realized_returns"]["5d"] == pytest.approx(-0.05)
 
         mock_print.assert_any_call("Processed 2/2 signals")
         mock_exit.assert_not_called()
 
-    @patch('sys.exit')
-    @patch('builtins.print')
+    @patch("sys.exit")
+    @patch("builtins.print")
     def test_main_signal_id_parsing(self, mock_print, mock_exit, mocker, tmp_path):
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "macro_regime" ).mkdir()
-        (reports_dir / "macro_regime" / "macro_regime_2023-01-05_100000.json").write_text(json.dumps({"regime": "RISK_OFF"}))
+        (reports_dir / "macro_regime").mkdir()
+        (reports_dir / "macro_regime" / "macro_regime_2023-01-05_100000.json").write_text(
+            json.dumps({"regime": "RISK_OFF"})
+        )
 
         test_args = [
-            "--signal-id", "sig_BRK.A_20230101_custom",
-            "--exit-price", "1500.0",
-            "--exit-date", "2023-01-05",
-            "--output-dir", str(tmp_path)
+            "--signal-id",
+            "sig_BRK.A_20230101_custom",
+            "--exit-price",
+            "1500.0",
+            "--exit-date",
+            "2023-01-05",
+            "--output-dir",
+            str(tmp_path),
         ]
-        mocker.patch('sys.argv', ['postmortem_recorder.py'] + test_args)
+        mocker.patch("sys.argv", ["postmortem_recorder.py"] + test_args)
         recorder_main()
 
         output_file = tmp_path / "postmortems" / "pm_sig_BRK.A_20230101_custom.json"
@@ -543,21 +617,29 @@ class TestNewPostmortemRecorderFunctions:
         assert pm["signal_date"] == "2023-01-01"
         mock_exit.assert_not_called()
 
-    @patch('sys.exit')
-    @patch('builtins.print')
-    def test_main_signal_id_parsing_invalid_date_warns(self, mock_print, mock_exit, mocker, tmp_path):
+    @patch("sys.exit")
+    @patch("builtins.print")
+    def test_main_signal_id_parsing_invalid_date_warns(
+        self, mock_print, mock_exit, mocker, tmp_path
+    ):
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "macro_regime" ).mkdir()
-        (reports_dir / "macro_regime" / "macro_regime_2023-01-05_100000.json").write_text(json.dumps({"regime": "RISK_OFF"}))
+        (reports_dir / "macro_regime").mkdir()
+        (reports_dir / "macro_regime" / "macro_regime_2023-01-05_100000.json").write_text(
+            json.dumps({"regime": "RISK_OFF"})
+        )
 
         test_args = [
-            "--signal-id", "sig_BRK.A_20239999_custom", # Invalid date
-            "--exit-price", "1500.0",
-            "--exit-date", "2023-01-05",
-            "--output-dir", str(tmp_path)
+            "--signal-id",
+            "sig_BRK.A_20239999_custom",  # Invalid date
+            "--exit-price",
+            "1500.0",
+            "--exit-date",
+            "2023-01-05",
+            "--output-dir",
+            str(tmp_path),
         ]
-        mocker.patch('sys.argv', ['postmortem_recorder.py'] + test_args)
+        mocker.patch("sys.argv", ["postmortem_recorder.py"] + test_args)
         recorder_main()
 
         output_file = tmp_path / "postmortems" / "pm_sig_BRK.A_20239999_custom.json"
@@ -565,6 +647,9 @@ class TestNewPostmortemRecorderFunctions:
         with open(output_file) as f:
             pm = json.load(f)
         assert pm["ticker"] == "BRK.A"
-        assert pm["signal_date"] == datetime.now().strftime("%Y-%m-%d") # Should be current date
-        mock_print.assert_any_call(f"Warning: Could not parse date from signal_id: 20239999. Using current date.", file=sys.stderr)
+        assert pm["signal_date"] == datetime.now().strftime("%Y-%m-%d")  # Should be current date
+        mock_print.assert_any_call(
+            "Warning: Could not parse date from signal_id: 20239999. Using current date.",
+            file=sys.stderr,
+        )
         mock_exit.assert_not_called()

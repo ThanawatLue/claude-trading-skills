@@ -356,10 +356,13 @@ def update_all() -> list[dict]:
     if thai_failures:
         print(f"Attempting TradingView fallback for Thai stocks: {thai_failures}", file=sys.stderr)
         try:
-            tv_path = Path(__file__).resolve().parents[3] / "skills" / "vcp-screener" / "scripts"
-            # Temporarily add vcp-screener to sys.path for tv_client import
-            sys.path.insert(0, str(tv_path))
-            import tv_client
+            if "tv_client" in sys.modules:
+                tv_client = sys.modules["tv_client"]
+            else:
+                try:
+                    from scripts.lib import tv_client
+                except ImportError:
+                    import tv_client
 
             if tv_client.is_available():
                 stocks = tv_client.get_thai_stocks()
@@ -387,10 +390,6 @@ def update_all() -> list[dict]:
             )
         except Exception as e:
             print(f"  TradingView fallback failed: {e}", file=sys.stderr)
-        finally:
-            # Remove vcp-screener from sys.path
-            if str(tv_path) in sys.path:
-                sys.path.remove(str(tv_path))
 
     source_rules = _load_exit_rules()
     results = []

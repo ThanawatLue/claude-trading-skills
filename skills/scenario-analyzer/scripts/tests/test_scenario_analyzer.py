@@ -71,16 +71,16 @@ def test_relative_paths_for_references(skill_md_content):
     # This regex looks for `references/` within markdown code blocks or inline code
     # to specifically target the way references are shown in SKILL.md.
     # It explicitly excludes paths starting with 'skills/' or absolute paths.
-    
+
     # Check "リファレンス読み込み" section
     ref_section_match = re.search(r"### リファレンス読み込み.*?```(.*?)```", skill_md_content, re.MULTILINE | re.DOTALL)
     assert ref_section_match, "Reference loading section not found."
     code_block = ref_section_match.group(1)
-    
+
     # Ensure no 'skills/scenario-analyzer' or similar absolute paths in the code block
     assert "skills/scenario-analyzer/" not in code_block
     assert not re.search(r"^\s*(/|\w:/)", code_block, re.MULTILINE), "Absolute path found in reference code block."
-    
+
     # Check "Resources" section
     resources_section_match = re.search(r"## Resources.*?### References(.*?)### Agents", skill_md_content, re.MULTILINE | re.DOTALL)
     assert resources_section_match, "Resources section (References subsection) not found."
@@ -90,7 +90,7 @@ def test_relative_paths_for_references(skill_md_content):
     # This pattern specifically targets markdown list items with backticks containing `references/`
     reference_path_pattern = re.compile(r"`(references/[^`]+?)`")
     found_relative_paths = reference_path_pattern.findall(resources_content)
-    
+
     # Expecting 3 reference files as per SKILL.md
     assert len(found_relative_paths) == 3, f"Expected 3 relative reference paths, found {len(found_relative_paths)}."
     for path in found_relative_paths:

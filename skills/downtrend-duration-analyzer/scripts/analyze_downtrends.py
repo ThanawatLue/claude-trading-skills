@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -18,7 +17,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-
 from yf_client import fetch_historical_prices as _yf_fetch_prices
 from yf_client import fetch_sp500_list
 

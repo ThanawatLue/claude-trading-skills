@@ -153,7 +153,9 @@ class TestLoadSkillContracts:
         from validate_workflows import _load_skill_contracts
 
         # Create dummy contracts file
-        contracts_dir = tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        contracts_dir = (
+            tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        )
         contracts_dir.mkdir(parents=True, exist_ok=True)
         (contracts_dir / "skill_contracts.json").write_text(
             json.dumps({"skill-a": {"output_fields": ["field1"]}})
@@ -172,8 +174,14 @@ class TestLoadSkillContracts:
         mock_sys_exit = mocker.patch("sys.exit")
         # Ensure contracts directory does not exist to simulate FileNotFoundError
         # Or, ensure the specific file is not there
-        (project_root / "skills" / "skill-integration-tester" / "references" / "workflow_contracts").mkdir(parents=True, exist_ok=True)
-        
+        (
+            project_root
+            / "skills"
+            / "skill-integration-tester"
+            / "references"
+            / "workflow_contracts"
+        ).mkdir(parents=True, exist_ok=True)
+
         _load_skill_contracts(project_root)
         mock_sys_exit.assert_called_once_with(1)
 
@@ -181,7 +189,9 @@ class TestLoadSkillContracts:
         from validate_workflows import _load_skill_contracts
 
         # Create malformed JSON contracts file
-        contracts_dir = tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        contracts_dir = (
+            tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        )
         contracts_dir.mkdir(parents=True, exist_ok=True)
         (contracts_dir / "skill_contracts.json").write_text("this is not json {")
 
@@ -199,7 +209,9 @@ class TestLoadHandoffContracts:
         from validate_workflows import _load_handoff_contracts
 
         # Create dummy contracts file
-        contracts_dir = tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        contracts_dir = (
+            tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        )
         contracts_dir.mkdir(parents=True, exist_ok=True)
         (contracts_dir / "handoff_contracts.json").write_text(
             json.dumps({"skill-a_skill-b": {"description": "A to B"}})
@@ -216,7 +228,13 @@ class TestLoadHandoffContracts:
         project_root = tmp_path
         mock_sys_exit = mocker.patch("sys.exit")
         # Ensure contracts directory does not exist to simulate FileNotFoundError
-        (project_root / "skills" / "skill-integration-tester" / "references" / "workflow_contracts").mkdir(parents=True, exist_ok=True)
+        (
+            project_root
+            / "skills"
+            / "skill-integration-tester"
+            / "references"
+            / "workflow_contracts"
+        ).mkdir(parents=True, exist_ok=True)
 
         _load_handoff_contracts(project_root)
         mock_sys_exit.assert_called_once_with(1)
@@ -225,7 +243,9 @@ class TestLoadHandoffContracts:
         from validate_workflows import _load_handoff_contracts
 
         # Create malformed JSON contracts file
-        contracts_dir = tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        contracts_dir = (
+            tmp_path / "skills" / "skill-integration-tester" / "references" / "workflow_contracts"
+        )
         contracts_dir.mkdir(parents=True, exist_ok=True)
         (contracts_dir / "handoff_contracts.json").write_text("this is not json [")
 
@@ -453,100 +473,111 @@ class TestCreateDryRunFixtures:
         assert len(fixtures) == 1
 
 
-        # ── Test Main Function ───────────────────────────────────────────────
+# ── Test Main Function ───────────────────────────────────────────────
 
-        class TestMainFunction:
-            def test_main_runs_successfully(self, tmp_path, mocker):
-                # Create dummy GEMINI.md and skill directories for the test
-                gemini_md_content = """\
-        ## Multi-Skill Workflows
 
-        **Daily Market Monitoring:**
-        1. Economic Calendar Fetcher \u2192 Check today's events
-        """
-            (tmp_path / "GEMINI.md").write_text(gemini_md_content)
+class TestMainFunction:
+    def test_main_runs_successfully(self, tmp_path, mocker):
+        gemini_md_content = """\
+## Multi-Skill Workflows
 
-            economic_calendar_fetcher_dir = tmp_path / "skills" / "economic-calendar-fetcher"
-            economic_calendar_fetcher_dir.mkdir(parents=True, exist_ok=True)
-            (economic_calendar_fetcher_dir / "SKILL.md").write_text("---\nname: economic-calendar-fetcher\n---\n")
+**Daily Market Monitoring:**
+1. Economic Calendar Fetcher \u2192 Check today's events
+"""
+        (tmp_path / "GEMINI.md").write_text(gemini_md_content, encoding="utf-8")
 
-            # Mock sys.argv to pass command-line arguments
-            mocker.patch("sys.argv", [
+        economic_calendar_fetcher_dir = tmp_path / "skills" / "economic-calendar-fetcher"
+        economic_calendar_fetcher_dir.mkdir(parents=True, exist_ok=True)
+        (economic_calendar_fetcher_dir / "SKILL.md").write_text(
+            "---\nname: economic-calendar-fetcher\n---\n", encoding="utf-8"
+        )
+
+        mocker.patch(
+            "sys.argv",
+            [
                 "validate_workflows.py",
-                "--gemini-md", str(tmp_path / "GEMINI.md"),
-                "--skills-dir", str(tmp_path / "skills"),
-                "--output-dir", str(tmp_path / "reports")
-            ])
+                "--gemini-md",
+                str(tmp_path / "GEMINI.md"),
+                "--skills-dir",
+                str(tmp_path / "skills"),
+                "--output-dir",
+                str(tmp_path / "reports"),
+            ],
+        )
 
-            # Mock sys.exit to prevent the test from exiting
-            mock_sys_exit = mocker.patch("sys.exit")
+        from validate_workflows import main
 
-            # Call the main function
-            from validate_workflows import main
-            main()
+        rc = main()
 
-            # Assertions
-            mock_sys_exit.assert_called_once_with(0)  # Expect successful execution
-            assert (tmp_path / "reports").is_dir()
-            # Verify reports are generated
-            assert any(f.name.startswith("integration_test_") and f.suffix == ".json" for f in (tmp_path / "reports").iterdir())
-            assert any(f.name.startswith("integration_test_") and f.suffix == ".md" for f in (tmp_path / "reports").iterdir())
+        assert rc == 0
+        assert (tmp_path / "reports").is_dir()
+        assert any(
+            f.name.startswith("integration_test_") and f.suffix == ".json"
+            for f in (tmp_path / "reports").iterdir()
+        )
+        assert any(
+            f.name.startswith("integration_test_") and f.suffix == ".md"
+            for f in (tmp_path / "reports").iterdir()
+        )
 
-        def test_main_exits_with_error_if_gemini_md_not_found(self, tmp_path, mocker):
-            mocker.patch("sys.argv", [
+    def test_main_exits_with_error_if_gemini_md_not_found(self, tmp_path, mocker):
+        mocker.patch(
+            "sys.argv",
+            [
                 "validate_workflows.py",
-                "--gemini-md", str(tmp_path / "non_existent_GEMINI.md"),
-                "--skills-dir", str(tmp_path / "skills"),
-                "--output-dir", str(tmp_path / "reports")
-            ])
-            mock_sys_exit = mocker.patch("sys.exit")
+                "--gemini-md",
+                str(tmp_path / "non_existent_GEMINI.md"),
+                "--skills-dir",
+                str(tmp_path / "skills"),
+                "--output-dir",
+                str(tmp_path / "reports"),
+            ],
+        )
 
-            from validate_workflows import main
-            main()
-            mock_sys_exit.assert_called_once_with(1)
+        from validate_workflows import main
 
-        def test_main_exits_with_error_if_skills_dir_not_found(self, tmp_path, mocker):
-            # Create dummy GEMINI.md for the test
-            (tmp_path / "GEMINI.md").write_text("## Multi-Skill Workflows")
+        rc = main()
+        assert rc == 1
 
-            mocker.patch("sys.argv", [
+    def test_main_exits_with_error_if_skills_dir_not_found(self, tmp_path, mocker):
+        (tmp_path / "GEMINI.md").write_text("## Multi-Skill Workflows", encoding="utf-8")
+
+        mocker.patch(
+            "sys.argv",
+            [
                 "validate_workflows.py",
-                "--gemini-md", str(tmp_path / "GEMINI.md"),
-                "--skills-dir", str(tmp_path / "non_existent_skills"),
-                "--output-dir", str(tmp_path / "reports")
-            ])
-            mock_sys_exit = mocker.patch("sys.exit")
+                "--gemini-md",
+                str(tmp_path / "GEMINI.md"),
+                "--skills-dir",
+                str(tmp_path / "non_existent_skills"),
+                "--output-dir",
+                str(tmp_path / "reports"),
+            ],
+        )
 
-            from validate_workflows import main
-            main()
-            mock_sys_exit.assert_called_once_with(1)
+        from validate_workflows import main
 
-        # ── Contract data integrity ──────────────────────────────────────────
+        rc = main()
+        assert rc == 1
 
 
-        class TestContractIntegrity:
-            def test_all_handoff_producers_have_contracts(self):
-                """Every producer in _HANDHOFF_CONTRACTS must exist in _SKILL_CONTRACTS."""
-                # _SKILL_CONTRACTS and _HANDHOFF_CONTRACTS are global variables loaded in main.
-                # For unit tests, we need to ensure they are available or mocked.
-                # Since these tests run independently, we will assume a setup
-                # where these are loaded or available from the `validate_workflows` module.
-                # Or, we can load them manually for this specific test class.
-                from validate_workflows import _HANDHOFF_CONTRACTS, _SKILL_CONTRACTS
-                for (producer, _consumer), _contract in _HANDHOFF_CONTRACTS.items():
-                    assert producer in _SKILL_CONTRACTS, (
-                        f"Handoff producer '{producer}' missing from _SKILL_CONTRACTS"
-                    )
+# ── Contract data integrity ──────────────────────────────────────────
 
-        def test_handoff_required_fields_subset_of_output(self):
-            """Required fields in handoff must be subset of producer output."""
-            from validate_workflows import _HANDOFF_CONTRACTS, _SKILL_CONTRACTS
-            for (producer, consumer), contract in _HANDOFF_CONTRACTS.items():
-                producer_fields = set(_SKILL_CONTRACTS[producer]["output_fields"])
-                required = set(contract["required_fields"])
-                missing = required - producer_fields
-                assert not missing, (
-                    f"Handoff {producer}\u2192{consumer}: "
-                    f"required fields {missing} not in producer output"
-                )
 
+class TestContractIntegrity:
+    def test_all_handoff_producers_have_contracts(self):
+        """Every producer in _HANDOFF_CONTRACTS must exist in _SKILL_CONTRACTS."""
+        for (producer, _consumer), _contract in _HANDOFF_CONTRACTS.items():
+            assert producer in _SKILL_CONTRACTS, (
+                f"Handoff producer '{producer}' missing from _SKILL_CONTRACTS"
+            )
+
+    def test_handoff_required_fields_subset_of_output(self):
+        """Required fields in handoff must be subset of producer output."""
+        for (producer, consumer), contract in _HANDOFF_CONTRACTS.items():
+            producer_fields = set(_SKILL_CONTRACTS[producer]["output_fields"])
+            required = set(contract["required_fields"])
+            missing = required - producer_fields
+            assert not missing, (
+                f"Handoff {producer}→{consumer}: required fields {missing} not in producer output"
+            )

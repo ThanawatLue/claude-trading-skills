@@ -90,4 +90,3 @@ python3 skills/trade-hypothesis-ideator/scripts/run_hypothesis_ideator.py \
 
 - `references/hypothesis_types.md`: Defines the various categories and structures of hypotheses that the skill can generate, providing a framework for understanding and classifying output.
 - `references/evidence_quality_guide.md`: A rubric for evaluating the strength and relevance of evidence provided as input, helping operators to improve the quality of their data.
-

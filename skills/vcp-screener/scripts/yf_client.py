@@ -41,7 +41,9 @@ except ImportError:
 
 # ── Cache setup ───────────────────────────────────────────────────────────────
 _HERE = Path(__file__).resolve().parent
-_PROJECT_ROOT = _HERE.parents[2]   # skills/vcp-screener/scripts -> skills/vcp-screener -> skills -> trading
+_PROJECT_ROOT = _HERE.parents[
+    2
+]  # skills/vcp-screener/scripts -> skills/vcp-screener -> skills -> trading
 sys.path.insert(0, str(_PROJECT_ROOT / "scripts"))
 
 from cache_manager import CacheManager  # noqa: E402
@@ -52,18 +54,21 @@ _cache = CacheManager(_DB_PATH)
 
 # ── DataFrame → list[dict] helper ─────────────────────────────────────────────
 
+
 def _df_to_bars(df) -> list[dict]:
     """Convert a yfinance DataFrame to most-recent-first list[dict]."""
     bars = []
     for dt, row in df.iterrows():
-        bars.append({
-            "date": dt.strftime("%Y-%m-%d"),
-            "open": round(float(row["Open"]), 4),
-            "high": round(float(row["High"]), 4),
-            "low": round(float(row["Low"]), 4),
-            "close": round(float(row["Close"]), 4),
-            "volume": int(row["Volume"]),
-        })
+        bars.append(
+            {
+                "date": dt.strftime("%Y-%m-%d"),
+                "open": round(float(row["Open"]), 4),
+                "high": round(float(row["High"]), 4),
+                "low": round(float(row["Low"]), 4),
+                "close": round(float(row["Close"]), 4),
+                "volume": int(row["Volume"]),
+            }
+        )
     bars.reverse()  # most-recent first
     return bars
 
@@ -92,7 +97,10 @@ class YFClient:
 
     def _fetch_sp500_wikipedia(self) -> Optional[list[dict]]:
         if requests is None:
-            print("WARNING: requests library not found, Wikipedia fallback for S&P 500 constituents is unavailable.", file=sys.stderr)
+            print(
+                "WARNING: requests library not found, Wikipedia fallback for S&P 500 constituents is unavailable.",
+                file=sys.stderr,
+            )
             return None
         try:
             url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
@@ -103,7 +111,8 @@ class YFClient:
 
             table_match = re.search(
                 r'<table[^>]*class="[^"]*wikitable[^"]*"[^>]*>(.*?)</table>',
-                resp.text, re.DOTALL,
+                resp.text,
+                re.DOTALL,
             )
             if not table_match:
                 return None
@@ -140,36 +149,87 @@ class YFClient:
     def get_thai_constituents(self, index: str = "SET50") -> Optional[list[dict]]:
         try:
             from scripts.lib.tv_client import get_thai_set50, get_thai_set100, is_available
+
             if is_available():
                 if index == "SET100":
                     stocks = get_thai_set100(limit=100)
                 else:
                     stocks = get_thai_set50(limit=50)
-                
+
                 if stocks:
                     constituents = [
                         {
                             "symbol": f"{s['name']}.BK",
-                            "name": s['name'],
+                            "name": s["name"],
                             "sector": s.get("sector", index),
-                            "subSector": s.get("industry", "Thai Stock")
+                            "subSector": s.get("industry", "Thai Stock"),
                         }
                         for s in stocks
                     ]
-                    print(f"  (Thai {index} via TradingView: {len(constituents)} stocks)", flush=True)
+                    print(
+                        f"  (Thai {index} via TradingView: {len(constituents)} stocks)", flush=True
+                    )
                     return constituents
         except Exception as e:
             import sys
-            print(f"WARNING: tv_client fetch failed ({e}). Falling back to hardcoded SET50.", file=sys.stderr)
+
+            print(
+                f"WARNING: tv_client fetch failed ({e}). Falling back to hardcoded SET50.",
+                file=sys.stderr,
+            )
 
         # Fallback to hardcoded SET50
         set50_symbols = [
-            "ADVANC", "AOT", "AWC", "BANPU", "BBL", "BCP", "BDMS", "BEM", "BGRIM",
-            "BH", "BTS", "CBG", "CENTEL", "COM7", "CPALL", "CPF", "CPN", "CRC",
-            "DELTA", "EA", "EGCO", "GLOBAL", "GULF", "HANA", "HMPRO", "INTUCH",
-            "IRPC", "IVL", "KBANK", "KCE", "KTB", "KTC", "LH", "MINT", "MTC",
-            "OR", "OSP", "PTT", "PTTEP", "PTTGC", "SAWAD", "SCB", "SCC", "SCGP",
-            "TISCO", "TOP", "TRUE", "TTB", "TU", "WHA",
+            "ADVANC",
+            "AOT",
+            "AWC",
+            "BANPU",
+            "BBL",
+            "BCP",
+            "BDMS",
+            "BEM",
+            "BGRIM",
+            "BH",
+            "BTS",
+            "CBG",
+            "CENTEL",
+            "COM7",
+            "CPALL",
+            "CPF",
+            "CPN",
+            "CRC",
+            "DELTA",
+            "EA",
+            "EGCO",
+            "GLOBAL",
+            "GULF",
+            "HANA",
+            "HMPRO",
+            "INTUCH",
+            "IRPC",
+            "IVL",
+            "KBANK",
+            "KCE",
+            "KTB",
+            "KTC",
+            "LH",
+            "MINT",
+            "MTC",
+            "OR",
+            "OSP",
+            "PTT",
+            "PTTEP",
+            "PTTGC",
+            "SAWAD",
+            "SCB",
+            "SCC",
+            "SCGP",
+            "TISCO",
+            "TOP",
+            "TRUE",
+            "TTB",
+            "TU",
+            "WHA",
         ]
         constituents = [
             {"symbol": f"{sym}.BK", "name": sym, "sector": "SET50", "subSector": "Thai Stock"}
@@ -385,8 +445,13 @@ class YFClient:
             from datetime import date as _date
 
             today = _date.today()
-            max_behind = max((_date.today() - (_cache.latest_bar_date(s) or _date(2000, 1, 1))).days
-                             for s in need_update) + 5
+            max_behind = (
+                max(
+                    (_date.today() - (_cache.latest_bar_date(s) or _date(2000, 1, 1))).days
+                    for s in need_update
+                )
+                + 5
+            )
             fetch_period = int(max_behind * 1.5)
             print(
                 f"    Incremental update: {len(need_update)} symbols ({max_behind} days)...",
@@ -410,7 +475,9 @@ class YFClient:
                         new_bars = _df_to_bars(df)
                         latest = _cache.latest_bar_date(sym)
                         if latest:
-                            new_bars = [b for b in new_bars if _date.fromisoformat(b["date"]) > latest]
+                            new_bars = [
+                                b for b in new_bars if _date.fromisoformat(b["date"]) > latest
+                            ]
                         if new_bars:
                             _cache.upsert_bars(sym, new_bars)
                         full_bars = _cache.get_bars(sym, days)

@@ -38,8 +38,10 @@ from calculators.market_calculator import calculate_market_direction
 from calculators.new_highs_calculator import calculate_newness
 from calculators.supply_demand_calculator import calculate_supply_demand
 from fmp_client import FMPClient
+
 try:
     from yf_client import YFClient
+
     _YF_AVAILABLE = True
 except ImportError:
     _YF_AVAILABLE = False
@@ -397,7 +399,6 @@ def main():
     api_key = args.api_key or os.environ.get("FMP_API_KEY", "")
     use_yfinance = (not api_key or args.market == "TH") and _YF_AVAILABLE
 
-
     if use_yfinance:
         client = YFClient()
         print("✓ Yahoo Finance client (free, no API key required)")
@@ -407,7 +408,9 @@ def main():
             # test if API key is exhausted
             client.get_quote("^GSPC")
             if getattr(client, "rate_limit_reached", False):
-                print("⚠️  FMP API rate limit reached. Falling back to Yahoo Finance.", file=sys.stderr)
+                print(
+                    "⚠️  FMP API rate limit reached. Falling back to Yahoo Finance.", file=sys.stderr
+                )
                 client = YFClient()
                 use_yfinance = True
             else:
@@ -470,7 +473,9 @@ def main():
         market_days = len(market_sp500_historical.get("historical", []))
         print(f"✓ {benchmark_symbol} historical data: {market_days} days")
     else:
-        print(f"⚠️  {benchmark_symbol} historical data unavailable - M component will use EMA fallback")
+        print(
+            f"⚠️  {benchmark_symbol} historical data unavailable - M component will use EMA fallback"
+        )
 
     # Set default benchmark based on market if not explicitly overridden by user
     rs_benchmark = args.rs_benchmark
@@ -485,9 +490,7 @@ def main():
         elif rs_benchmark == "^SET.BK" and args.market == "TH":
             rs_benchmark_historical = market_sp500_historical
         else:
-            print(
-                f"Fetching {rs_benchmark} 52-week data for L component (Relative Strength)..."
-            )
+            print(f"Fetching {rs_benchmark} 52-week data for L component (Relative Strength)...")
             rs_benchmark_historical = client.get_historical_prices(rs_benchmark, days=365)
             if rs_benchmark_historical and rs_benchmark_historical.get("historical"):
                 rs_days = len(rs_benchmark_historical.get("historical", []))

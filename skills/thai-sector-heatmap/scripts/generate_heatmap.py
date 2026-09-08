@@ -20,26 +20,45 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Import tv_client from the vcp-screener skill (avoid duplicating it)
-sys.path.insert(
-    0,
-    str(Path(__file__).resolve().parents[3] / "vcp-screener" / "scripts"),
-)
-from tv_client import (  # noqa: E402
-    get_thai_stocks,
-    filter_common_stocks,
-    clean_for_json,
-    is_available as tv_available,
-)
+# Add project root and scripts/lib to sys.path for standalone execution
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+for _p in (str(_REPO_ROOT), str(_REPO_ROOT / "scripts" / "lib")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from scripts.lib.tv_client import (  # noqa: E402
+        clean_for_json,
+        filter_common_stocks,
+        get_thai_stocks,
+    )
+    from scripts.lib.tv_client import (
+        is_available as tv_available,
+    )
+except ImportError:
+    from tv_client import (  # noqa: E402
+        clean_for_json,
+        filter_common_stocks,
+        get_thai_stocks,
+    )
+    from tv_client import (
+        is_available as tv_available,
+    )
 
 
 # Sector momentum composite weights (sum = 1.0)
 # Weighted toward shorter periods to react quickly to rotation
-_W_1M = 0.40
-_W_3M = 0.35
-_W_6M = 0.20
-_W_Y = 0.05
-MIN_STOCK_PRICE = 1.0
+DEFAULT_W_1M = 0.40
+DEFAULT_W_3M = 0.35
+DEFAULT_W_6M = 0.20
+DEFAULT_W_Y = 0.05
+DEFAULT_MIN_STOCK_PRICE = 1.0
+
+_W_1M = DEFAULT_W_1M
+_W_3M = DEFAULT_W_3M
+_W_6M = DEFAULT_W_6M
+_W_Y = DEFAULT_W_Y
+MIN_STOCK_PRICE = DEFAULT_MIN_STOCK_PRICE
 
 
 def _median(values: list) -> float:
@@ -85,24 +104,26 @@ def compute_sector_stats(stocks: list[dict], min_stocks_per_sector: int = 3) -> 
             key=lambda s: s.get("perf_3m") or -999,
             reverse=True,
         )[:3]
-        sectors.append({
-            "sector": sec,
-            "n_stocks": len(group),
-            "median_perf_1m": round(p1m, 2),
-            "median_perf_3m": round(p3m, 2),
-            "median_perf_6m": round(p6m, 2),
-            "median_perf_y": round(py, 2),
-            "momentum_score": _momentum_score(p1m, p3m, p6m, py),
-            "top_stocks": [
-                {
-                    "symbol": s["symbol"],
-                    "name": s.get("name", s["symbol"]),
-                    "perf_3m": round(s.get("perf_3m") or 0, 2),
-                    "price": s.get("price"),
-                }
-                for s in top3
-            ],
-        })
+        sectors.append(
+            {
+                "sector": sec,
+                "n_stocks": len(group),
+                "median_perf_1m": round(p1m, 2),
+                "median_perf_3m": round(p3m, 2),
+                "median_perf_6m": round(p6m, 2),
+                "median_perf_y": round(py, 2),
+                "momentum_score": _momentum_score(p1m, p3m, p6m, py),
+                "top_stocks": [
+                    {
+                        "symbol": s["symbol"],
+                        "name": s.get("name", s["symbol"]),
+                        "perf_3m": round(s.get("perf_3m") or 0, 2),
+                        "price": s.get("price"),
+                    }
+                    for s in top3
+                ],
+            }
+        )
 
     # Rank by momentum score (descending)
     sectors.sort(key=lambda s: s["momentum_score"], reverse=True)
@@ -133,16 +154,22 @@ def to_markdown(sectors: list[dict], universe_size: int, ts: str) -> str:
     # Top 5 sectors with top stocks
     lines += ["", "## Top 5 Sectors — Leading Stocks", ""]
     for s in sectors[:5]:
-        lines.append(f"### {s['rank']}. {s['sector']}  ({_emoji(s['momentum_score'])} {s['momentum_score']:+.1f})")
+        lines.append(
+            f"### {s['rank']}. {s['sector']}  ({_emoji(s['momentum_score'])} {s['momentum_score']:+.1f})"
+        )
         for ts_ in s["top_stocks"]:
-            lines.append(f"- **{ts_['symbol']}** {ts_['name']} — 3M: {ts_['perf_3m']:+.1f}% @ {ts_['price']:.2f} THB")
+            lines.append(
+                f"- **{ts_['symbol']}** {ts_['name']} — 3M: {ts_['perf_3m']:+.1f}% @ {ts_['price']:.2f} THB"
+            )
         lines.append("")
 
     # Bottom 3 sectors (avoid list)
     if len(sectors) > 5:
         lines += ["## Bottom 3 Sectors (Avoid / Short Candidates)", ""]
         for s in sectors[-3:]:
-            lines.append(f"- {s['rank']}. **{s['sector']}** — Momentum {s['momentum_score']:+.1f}  (1M {s['median_perf_1m']:+.1f}%, 3M {s['median_perf_3m']:+.1f}%)")
+            lines.append(
+                f"- {s['rank']}. **{s['sector']}** — Momentum {s['momentum_score']:+.1f}  (1M {s['median_perf_1m']:+.1f}%, 3M {s['median_perf_3m']:+.1f}%)"
+            )
         lines.append("")
 
     lines += [
@@ -154,7 +181,7 @@ def to_markdown(sectors: list[dict], universe_size: int, ts: str) -> str:
         "- **Per-sector aggregation:** Median return (resistant to outliers)",
         f"- **Momentum score:** {_W_1M:.0%}×1M + {_W_3M:.0%}×3M + {_W_6M:.0%}×6M + {_W_Y:.0%}×1Y",
         "- **Color code:** 🟢 ≥ +10  |  🟡 0 to +10  |  🔴 < 0",
-        f"- **Minimum stocks per sector:** 3 (sectors with fewer constituents excluded)",
+        "- **Minimum stocks per sector:** 3 (sectors with fewer constituents excluded)",
     ]
     return "\n".join(lines)
 
@@ -164,99 +191,125 @@ def main():
 
     parser = argparse.ArgumentParser(description="Generate Thai SET sector rotation heatmap")
     parser.add_argument("--output-dir", default="reports/", help="Output directory")
-    parser.add_argument("--min-stocks", type=int, default=3,
-                        help="Minimum stocks per sector to include (default: 3)")
-    parser.add_argument("--limit", type=int, default=1500,
-                        help="Max stocks to fetch from TradingView (default: 1500)")
+    parser.add_argument(
+        "--min-stocks",
+        type=int,
+        default=3,
+        help="Minimum stocks per sector to include (default: 3)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=1500,
+        help="Max stocks to fetch from TradingView (default: 1500)",
+    )
     parser.add_argument(
         "--w-1m",
         type=float,
-        default=_W_1M,
-        help=f"Weight for 1-month performance in momentum score (default: {_W_1M})",
+        default=DEFAULT_W_1M,
+        help=f"Weight for 1-month performance in momentum score (default: {DEFAULT_W_1M})",
     )
     parser.add_argument(
         "--w-3m",
         type=float,
-        default=_W_3M,
-        help=f"Weight for 3-month performance in momentum score (default: {_W_3M})",
+        default=DEFAULT_W_3M,
+        help=f"Weight for 3-month performance in momentum score (default: {DEFAULT_W_3M})",
     )
     parser.add_argument(
         "--w-6m",
         type=float,
-        default=_W_6M,
-        help=f"Weight for 6-month performance in momentum score (default: {_W_6M})",
+        default=DEFAULT_W_6M,
+        help=f"Weight for 6-month performance in momentum score (default: {DEFAULT_W_6M})",
     )
     parser.add_argument(
         "--w-y",
         type=float,
-        default=_W_Y,
-        help=f"Weight for 1-year performance in momentum score (default: {_W_Y})",
+        default=DEFAULT_W_Y,
+        help=f"Weight for 1-year performance in momentum score (default: {DEFAULT_W_Y})",
     )
     parser.add_argument(
         "--min-price",
         type=float,
-        default=MIN_STOCK_PRICE,
-        help=f"Minimum stock price for filtering illiquid stocks (default: {MIN_STOCK_PRICE})",
+        default=DEFAULT_MIN_STOCK_PRICE,
+        help=f"Minimum stock price for filtering illiquid stocks (default: {DEFAULT_MIN_STOCK_PRICE})",
     )
     args = parser.parse_args()
 
-    _W_1M = args.w_1m
-    _W_3M = args.w_3m
-    _W_6M = args.w_6m
-    _W_Y = args.w_y
-    MIN_STOCK_PRICE = args.min_price
+    _orig_w1, _orig_w3, _orig_w6, _orig_wy, _orig_min_price = (
+        _W_1M,
+        _W_3M,
+        _W_6M,
+        _W_Y,
+        MIN_STOCK_PRICE,
+    )
+    try:
+        _W_1M = args.w_1m
+        _W_3M = args.w_3m
+        _W_6M = args.w_6m
+        _W_Y = args.w_y
+        MIN_STOCK_PRICE = args.min_price
 
-    if not tv_available():
-        print("ERROR: tradingview-screener not installed. Run: pip install tradingview-screener",
-              file=sys.stderr)
-        sys.exit(1)
+        if not tv_available():
+            print(
+                "ERROR: tradingview-screener not installed. Run: pip install tradingview-screener",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
-    print("=" * 60)
-    print("Thai Sector Heatmap")
-    print("=" * 60)
-    print("Fetching SET universe via TradingView Screener...", end=" ", flush=True)
-    stocks = get_thai_stocks(limit=args.limit)
-    stocks = filter_common_stocks(stocks)
-    # Drop extremely illiquid penny stocks
-    stocks = [s for s in stocks if (s.get("price") or 0) >= MIN_STOCK_PRICE]
-    print(f"OK ({len(stocks)} common stocks)")
+        print("=" * 60)
+        print("Thai Sector Heatmap")
+        print("=" * 60)
+        print("Fetching SET universe via TradingView Screener...", end=" ", flush=True)
+        stocks = get_thai_stocks(limit=args.limit)
+        stocks = filter_common_stocks(stocks)
+        # Drop extremely illiquid penny stocks
+        stocks = [s for s in stocks if (s.get("price") or 0) >= MIN_STOCK_PRICE]
+        print(f"OK ({len(stocks)} common stocks)")
 
-    print("Grouping by sector...", end=" ", flush=True)
-    sectors = compute_sector_stats(stocks, min_stocks_per_sector=args.min_stocks)
-    print(f"OK ({len(sectors)} sectors)")
+        print("Grouping by sector...", end=" ", flush=True)
+        sectors = compute_sector_stats(stocks, min_stocks_per_sector=args.min_stocks)
+        print(f"OK ({len(sectors)} sectors)")
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    base = os.path.join(args.output_dir, f"thai_sector_heatmap_{ts}")
+        os.makedirs(args.output_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        base = os.path.join(args.output_dir, f"thai_sector_heatmap_{ts}")
 
-    json_path = base + ".json"
-    md_path = base + ".md"
+        json_path = base + ".json"
+        md_path = base + ".md"
 
-    payload = {
-        "generated": ts,
-        "market": "TH",
-        "universe_size": len(stocks),
-        "min_stocks_per_sector": args.min_stocks,
-        "min_stock_price": MIN_STOCK_PRICE,
-        "weights": {"1m": _W_1M, "3m": _W_3M, "6m": _W_6M, "y": _W_Y},
-        "sectors": sectors,
-        "metadata": {"market": "TH", "source": "tradingview"},
-    }
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(clean_for_json(payload), f, ensure_ascii=False, indent=2)
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(to_markdown(sectors, len(stocks), ts))
+        payload = {
+            "generated": ts,
+            "market": "TH",
+            "universe_size": len(stocks),
+            "min_stocks_per_sector": args.min_stocks,
+            "min_stock_price": MIN_STOCK_PRICE,
+            "weights": {"1m": _W_1M, "3m": _W_3M, "6m": _W_6M, "y": _W_Y},
+            "sectors": sectors,
+            "metadata": {"market": "TH", "source": "tradingview"},
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(clean_for_json(payload), f, ensure_ascii=False, indent=2)
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(to_markdown(sectors, len(stocks), ts))
 
-    print(f"\nReports:")
-    print(f"  {json_path}")
-    print(f"  {md_path}")
-    print(f"\nTop 3 sectors:")
-    for s in sectors[:3]:
-        line = f"  {s['rank']}. {s['sector']}: {s['momentum_score']:+.2f} ({s['n_stocks']} stocks)"
-        try:
-            print(line)
-        except UnicodeEncodeError:
-            print(line.encode("ascii", "replace").decode("ascii"))
+        print("\nReports:")
+        print(f"  {json_path}")
+        print(f"  {md_path}")
+        print("\nTop 3 sectors:")
+        for s in sectors[:3]:
+            line = (
+                f"  {s['rank']}. {s['sector']}: {s['momentum_score']:+.2f} ({s['n_stocks']} stocks)"
+            )
+            try:
+                print(line)
+            except UnicodeEncodeError:
+                print(line.encode("ascii", "replace").decode("ascii"))
+    finally:
+        _W_1M = _orig_w1
+        _W_3M = _orig_w3
+        _W_6M = _orig_w6
+        _W_Y = _orig_wy
+        MIN_STOCK_PRICE = _orig_min_price
 
 
 if __name__ == "__main__":

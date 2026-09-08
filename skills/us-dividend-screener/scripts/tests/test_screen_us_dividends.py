@@ -1,7 +1,6 @@
 import importlib.util
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parents[1] / "screen_us_dividends.py"
 spec = importlib.util.spec_from_file_location("screen_us_dividends", SCRIPT)
 module = importlib.util.module_from_spec(spec)

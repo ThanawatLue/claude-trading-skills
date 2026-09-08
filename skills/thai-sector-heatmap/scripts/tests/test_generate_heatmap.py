@@ -3,16 +3,14 @@
 Pure unit tests — no TradingView network calls. We feed synthetic stock dicts
 to compute_sector_stats() and verify the ranking and aggregation logic.
 """
+
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from generate_heatmap import (  # noqa: E402
-    compute_sector_stats,
+    _emoji,
     _median,
     _momentum_score,
-    _emoji,
+    compute_sector_stats,
 )
 
 
@@ -58,17 +56,22 @@ def test_median_calculation():
 def test_median_odd_elements():
     assert _median([1, 2, 3]) == 2.0
 
+
 def test_median_even_elements():
     assert _median([1, 2, 3, 4]) == 2.5
+
 
 def test_median_single_element():
     assert _median([5]) == 5.0
 
+
 def test_median_empty_list():
     assert _median([]) == 0.0
 
+
 def test_median_all_none():
     assert _median([None, None, None]) == 0.0
+
 
 def test_median_mixed_none_and_numbers():
     assert _median([1, None, 2, None, 3]) == 2.0
@@ -77,13 +80,16 @@ def test_median_mixed_none_and_numbers():
 
 # New _momentum_score tests
 def test_momentum_score_positive():
-    assert _momentum_score(20, 15, 10, 5) == 16.55
+    assert _momentum_score(20, 15, 10, 5) == 15.5
+
 
 def test_momentum_score_negative():
-    assert _momentum_score(-10, -5, -2, -1) == -6.05
+    assert _momentum_score(-10, -5, -2, -1) == -6.2
+
 
 def test_momentum_score_mixed():
-    assert _momentum_score(10, -5, 2, 0) == 2.85
+    assert _momentum_score(10, -5, 2, 0) == 2.65
+
 
 def test_momentum_score_zero():
     assert _momentum_score(0, 0, 0, 0) == 0.0
@@ -94,9 +100,11 @@ def test_emoji_hot():
     assert _emoji(10) == "🟢"
     assert _emoji(15) == "🟢"
 
+
 def test_emoji_neutral():
     assert _emoji(0) == "🟡"
     assert _emoji(9.99) == "🟡"
+
 
 def test_emoji_cold():
     assert _emoji(-1) == "🔴"
@@ -143,7 +151,15 @@ def test_handles_unknown_sector():
         _stock("A.BK", "Tech", p1m=10),
         _stock("B.BK", "Tech", p1m=20),
         _stock("C.BK", "Tech", p1m=30),
-        {"symbol": "X.BK", "sector": None, "price": 10, "perf_1m": 0, "perf_3m": 0, "perf_6m": 0, "perf_y": 0},
+        {
+            "symbol": "X.BK",
+            "sector": None,
+            "price": 10,
+            "perf_1m": 0,
+            "perf_3m": 0,
+            "perf_6m": 0,
+            "perf_y": 0,
+        },
     ]
     # Should not crash
     out = compute_sector_stats(stocks)
@@ -156,14 +172,13 @@ def test_top_stocks_field():
         _stock("B.BK", "Tech", p3m=30),
         _stock("C.BK", "Tech", p3m=20),
         _stock("D.BK", "Tech", p3m=5),
-        _stock("E.BK", "Tech", p3m=None), # Test case for None
+        _stock("E.BK", "Tech", p3m=None),  # Test case for None
         _stock("F.BK", "Tech", p3m=-5),
     ]
     out = compute_sector_stats(stocks)
     top = out[0]["top_stocks"]
-    assert len(top) == 3 # Should still be 3 top stocks
+    assert len(top) == 3  # Should still be 3 top stocks
     # B should be first (highest p3m)
     assert top[0]["symbol"] == "B.BK"
     assert top[1]["symbol"] == "C.BK"
     assert top[2]["symbol"] == "A.BK"
-

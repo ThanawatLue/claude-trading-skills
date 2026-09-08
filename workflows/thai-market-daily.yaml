@@ -1,0 +1,98 @@
+schema_version: 1
+id: thai-market-daily
+display_name: Thai Market Daily Routine
+cadence: daily
+estimated_minutes: 20
+target_users:
+  - part-time-swing-trader
+  - dividend-investor
+difficulty: beginner
+api_profile: no-api-basic
+
+when_to_run: >-
+  Run after SET market close (17:00 ICT) to evaluate market breadth,
+  momentum sectors, and screen swing/dividend candidates.
+when_not_to_run: >-
+  Do not run during market trading hours or before end-of-day data is settled.
+
+required_skills:
+  - thai-breadth-analyzer
+  - thai-sector-heatmap
+  - thai-watchlist-builder
+  - vcp-screener
+  - paper-trade-simulator
+optional_skills:
+  - thai-dividend-screener
+
+artifacts:
+  - id: thai_breadth_report
+    produced_by_step: 1
+    required: true
+  - id: thai_sector_heatmap_report
+    produced_by_step: 2
+    required: true
+  - id: thai_watchlists_report
+    produced_by_step: 3
+    required: true
+  - id: thai_swing_candidates
+    produced_by_step: 4
+    required: true
+  - id: thai_dividend_candidates
+    produced_by_step: 5
+    required: false
+  - id: paper_marks_updated
+    produced_by_step: 6
+    required: true
+
+steps:
+  - step: 1
+    name: Analyze Thai market breadth
+    skill: thai-breadth-analyzer
+    produces:
+      - thai_breadth_report
+    decision_gate: false
+
+  - step: 2
+    name: Analyze Thai sector rotation heatmap
+    skill: thai-sector-heatmap
+    produces:
+      - thai_sector_heatmap_report
+    decision_gate: false
+
+  - step: 3
+    name: Build Thai multi-strategy watchlists
+    skill: thai-watchlist-builder
+    produces:
+      - thai_watchlists_report
+    decision_gate: false
+
+  - step: 4
+    name: Screen Thai swing trade candidates
+    skill: vcp-screener
+    produces:
+      - thai_swing_candidates
+    decision_gate: false
+
+  - step: 5
+    name: Screen Thai dividend opportunities
+    skill: thai-dividend-screener
+    optional: true
+    produces:
+      - thai_dividend_candidates
+    decision_gate: false
+
+  - step: 6
+    name: Update paper trading mark-to-market prices
+    skill: paper-trade-simulator
+    produces:
+      - paper_marks_updated
+    decision_gate: true
+    decision_question: >-
+      Are any open paper trade stop-losses or profit targets triggered by today's closes?
+
+manual_review:
+  - Review Thai market breadth for overall health and risk posture.
+  - Check top 3 momentum sectors for sector leadership and avoid lagging sectors.
+  - Confirm swing trade candidate entry triggers and risk-reward ratios before placing orders.
+
+journal_destination: paper-trade-simulator

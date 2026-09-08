@@ -71,13 +71,13 @@ def _activate_skill(skill: Path, test_dir: str) -> None:
         pass
     sys.path.insert(0, scripts_dir)
 
-    # 3. Ensure the vcp-screener's scripts dir is on sys.path for tv_client
-    vcp_screener_scripts_dir = str(Path.cwd() / "skills" / "vcp-screener" / "scripts")
+    # 3. Ensure scripts/lib is on sys.path for tv_client
+    tv_client_lib_dir = str(Path.cwd() / "scripts" / "lib")
     try:
-        sys.path.remove(vcp_screener_scripts_dir)
+        sys.path.remove(tv_client_lib_dir)
     except ValueError:
         pass
-    sys.path.append(vcp_screener_scripts_dir)
+    sys.path.append(tv_client_lib_dir)
 
     # 4. Ensure the test directory itself is on sys.path (some tests
     #    import helpers co-located with test files).

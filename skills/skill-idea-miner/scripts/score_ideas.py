@@ -4,12 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import re
-import shutil
-import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -148,7 +145,9 @@ def find_duplicates(
 # ── LLM scoring ──
 
 
-def score_with_llm(candidates: list[dict], dry_run: bool = False, model_name: str = "gemini-3-flash-preview") -> list[dict]:
+def score_with_llm(
+    candidates: list[dict], dry_run: bool = False, model_name: str = "gemini-3-flash-preview"
+) -> list[dict]:
     """Score non-duplicate candidates using Gemini."""
     scorable = [c for c in candidates if c.get("status") != "duplicate"]
 
@@ -195,9 +194,7 @@ def score_with_llm(candidates: list[dict], dry_run: bool = False, model_name: st
     )
 
     response_text = gemini_adapter.call_gemini(
-        prompt,
-        model_name=model_name,
-        response_mime_type="application/json"
+        prompt, model_name=model_name, response_mime_type="application/json"
     )
 
     if response_text:
@@ -217,7 +214,9 @@ def score_with_llm(candidates: list[dict], dry_run: bool = False, model_name: st
                         "trading_value": t,
                         "composite": round(0.3 * n + 0.3 * f + 0.4 * t, 1),
                     }
-                    c["status"] = c.get("status", "scored") # Ensure status is set to scored if successful
+                    c["status"] = c.get(
+                        "status", "scored"
+                    )  # Ensure status is set to scored if successful
                 else:
                     logger.warning(
                         "Candidate ID %s not found in Gemini scoring response. Raw response:\n%s",
@@ -233,7 +232,9 @@ def score_with_llm(candidates: list[dict], dry_run: bool = False, model_name: st
                     c["status"] = "scoring_failed"
             return candidates
 
-    logger.warning("Gemini scoring failed or returned invalid JSON. Raw response:\n%s", response_text)
+    logger.warning(
+        "Gemini scoring failed or returned invalid JSON. Raw response:\n%s", response_text
+    )
     for c in scorable:
         c["scores"] = {
             "novelty": 0,
@@ -241,11 +242,8 @@ def score_with_llm(candidates: list[dict], dry_run: bool = False, model_name: st
             "trading_value": 0,
             "composite": 0,
         }
-        c["status"] = "scoring_failed" # Set status to scoring_failed
+        c["status"] = "scoring_failed"  # Set status to scoring_failed
     return candidates
-
-
-
 
 
 # ── Backlog management ──

@@ -24,7 +24,9 @@ class TestGetApiKey(unittest.TestCase):
         """Test that get_api_key returns None and prints a warning when FMP_API_KEY is not set."""
         with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
             self.assertIsNone(get_api_key())
-            self.assertIn("Warning: FMP_API_KEY environment variable not set", mock_stderr.getvalue())
+            self.assertIn(
+                "Warning: FMP_API_KEY environment variable not set", mock_stderr.getvalue()
+            )
 
     @patch.dict(os.environ, {"FMP_API_KEY": "test_key"}, clear=True)
     def test_get_api_key_set(self):
@@ -42,9 +44,9 @@ class TestFetchEconomicCalendar(unittest.TestCase):
         """Test successful fetching of economic calendar data."""
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.read.return_value = json.dumps([{"event": "GDP", "date": "2024-01-01"}]).encode(
-            "utf-8"
-        )
+        mock_response.read.return_value = json.dumps(
+            [{"event": "GDP", "date": "2024-01-01"}]
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         data = fetch_economic_calendar("2024-01-01", "2024-01-01", self.API_KEY)
@@ -135,7 +137,7 @@ class TestValidateDateRange(unittest.TestCase):
     def test_valid_date_range(self):
         """Test valid date range within 90 days."""
         validate_date_range("2024-01-01", "2024-03-30")  # 89 days, valid
-        self.assertIsNone(None) # No exception means success
+        self.assertIsNone(None)  # No exception means success
 
     def test_invalid_date_format(self):
         """Test invalid date format."""
@@ -144,12 +146,16 @@ class TestValidateDateRange(unittest.TestCase):
 
     def test_start_date_after_end_date(self):
         """Test start date after end date."""
-        with self.assertRaisesRegex(ValueError, "Start date 2024-01-02 is after end date 2024-01-01"):
+        with self.assertRaisesRegex(
+            ValueError, "Start date 2024-01-02 is after end date 2024-01-01"
+        ):
             validate_date_range("2024-01-02", "2024-01-01")
 
     def test_date_range_exceeds_90_days(self):
         """Test date range exceeding 90 days."""
-        with self.assertRaisesRegex(ValueError, "Date range \(91 days\) exceeds maximum of 90 days"):
+        with self.assertRaisesRegex(
+            ValueError, r"Date range \(91 days\) exceeds maximum of 90 days"
+        ):
             validate_date_range("2024-01-01", "2024-04-01")
 
     @patch("sys.stderr", new_callable=io.StringIO)
@@ -205,7 +211,7 @@ class TestFormatEventOutput(unittest.TestCase):
         self.assertIn("Country: US", output)
         self.assertIn("Previous: 1.0%", output)
         self.assertIn("Change %: 10.0%", output)
-        self.assertNotIn("Previous: None", output) # Ensure None values are not printed
+        self.assertNotIn("Previous: None", output)  # Ensure None values are not printed
 
     def test_unknown_output_format(self):
         """Test handling of unknown output format."""
@@ -222,7 +228,11 @@ class TestMain(unittest.TestCase):
         mock_exit.side_effect = SystemExit
         with patch("argparse.ArgumentParser.parse_args") as mock_parse_args:
             mock_parse_args.return_value = argparse.Namespace(
-                from_date="2024-01-01", to_date="2024-01-01", api_key=None, format="json", output=None
+                from_date="2024-01-01",
+                to_date="2024-01-01",
+                api_key=None,
+                format="json",
+                output=None,
             )
             with self.assertRaises(SystemExit):
                 main()
@@ -236,11 +246,17 @@ class TestMain(unittest.TestCase):
     @patch("get_economic_calendar.get_api_key", return_value="test_key")
     @patch("sys.stderr", new_callable=io.StringIO)
     @patch("sys.exit")
-    def test_main_invalid_date_range(self, mock_exit, mock_stderr, mock_get_api_key, mock_validate_date_range):
+    def test_main_invalid_date_range(
+        self, mock_exit, mock_stderr, mock_get_api_key, mock_validate_date_range
+    ):
         """Test main function exits with error for invalid date range."""
         with patch("argparse.ArgumentParser.parse_args") as mock_parse_args:
             mock_parse_args.return_value = argparse.Namespace(
-                from_date="2024-01-02", to_date="2024-01-01", api_key="test_key", format="json", output=None
+                from_date="2024-01-02",
+                to_date="2024-01-01",
+                api_key="test_key",
+                format="json",
+                output=None,
             )
             main()
             mock_exit.assert_called_once_with(1)
@@ -286,10 +302,16 @@ class TestMain(unittest.TestCase):
             self.assertIn("Retrieved 0 events", mock_stderr.getvalue())
             self.assertEqual(sys.stdout.getvalue(), "[]\n")
 
-    @patch("get_economic_calendar.fetch_economic_calendar", return_value=[{"event": "Test", "date": "2024-01-01"}])
+    @patch(
+        "get_economic_calendar.fetch_economic_calendar",
+        return_value=[{"event": "Test", "date": "2024-01-01"}],
+    )
     @patch("get_economic_calendar.get_api_key", return_value="test_key")
     @patch("get_economic_calendar.validate_date_range")
-    @patch("get_economic_calendar.format_event_output", return_value='[{"event": "Test", "date": "2024-01-01"}]')
+    @patch(
+        "get_economic_calendar.format_event_output",
+        return_value='[{"event": "Test", "date": "2024-01-01"}]',
+    )
     @patch("builtins.open", new_callable=unittest.mock.mock_open)
     @patch("sys.stdout", new_callable=io.StringIO)
     @patch("sys.stderr", new_callable=io.StringIO)
@@ -308,16 +330,18 @@ class TestMain(unittest.TestCase):
         """Test main function executes successfully and writes to a file."""
         with patch("argparse.ArgumentParser.parse_args") as mock_parse_args:
             mock_parse_args.return_value = argparse.Namespace(
-                from_date="2024-01-01", to_date="2024-01-01", api_key="test_key", format="json", output="output.json"
+                from_date="2024-01-01",
+                to_date="2024-01-01",
+                api_key="test_key",
+                format="json",
+                output="output.json",
             )
             main()
             mock_fetch_economic_calendar.assert_called_once_with(
                 "2024-01-01", "2024-01-01", "test_key"
             )
             mock_open.assert_called_once_with("output.json", "w", encoding="utf-8")
-            mock_open().write.assert_called_once_with(
-                '[{"event": "Test", "date": "2024-01-01"}]'
-            )
+            mock_open().write.assert_called_once_with('[{"event": "Test", "date": "2024-01-01"}]')
             mock_exit.assert_called_once_with(0)
             self.assertIn("Output written to output.json", mock_stderr.getvalue())
             self.assertEqual(sys.stdout.getvalue(), "")  # No output to stdout when writing to file
@@ -342,7 +366,11 @@ class TestMain(unittest.TestCase):
         """Test main function executes successfully with text output format."""
         with patch("argparse.ArgumentParser.parse_args") as mock_parse_args:
             mock_parse_args.return_value = argparse.Namespace(
-                from_date="2024-01-01", to_date="2024-01-01", api_key="test_key", format="text", output=None
+                from_date="2024-01-01",
+                to_date="2024-01-01",
+                api_key="test_key",
+                format="text",
+                output=None,
             )
             main()
             mock_fetch_economic_calendar.assert_called_once_with(

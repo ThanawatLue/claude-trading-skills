@@ -4,10 +4,6 @@ Tests for postmortem_analyzer.py
 
 import json
 from datetime import datetime, timedelta
-import os
-from pathlib import Path
-from unittest.mock import mock_open, patch, MagicMock
-
 
 import pytest
 from postmortem_analyzer import (
@@ -218,22 +214,24 @@ class TestGenerateImprovementBacklog:
         for i in range(20):  # 20 signals, 15 regime mismatch, 5 TP
             outcome = "REGIME_MISMATCH" if i < 15 else "TRUE_POSITIVE"
             ret = -0.05 if i < 15 else 0.03
-            postmortems.append({
-                "postmortem_id": f"pm_regime_{i}",
-                "signal_id": f"sig_regime_{i}",
-                "ticker": f"TICK{i}",
-                "signal_date": (base_date + timedelta(days=i)).strftime("%Y-%m-%d"),
-                "source_skill": "regime-skill",
-                "outcome_category": outcome,
-                "regime_at_signal": "RISK_ON" if i < 15 else "RISK_OFF",
-                "regime_at_exit": "RISK_OFF" if i < 15 else "RISK_OFF",
-                "realized_returns": {"5d": ret},
-                "recorded_at": datetime.utcnow().isoformat() + "Z",
-            })
-        
+            postmortems.append(
+                {
+                    "postmortem_id": f"pm_regime_{i}",
+                    "signal_id": f"sig_regime_{i}",
+                    "ticker": f"TICK{i}",
+                    "signal_date": (base_date + timedelta(days=i)).strftime("%Y-%m-%d"),
+                    "source_skill": "regime-skill",
+                    "outcome_category": outcome,
+                    "regime_at_signal": "RISK_ON" if i < 15 else "RISK_OFF",
+                    "regime_at_exit": "RISK_OFF" if i < 15 else "RISK_OFF",
+                    "realized_returns": {"5d": ret},
+                    "recorded_at": datetime.utcnow().isoformat() + "Z",
+                }
+            )
+
         metrics = calculate_skill_metrics(postmortems)
         backlog = generate_improvement_backlog(metrics, postmortems, min_sample_size=15)
-        
+
         assert any(
             entry["issue_type"] == "regime_sensitivity" and entry["skill"] == "regime-skill"
             for entry in backlog
@@ -243,30 +241,30 @@ class TestGenerateImprovementBacklog:
         """Test backlog generation for overconfidence (high confidence, low accuracy)."""
         postmortems = []
         base_date = datetime(2026, 3, 1)
-        for i in range(20):  # 20 signals, all high confidence, many FPs
-            outcome = "FALSE_POSITIVE" if i < 15 else "TRUE_POSITIVE"
-            ret = -0.04 if i < 15 else 0.02
-            postmortems.append({
-                "postmortem_id": f"pm_conf_{i}",
-                "signal_id": f"sig_conf_{i}",
-                "ticker": f"TICK{i}",
-                "signal_date": (base_date + timedelta(days=i)).strftime("%Y-%m-%d"),
-                "source_skill": "confident-skill",
-                "outcome_category": outcome,
-                "confidence": 0.9,  # High confidence
-                "realized_returns": {"5d": ret},
-                "recorded_at": datetime.utcnow().isoformat() + "Z",
-            })
-        
+        for i in range(20):  # 20 signals, all high confidence, many severe FPs
+            outcome = "FALSE_POSITIVE_SEVERE" if i < 15 else "TRUE_POSITIVE"
+            ret = -0.08 if i < 15 else 0.02
+            postmortems.append(
+                {
+                    "postmortem_id": f"pm_conf_{i}",
+                    "signal_id": f"sig_conf_{i}",
+                    "ticker": f"TICK{i}",
+                    "signal_date": (base_date + timedelta(days=i)).strftime("%Y-%m-%d"),
+                    "source_skill": "confident-skill",
+                    "outcome_category": outcome,
+                    "confidence": 0.9,  # High confidence
+                    "realized_returns": {"5d": ret},
+                    "recorded_at": datetime.utcnow().isoformat() + "Z",
+                }
+            )
+
         metrics = calculate_skill_metrics(postmortems)
         backlog = generate_improvement_backlog(metrics, postmortems, min_sample_size=15)
-        
+
         assert any(
             entry["issue_type"] == "overconfidence" and entry["skill"] == "confident-skill"
             for entry in backlog
         )
-
-
 
 
 class TestAnalyzeRegimeCorrelation:
@@ -348,31 +346,49 @@ class TestLoadPostmortems:
         pm_dir.mkdir()
 
         # Recent postmortems
-        (pm_dir / "pm_recent_1.json").write_text(json.dumps({
-            "postmortem_id": "pm_recent_1",
-            "recorded_at": (datetime.utcnow() - timedelta(days=5)).isoformat() + "Z"
-        }))
-        (pm_dir / "pm_recent_2.json").write_text(json.dumps({
-            "postmortem_id": "pm_recent_2",
-            "recorded_at": (datetime.utcnow() - timedelta(days=10)).isoformat() + "Z"
-        }))
+        (pm_dir / "pm_recent_1.json").write_text(
+            json.dumps(
+                {
+                    "postmortem_id": "pm_recent_1",
+                    "recorded_at": (datetime.utcnow() - timedelta(days=5)).isoformat() + "Z",
+                }
+            )
+        )
+        (pm_dir / "pm_recent_2.json").write_text(
+            json.dumps(
+                {
+                    "postmortem_id": "pm_recent_2",
+                    "recorded_at": (datetime.utcnow() - timedelta(days=10)).isoformat() + "Z",
+                }
+            )
+        )
 
         # Older postmortem
-        (pm_dir / "pm_old_1.json").write_text(json.dumps({
-            "postmortem_id": "pm_old_1",
-            "recorded_at": (datetime.utcnow() - timedelta(days=100)).isoformat() + "Z"
-        }))
+        (pm_dir / "pm_old_1.json").write_text(
+            json.dumps(
+                {
+                    "postmortem_id": "pm_old_1",
+                    "recorded_at": (datetime.utcnow() - timedelta(days=100)).isoformat() + "Z",
+                }
+            )
+        )
 
         # Postmortem with no recorded_at
-        (pm_dir / "pm_no_date.json").write_text(json.dumps({
-            "postmortem_id": "pm_no_date",
-        }))
+        (pm_dir / "pm_no_date.json").write_text(
+            json.dumps(
+                {
+                    "postmortem_id": "pm_no_date",
+                }
+            )
+        )
 
         # Invalid JSON
         (pm_dir / "pm_invalid.json").write_text("this is not json")
 
         # File causing OSError
-        (pm_dir / "pm_os_error.json").write_text(json.dumps({"postmortem_id": "pm_os_error", "some": "data"})) # Added postmortem_id
+        (pm_dir / "pm_os_error.json").write_text(
+            json.dumps({"postmortem_id": "pm_os_error", "some": "data"})
+        )  # Added postmortem_id
 
         return pm_dir
 
@@ -399,7 +415,7 @@ class TestLoadPostmortems:
 
         # Test with no filtering (default 90 days)
         postmortems = load_postmortems(str(pm_dir))
-        assert len(postmortems) == 4 # recent_1, recent_2, no_date, os_error_file
+        assert len(postmortems) == 4  # recent_1, recent_2, no_date, os_error_file
 
     def test_load_postmortems_non_existent_dir(self, tmp_path):
         non_existent_dir = tmp_path / "does_not_exist"
@@ -408,10 +424,10 @@ class TestLoadPostmortems:
 
     def test_load_postmortems_invalid_json_file(self, setup_postmortem_dir, capsys):
         pm_dir = setup_postmortem_dir
-        # Assuming for days_back=1, only pm_recent_1 is recent, and pm_no_date, pm_os_error are always included.
+        # Assuming for days_back=7, only pm_recent_1 is recent, and pm_no_date, pm_os_error are always included.
         # pm_invalid should be skipped.
-        postmortems = load_postmortems(str(pm_dir), days_back=1)
-        assert len(postmortems) == 3 # pm_recent_1, pm_no_date, pm_os_error
+        postmortems = load_postmortems(str(pm_dir), days_back=7)
+        assert len(postmortems) == 3  # pm_recent_1, pm_no_date, pm_os_error
         assert any(pm["postmortem_id"] == "pm_recent_1" for pm in postmortems)
         assert any(pm["postmortem_id"] == "pm_no_date" for pm in postmortems)
         assert any(pm["postmortem_id"] == "pm_os_error" for pm in postmortems)
@@ -419,26 +435,27 @@ class TestLoadPostmortems:
         captured = capsys.readouterr()
         assert "Warning: Error loading" in captured.err
         assert "pm_invalid.json" in captured.err
-        assert "JSONDecodeError" in captured.err
+        assert "Expecting value" in captured.err or "JSONDecodeError" in captured.err
 
     def test_load_postmortems_os_error_file_access(self, setup_postmortem_dir, capsys, mocker):
         pm_dir = setup_postmortem_dir
         # Mock open to raise OSError for a specific file
         original_open = open
+
         def mock_open_os_error(file, *args, **kwargs):
             if "pm_os_error.json" in str(file):
                 raise OSError("Permission denied")
             return original_open(file, *args, **kwargs)
 
-        mocker.patch('builtins.open', side_effect=mock_open_os_error)
+        mocker.patch("builtins.open", side_effect=mock_open_os_error)
 
         postmortems = load_postmortems(str(pm_dir), days_back=120)
-        
+
         # Expecting 4 valid postmortems: recent_1, recent_2, old_1, no_date (5 total) minus pm_os_error
         # The pm_no_date doesn't have a recorded_at, so it is always included.
         # The pm_invalid.json will be skipped with warning.
         # So we should get 4 valid ones: pm_recent_1, pm_recent_2, pm_old_1, pm_no_date
-        assert len(postmortems) == 4 # pm_recent_1, pm_recent_2, pm_old_1, pm_no_date
+        assert len(postmortems) == 4  # pm_recent_1, pm_recent_2, pm_old_1, pm_no_date
         assert any(pm["postmortem_id"] == "pm_recent_1" for pm in postmortems)
         assert any(pm["postmortem_id"] == "pm_recent_2" for pm in postmortems)
         assert any(pm["postmortem_id"] == "pm_old_1" for pm in postmortems)
@@ -447,4 +464,4 @@ class TestLoadPostmortems:
         captured = capsys.readouterr()
         assert "Warning: Error loading" in captured.err
         assert "pm_os_error.json" in captured.err
-        assert "OSError" in captured.err
+        assert "Permission denied" in captured.err

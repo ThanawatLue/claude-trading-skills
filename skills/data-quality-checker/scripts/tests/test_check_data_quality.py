@@ -182,7 +182,6 @@ class TestDates:
         date_findings = [f for f in findings if "Jan 1" in f.message]
         assert len(date_findings) == 0
 
-
     def test_week_notation(self):
         """week notation, no weekday to check, no error."""
         content = "11/03 week"
@@ -293,7 +292,9 @@ class TestAllocations:
 
     def test_allocation_range_notation_valid(self):
         """Range notation where 100% is contained in [sum_mins, sum_maxs] -> OK."""
-        content = "## Allocation\n- Stocks: 50-55%\n- Bonds: 20-25%\n- Gold: 15-20%\n- Cash: 5-10%\n"
+        content = (
+            "## Allocation\n- Stocks: 50-55%\n- Bonds: 20-25%\n- Gold: 15-20%\n- Cash: 5-10%\n"
+        )
         # sum_mins = 50+20+15+5 = 90, sum_maxs = 55+25+20+10 = 110
         # 100 is in [90, 110] -> OK
         findings = check_allocations(content)
@@ -335,9 +336,7 @@ class TestAllocations:
 
     def test_allocation_detects_ratio_column(self):
         """Table with Ratio column header triggers allocation detection."""
-        content = (
-            "| Sector | Ratio |\n|--------|----------|\n| Tech | 50% |\n| Finance | 50% |\n"
-        )
+        content = "| Sector | Ratio |\n|--------|----------|\n| Tech | 50% |\n| Finance | 50% |\n"
         findings = check_allocations(content)
         # 50 + 50 = 100 -> no warning, but proves the section was detected
         assert len(findings) == 0
@@ -385,7 +384,9 @@ class TestFullWidth:
 
     def test_fullwidth_tilde_range(self):
         """Full-width tilde 〜 should be parsed as range separator."""
-        content = "## Allocation\n- Stocks: 50〜55%\n- Bonds: 20〜25%\n- Gold: 15〜20%\n- Cash: 5〜10%\n"
+        content = (
+            "## Allocation\n- Stocks: 50〜55%\n- Bonds: 20〜25%\n- Gold: 15〜20%\n- Cash: 5〜10%\n"
+        )
         # sum_mins = 90, sum_maxs = 110, 100 in range -> OK
         findings = check_allocations(content)
         assert len(findings) == 0
