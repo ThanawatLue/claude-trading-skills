@@ -61,10 +61,16 @@ auto_paper:
       target_r: 2.0
       stop_pct_cap: 3.0
       take_profit_r: 2.0
-      max_hold_days: 15
+      max_hold_days: 10
       time_stop_min_r: -0.5
       trail_after_r: 1.0
       trail_stop_r: 0.5
+      ratchet_tiers:
+        - [0.8, -0.3]
+        - [1.2, 0.15]
+        - [1.8, 0.8]
+      velocity_stall_days: 4
+      velocity_min_mfe_r: 0.3
     thai-swing-momentum:
       min_score: 80
       max_new_per_run: 1
@@ -72,37 +78,67 @@ auto_paper:
       target_r: 2.0
       stop_pct_cap: 4.0
       take_profit_r: 2.0
-      max_hold_days: 15
+      max_hold_days: 8
       time_stop_min_r: -0.5
       trail_after_r: 1.0
       trail_stop_r: 0.5
+      ratchet_tiers:
+        - [0.8, -0.3]
+        - [1.2, 0.15]
+        - [1.8, 0.8]
+      velocity_stall_days: 3
+      velocity_min_mfe_r: 0.3
     vcp-screener:
       min_score: 75
       max_new_per_run: 1
       target_r: 2.0
       stop_pct_cap: 5.0
       take_profit_r: 2.0
-      max_hold_days: 15
+      max_hold_days: 12
       time_stop_min_r: -0.5
       trail_after_r: 1.0
       trail_stop_r: 0.5
+      ratchet_tiers:
+        - [0.8, -0.3]
+        - [1.2, 0.15]
+        - [1.8, 0.8]
+      velocity_stall_days: 4
+      velocity_min_mfe_r: 0.3
 
 paper_exit_rules:
   thai-swing-dip:
     take_profit_r: 2.0
-    max_hold_days: 15
+    max_hold_days: 10
     time_stop_min_r: -0.5
     trail_after_r: 1.0
     trail_stop_r: 0.5
+    ratchet_tiers:
+      - [0.8, -0.3]
+      - [1.2, 0.15]
+      - [1.8, 0.8]
+    velocity_stall_days: 4
+    velocity_min_mfe_r: 0.3
   thai-swing-momentum:
     take_profit_r: 2.0
-    max_hold_days: 15
+    max_hold_days: 8
     time_stop_min_r: -0.5
     trail_after_r: 1.0
     trail_stop_r: 0.5
+    ratchet_tiers:
+      - [0.8, -0.3]
+      - [1.2, 0.15]
+      - [1.8, 0.8]
+    velocity_stall_days: 3
+    velocity_min_mfe_r: 0.3
   vcp-screener:
     take_profit_r: 2.0
-    max_hold_days: 15
+    max_hold_days: 12
     time_stop_min_r: -0.5
     trail_after_r: 1.0
     trail_stop_r: 0.5
+    ratchet_tiers:
+      - [0.8, -0.3]
+      - [1.2, 0.15]
+      - [1.8, 0.8]
+    velocity_stall_days: 4
+    velocity_min_mfe_r: 0.3

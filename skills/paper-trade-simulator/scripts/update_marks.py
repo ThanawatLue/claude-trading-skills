@@ -21,6 +21,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from paper_trade import (  # noqa: E402
     STATUS_CLOSED_INVALIDATED,
+    STATUS_CLOSED_RATCHET,
+    STATUS_CLOSED_STALLED,
     STATUS_CLOSED_STOP,
     STATUS_CLOSED_TARGET,
     STATUS_CLOSED_TIME,
@@ -185,16 +187,25 @@ def update_one(
     side = row["side"]
     entry = row["entry_price"]
     shares = row["shares"]
-    risk_per_share = (entry - row["stop_price"]) if side == "long" else (row["stop_price"] - entry)
+    initial_risk = float(row["initial_risk"] or 0)
+    risk_per_share = (
+        (initial_risk / shares)
+        if (shares > 0 and initial_risk > 0)
+        else abs(entry - float(row["stop_price"]))
+    )
+    initial_stop = (entry - risk_per_share) if side == "long" else (entry + risk_per_share)
 
     if side == "long":
         pnl = (price - entry) * shares
     else:
         pnl = (entry - price) * shares
 
-    r_mult = pnl / (risk_per_share * shares) if risk_per_share > 0 else 0
+    r_mult = pnl / (risk_per_share * shares) if (risk_per_share > 0 and shares > 0) else 0
     new_mae = min(row["mae"] or price, price) if side == "long" else max(row["mae"] or price, price)
     new_mfe = max(row["mfe"] or price, price) if side == "long" else min(row["mfe"] or price, price)
+    mfe_gain = (new_mfe - entry) if side == "long" else (entry - new_mfe)
+    mfe_r = (mfe_gain / risk_per_share) if risk_per_share > 0 else 0.0
+
     days = (
         datetime.fromisoformat(_now_iso()).replace(tzinfo=None)
         - datetime.fromisoformat(row["entry_at"]).replace(tzinfo=None)
@@ -203,12 +214,35 @@ def update_one(
     take_profit_r = rule.get("take_profit_r")
     max_hold_days = rule.get("max_hold_days")
     time_stop_min_r = float(rule.get("time_stop_min_r", 0.0))
+    ratchet_tiers = rule.get("ratchet_tiers")
     trail_after_r = rule.get("trail_after_r")
     trail_stop_r = rule.get("trail_stop_r")
 
-    # After +N R, ratchet stop to entry + trail_stop_r * risk (default: breakeven).
+    # Multi-tier MFE Ratchet or classic trail_after_r
     stop_price = float(row["stop_price"])
-    if trail_after_r is not None and risk_per_share > 0 and r_mult >= float(trail_after_r):
+    if ratchet_tiers and risk_per_share > 0:
+        for tier in sorted(ratchet_tiers, key=lambda x: float(x[0])):
+            trigger_r, lock_r = float(tier[0]), float(tier[1])
+            if mfe_r >= trigger_r or r_mult >= trigger_r:
+                if side == "long":
+                    candidate_stop = entry + (risk_per_share * lock_r)
+                    if candidate_stop > stop_price:
+                        stop_price = candidate_stop
+                else:
+                    candidate_stop = entry - (risk_per_share * lock_r)
+                    if candidate_stop < stop_price:
+                        stop_price = candidate_stop
+        if round(stop_price, 4) != round(float(row["stop_price"]), 4):
+            with _db() as conn:
+                conn.execute(
+                    "UPDATE paper_trade SET stop_price=? WHERE id=?",
+                    (round(stop_price, 4), row["id"]),
+                )
+    elif (
+        trail_after_r is not None
+        and risk_per_share > 0
+        and (r_mult >= float(trail_after_r) or mfe_r >= float(trail_after_r))
+    ):
         trail_level = float(trail_stop_r if trail_stop_r is not None else 0.0)
         if side == "long":
             new_stop = entry + (risk_per_share * trail_level)
@@ -229,6 +263,15 @@ def update_one(
                         (round(stop_price, 4), row["id"]),
                     )
 
+    # Velocity Stall check (cut dead/stalled trades after N days without forward progress)
+    velocity_stall_days = rule.get("velocity_stall_days")
+    hit_velocity_stall = False
+    if velocity_stall_days is not None and risk_per_share > 0:
+        stall_days = int(velocity_stall_days)
+        min_mfe_r = float(rule.get("velocity_min_mfe_r", 0.30))
+        if days >= stall_days and mfe_r < min_mfe_r and r_mult <= 0.0:
+            hit_velocity_stall = True
+
     short_target_price = None
     hit_short_target = False
     if take_profit_r is not None and risk_per_share > 0:
@@ -242,7 +285,7 @@ def update_one(
         max_hold_days is not None and days >= int(max_hold_days) and r_mult < time_stop_min_r
     )
 
-    # Auto-close cases (priority: stop > target because stop fires first if both crossed)
+    # Auto-close cases (priority: stop > target > velocity > time)
     if side == "long":
         hit_stop = price <= stop_price
         hit_target = price >= row["target_price"]
@@ -251,18 +294,28 @@ def update_one(
         hit_target = price <= row["target_price"]
 
     if hit_stop:
-        # Close at stop price (assume execution at stop)
+        is_ratcheted = (
+            (stop_price > initial_stop + 1e-4)
+            if side == "long"
+            else (stop_price < initial_stop - 1e-4)
+        )
+        status = STATUS_CLOSED_RATCHET if is_ratcheted else STATUS_CLOSED_STOP
+        action = "auto_closed_ratchet" if is_ratcheted else "auto_closed_stop"
+        note_type = "ratcheted stop" if is_ratcheted else "stop"
         close_position(
             row["id"],
             stop_price,
-            status=STATUS_CLOSED_STOP,
-            notes=f"Auto-closed: price {price:.2f} crossed stop {stop_price:.2f}",
+            status=status,
+            notes=f"Auto-closed: price {price:.2f} crossed {note_type} {stop_price:.2f} (mfe: {mfe_r:.2f}R)",
         )
         return {
             "id": row["id"],
             "symbol": row["symbol"],
-            "action": "auto_closed_stop",
+            "action": action,
             "exit_price": stop_price,
+            "r": round(r_mult, 2),
+            "mfe_r": round(mfe_r, 2),
+            "ratcheted": is_ratcheted,
         }
     if hit_target:
         close_position(
@@ -276,6 +329,8 @@ def update_one(
             "symbol": row["symbol"],
             "action": "auto_closed_target",
             "exit_price": row["target_price"],
+            "r": round(r_mult, 2),
+            "mfe_r": round(mfe_r, 2),
         }
     if hit_short_target and short_target_price is not None:
         close_position(
@@ -292,6 +347,26 @@ def update_one(
             "action": "auto_closed_short_target",
             "exit_price": round(short_target_price, 4),
             "r": float(take_profit_r),
+            "mfe_r": round(mfe_r, 2),
+        }
+    if hit_velocity_stall:
+        close_position(
+            row["id"],
+            price,
+            status=STATUS_CLOSED_STALLED,
+            notes=(
+                f"Auto-closed: velocity stall after {days}d; "
+                f"peak MFE {mfe_r:.2f}R < {rule.get('velocity_min_mfe_r', 0.30):.2f}R, current R {r_mult:.2f}R"
+            ),
+        )
+        return {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "action": "auto_closed_stalled",
+            "exit_price": price,
+            "r": round(r_mult, 2),
+            "mfe_r": round(mfe_r, 2),
+            "days": days,
         }
     if hit_time_stop:
         close_position(
@@ -309,6 +384,7 @@ def update_one(
             "action": "auto_closed_time",
             "exit_price": price,
             "r": round(r_mult, 2),
+            "mfe_r": round(mfe_r, 2),
             "days": days,
         }
 
@@ -395,8 +471,10 @@ def update_all() -> list[dict]:
     results = []
     close_action_status = {
         "auto_closed_stop": STATUS_CLOSED_STOP,
+        "auto_closed_ratchet": STATUS_CLOSED_RATCHET,
         "auto_closed_target": STATUS_CLOSED_TARGET,
         "auto_closed_short_target": STATUS_CLOSED_TARGET,
+        "auto_closed_stalled": STATUS_CLOSED_STALLED,
         "auto_closed_time": STATUS_CLOSED_TIME,
         "auto_closed_invalidated": STATUS_CLOSED_INVALIDATED,
     }

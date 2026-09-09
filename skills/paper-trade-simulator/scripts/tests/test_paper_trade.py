@@ -379,9 +379,76 @@ class TestPaperTrade(unittest.TestCase):
         self.assertAlmostEqual(positions[0]["exit_price"], 99.0)
         self.assertLess(positions[0]["realized_r"], 0)
 
+    def test_update_marks_mfe_ratchet_stop(self):
+        rules = {
+            "thai-swing-momentum": {
+                "ratchet_tiers": [
+                    [0.8, -0.3],
+                    [1.2, 0.15],
+                    [1.8, 0.8],
+                ],
+            }
+        }
+        with patch("update_marks._load_exit_rules", return_value=rules):
+            with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+                paper_trade.open_position(
+                    symbol="RATCHET.BK",
+                    market="TH",
+                    shares=100,
+                    entry=100.0,
+                    stop=90.0,  # risk = 10.0 per share
+                    target=130.0,
+                    source="thai-swing-momentum",
+                )
 
-if __name__ == "__main__":
-    unittest.main()
+            # Step 1: price rises to 112.5 (1.25R -> triggers 1.2R tier -> moves stop to entry + 0.15*10 = 101.5)
+            with patch("update_marks._now_iso", return_value="2026-07-02T09:00:00+00:00"):
+                with patch("update_marks._fetch_price", return_value=112.5):
+                    res1 = update_marks.update_all()
+            self.assertEqual(res1[0]["action"], "marked")
+            pos = paper_trade.list_positions(status_filter="open")[0]
+            self.assertAlmostEqual(pos["stop_price"], 101.5)
+
+            # Step 2: price drops back to 101.0 (below ratcheted stop 101.5)
+            with patch("update_marks._now_iso", return_value="2026-07-03T09:00:00+00:00"):
+                with patch("update_marks._fetch_price", return_value=101.0):
+                    res2 = update_marks.update_all()
+            self.assertEqual(res2[0]["action"], "auto_closed_ratchet")
+            closed_pos = paper_trade.list_positions(status_filter="closed")[0]
+            self.assertEqual(closed_pos["status"], "closed_ratchet")
+            self.assertAlmostEqual(closed_pos["exit_price"], 101.5)
+            self.assertGreater(closed_pos["realized_r"], 0.1)
+
+    def test_update_marks_closes_velocity_stall(self):
+        rules = {
+            "thai-swing-momentum": {
+                "velocity_stall_days": 3,
+                "velocity_min_mfe_r": 0.3,
+            }
+        }
+        with patch("update_marks._load_exit_rules", return_value=rules):
+            with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+                paper_trade.open_position(
+                    symbol="STALL.BK",
+                    market="TH",
+                    shares=100,
+                    entry=100.0,
+                    stop=90.0,
+                    target=120.0,
+                    source="thai-swing-momentum",
+                )
+
+            # After 4 days, price is 99.0 (R = -0.1, peak MFE never reached 0.3R)
+            with patch("update_marks._now_iso", return_value="2026-07-05T09:00:00+00:00"):
+                with patch("paper_trade._now_iso", return_value="2026-07-05T09:00:00+00:00"):
+                    with patch("update_marks._fetch_price", return_value=99.0):
+                        results = update_marks.update_all()
+
+        self.assertEqual(results[0]["action"], "auto_closed_stalled")
+        closed_pos = paper_trade.list_positions(status_filter="closed")[0]
+        self.assertEqual(closed_pos["status"], "closed_stalled")
+        self.assertAlmostEqual(closed_pos["exit_price"], 99.0)
+        self.assertAlmostEqual(closed_pos["realized_r"], -0.1)
 
 
 if __name__ == "__main__":

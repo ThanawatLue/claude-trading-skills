@@ -3570,11 +3570,15 @@ async function paperUpdateMarks(event) {
     if (d.error) { alert('Update error: ' + d.error); return; }
     let summary = `Updated ${d.updated} positions`;
     const closedStop = (d.results||[]).filter(x=>x.action==='auto_closed_stop');
+    const closedRatchet = (d.results||[]).filter(x=>x.action==='auto_closed_ratchet');
     const closedTgt = (d.results||[]).filter(x=>x.action==='auto_closed_target' || x.action==='auto_closed_short_target');
+    const closedStall = (d.results||[]).filter(x=>x.action==='auto_closed_stalled');
     const closedTime = (d.results||[]).filter(x=>x.action==='auto_closed_time');
     if (closedStop.length) summary += `\n🛑 ${closedStop.length} hit STOP: ${closedStop.map(x=>x.symbol).join(', ')}`;
+    if (closedRatchet.length) summary += `\n🛡️ ${closedRatchet.length} hit RATCHET STOP: ${closedRatchet.map(x=>x.symbol).join(', ')}`;
     if (closedTgt.length) summary += `\n🎯 ${closedTgt.length} hit TARGET: ${closedTgt.map(x=>x.symbol).join(', ')}`;
-    if (closedTime.length) summary += `\nTIME ${closedTime.length} time stop: ${closedTime.map(x=>x.symbol).join(', ')}`;
+    if (closedStall.length) summary += `\n⚡ ${closedStall.length} VELOCITY STALL: ${closedStall.map(x=>x.symbol).join(', ')}`;
+    if (closedTime.length) summary += `\n⏳ ${closedTime.length} time stop: ${closedTime.map(x=>x.symbol).join(', ')}`;
     alert(summary);
     await paperRefresh();
   } finally {

@@ -48,9 +48,13 @@ def run_step(step_num: int, name: str, script_path: Path, args: list[str]) -> bo
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run complete Thai market daily analysis pipeline")
-    parser.add_argument("--output-dir", default="reports", help="Output directory for reports (default: reports/)")
+    parser.add_argument(
+        "--output-dir", default="reports", help="Output directory for reports (default: reports/)"
+    )
     parser.add_argument("--skip-dividends", action="store_true", help="Skip dividend screener")
-    parser.add_argument("--skip-paper", action="store_true", help="Skip paper trade simulator marks update")
+    parser.add_argument(
+        "--skip-paper", action="store_true", help="Skip paper trade simulator marks update"
+    )
 
     args = parser.parse_args(argv)
     output_dir = os.path.abspath(args.output_dir)
@@ -94,7 +98,11 @@ def main(argv: list[str] | None = None) -> int:
         (
             5,
             "Dividend Growth & High-Yield Screener",
-            _REPO_ROOT / "skills" / "thai-dividend-screener" / "scripts" / "screen_thai_dividends.py",
+            _REPO_ROOT
+            / "skills"
+            / "thai-dividend-screener"
+            / "scripts"
+            / "screen_thai_dividends.py",
             ["--output-dir", output_dir],
             not args.skip_dividends,
         ),
