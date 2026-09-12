@@ -44,33 +44,32 @@ SETUP_AWARE_SOURCES = frozenset(
 )
 DEFAULT_SOURCE_RULES = {
     "thai-swing-dip": {
-        "take_profit_r": 1.0,
-        # Longer hold; only time-stop when clearly underwater (not near flat).
-        "max_hold_days": 4,
-        "time_stop_min_r": -0.3,
-        "trail_after_r": 1.0,
-        "trail_stop_r": 0.0,
+        "take_profit_r": 2.0,
+        "max_hold_days": 10,
+        "time_stop_min_r": -0.5,
+        "velocity_stall_days": 4,
+        "velocity_min_mfe_r": 0.3,
     },
     "thai-swing-momentum": {
-        "take_profit_r": 1.0,
-        "max_hold_days": 3,
-        "time_stop_min_r": 0.0,
-        "trail_after_r": 1.0,
-        "trail_stop_r": 0.0,
+        "take_profit_r": 2.0,
+        "max_hold_days": 10,
+        "time_stop_min_r": -0.5,
+        "velocity_stall_days": 4,
+        "velocity_min_mfe_r": 0.3,
     },
     "vcp-screener": {
-        "take_profit_r": 1.5,
-        "max_hold_days": 7,
-        "time_stop_min_r": 0.5,
-        "trail_after_r": 1.0,
-        "trail_stop_r": 0.0,
+        "take_profit_r": 2.0,
+        "max_hold_days": 12,
+        "time_stop_min_r": -0.5,
+        "velocity_stall_days": 4,
+        "velocity_min_mfe_r": 0.3,
     },
     "vcp": {
-        "take_profit_r": 1.5,
-        "max_hold_days": 7,
-        "time_stop_min_r": 0.5,
-        "trail_after_r": 1.0,
-        "trail_stop_r": 0.0,
+        "take_profit_r": 2.0,
+        "max_hold_days": 12,
+        "time_stop_min_r": -0.5,
+        "velocity_stall_days": 4,
+        "velocity_min_mfe_r": 0.3,
     },
 }
 

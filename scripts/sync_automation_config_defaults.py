@@ -32,6 +32,7 @@ FORCE_TEMPLATE_PATHS = (
     "auto_paper.min_expected_net_r",
     "auto_paper.require_dual_check",
     "auto_paper.require_regime_gate",
+    "auto_paper.preserve_signal_plan",
     "auto_paper.source_rules.thai-swing-dip.min_score",
     "auto_paper.source_rules.thai-swing-dip.max_new_per_run",
     "auto_paper.source_rules.thai-swing-dip.max_open",
@@ -39,8 +40,10 @@ FORCE_TEMPLATE_PATHS = (
     "auto_paper.source_rules.thai-swing-dip.time_stop_min_r",
     "auto_paper.source_rules.thai-swing-dip.target_r",
     "auto_paper.source_rules.thai-swing-dip.take_profit_r",
-    "auto_paper.source_rules.thai-swing-dip.trail_after_r",
-    "auto_paper.source_rules.thai-swing-dip.trail_stop_r",
+    "auto_paper.source_rules.thai-swing-dip.stop_pct_min",
+    "auto_paper.source_rules.thai-swing-dip.stop_pct_cap",
+    "auto_paper.source_rules.thai-swing-dip.velocity_stall_days",
+    "auto_paper.source_rules.thai-swing-dip.velocity_min_mfe_r",
     "auto_paper.source_rules.thai-swing-momentum.min_score",
     "auto_paper.source_rules.thai-swing-momentum.max_new_per_run",
     "auto_paper.source_rules.thai-swing-momentum.max_open",
@@ -48,14 +51,30 @@ FORCE_TEMPLATE_PATHS = (
     "auto_paper.source_rules.thai-swing-momentum.time_stop_min_r",
     "auto_paper.source_rules.thai-swing-momentum.target_r",
     "auto_paper.source_rules.thai-swing-momentum.take_profit_r",
-    "auto_paper.source_rules.thai-swing-momentum.trail_after_r",
-    "auto_paper.source_rules.thai-swing-momentum.trail_stop_r",
+    "auto_paper.source_rules.thai-swing-momentum.stop_pct_min",
+    "auto_paper.source_rules.thai-swing-momentum.stop_pct_cap",
+    "auto_paper.source_rules.thai-swing-momentum.velocity_stall_days",
+    "auto_paper.source_rules.thai-swing-momentum.velocity_min_mfe_r",
     "auto_paper.source_rules.vcp-screener.target_r",
     "auto_paper.source_rules.vcp-screener.take_profit_r",
     "auto_paper.source_rules.vcp-screener.max_hold_days",
     "auto_paper.source_rules.vcp-screener.time_stop_min_r",
+    "auto_paper.source_rules.vcp-screener.stop_pct_min",
+    "auto_paper.source_rules.vcp-screener.stop_pct_cap",
+    "auto_paper.source_rules.vcp-screener.velocity_stall_days",
+    "auto_paper.source_rules.vcp-screener.velocity_min_mfe_r",
+)
+
+PURGE_STATE_PATHS = (
+    "auto_paper.source_rules.thai-swing-dip.trail_after_r",
+    "auto_paper.source_rules.thai-swing-dip.trail_stop_r",
+    "auto_paper.source_rules.thai-swing-dip.ratchet_tiers",
+    "auto_paper.source_rules.thai-swing-momentum.trail_after_r",
+    "auto_paper.source_rules.thai-swing-momentum.trail_stop_r",
+    "auto_paper.source_rules.thai-swing-momentum.ratchet_tiers",
     "auto_paper.source_rules.vcp-screener.trail_after_r",
     "auto_paper.source_rules.vcp-screener.trail_stop_r",
+    "auto_paper.source_rules.vcp-screener.ratchet_tiers",
 )
 
 
@@ -90,10 +109,23 @@ def _set_path(data: dict[str, Any], path: str, value: Any) -> None:
     cur[parts[-1]] = deepcopy(value)
 
 
+def _delete_path(data: dict[str, Any], path: str) -> None:
+    parts = path.split(".")
+    cur = data
+    for part in parts[:-1]:
+        if not isinstance(cur, dict) or part not in cur:
+            return
+        cur = cur[part]
+    if isinstance(cur, dict):
+        cur.pop(parts[-1], None)
+
+
 def _apply_forced_template_paths(
     merged: dict[str, Any], template: dict[str, Any]
 ) -> dict[str, Any]:
     out = deepcopy(merged)
+    for path in PURGE_STATE_PATHS:
+        _delete_path(out, path)
     for path in FORCE_TEMPLATE_PATHS:
         value = _get_path(template, path)
         if value is None:

@@ -389,11 +389,18 @@ def _derive_prices(
             max_risk = entry * (float(stop_pct_cap) / 100.0)
             if entry - stop > max_risk:
                 stop = entry - max_risk
-        effective_target_r = float(source_rule.get("target_r", config.target_r))
+        stop_pct_min = source_rule.get("stop_pct_min", source_rule.get("min_stop_pct"))
+        if stop_pct_min is not None:
+            min_risk = entry * (float(stop_pct_min) / 100.0)
+            if entry - stop < min_risk:
+                stop = entry - min_risk
         risk = entry - stop
-        capped_target = entry + (risk * effective_target_r)
-        if capped_target < target:
-            target = capped_target
+        if "target_r" in source_rule:
+            target = entry + (risk * float(source_rule["target_r"]))
+        else:
+            capped_target = entry + (risk * float(config.target_r))
+            if capped_target < target:
+                target = capped_target
     if not (0 < stop < entry < target):
         return None
     if (signal["market"] or "").upper() == "TH":

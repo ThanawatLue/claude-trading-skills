@@ -42,7 +42,7 @@ auto_paper:
   max_portfolio_heat_pct: 2
   dynamic_decision: true
   min_expected_net_r: 0.05
-  preserve_signal_plan: true
+  preserve_signal_plan: false
   regime_policy:
     NEW_ENTRY_ALLOWED:
       allow_open: true
@@ -55,53 +55,38 @@ auto_paper:
       risk_scale: 0.0
   source_rules:
     thai-swing-dip:
-      min_score: 85
-      max_new_per_run: 1
-      max_open: 2
+      min_score: 80
+      max_new_per_run: 2
+      max_open: 3
       target_r: 2.0
-      stop_pct_cap: 3.0
+      stop_pct_min: 5.0
+      stop_pct_cap: 6.0
       take_profit_r: 2.0
       max_hold_days: 10
       time_stop_min_r: -0.5
-      trail_after_r: 1.0
-      trail_stop_r: 0.5
-      ratchet_tiers:
-        - [0.8, -0.3]
-        - [1.2, 0.15]
-        - [1.8, 0.8]
       velocity_stall_days: 4
       velocity_min_mfe_r: 0.3
     thai-swing-momentum:
-      min_score: 80
-      max_new_per_run: 1
-      max_open: 2
+      min_score: 78
+      max_new_per_run: 2
+      max_open: 3
       target_r: 2.0
-      stop_pct_cap: 4.0
+      stop_pct_min: 4.5
+      stop_pct_cap: 6.0
       take_profit_r: 2.0
-      max_hold_days: 8
+      max_hold_days: 10
       time_stop_min_r: -0.5
-      trail_after_r: 1.0
-      trail_stop_r: 0.5
-      ratchet_tiers:
-        - [0.8, -0.3]
-        - [1.2, 0.15]
-        - [1.8, 0.8]
-      velocity_stall_days: 3
+      velocity_stall_days: 4
       velocity_min_mfe_r: 0.3
     vcp-screener:
       min_score: 75
       max_new_per_run: 1
       target_r: 2.0
-      stop_pct_cap: 5.0
+      stop_pct_min: 4.5
+      stop_pct_cap: 6.0
       take_profit_r: 2.0
       max_hold_days: 12
       time_stop_min_r: -0.5
-      trail_after_r: 1.0
-      trail_stop_r: 0.5
-      ratchet_tiers:
-        - [0.8, -0.3]
-        - [1.2, 0.15]
-        - [1.8, 0.8]
       velocity_stall_days: 4
       velocity_min_mfe_r: 0.3
 
@@ -110,35 +95,17 @@ paper_exit_rules:
     take_profit_r: 2.0
     max_hold_days: 10
     time_stop_min_r: -0.5
-    trail_after_r: 1.0
-    trail_stop_r: 0.5
-    ratchet_tiers:
-      - [0.8, -0.3]
-      - [1.2, 0.15]
-      - [1.8, 0.8]
     velocity_stall_days: 4
     velocity_min_mfe_r: 0.3
   thai-swing-momentum:
     take_profit_r: 2.0
-    max_hold_days: 8
+    max_hold_days: 10
     time_stop_min_r: -0.5
-    trail_after_r: 1.0
-    trail_stop_r: 0.5
-    ratchet_tiers:
-      - [0.8, -0.3]
-      - [1.2, 0.15]
-      - [1.8, 0.8]
-    velocity_stall_days: 3
+    velocity_stall_days: 4
     velocity_min_mfe_r: 0.3
   vcp-screener:
     take_profit_r: 2.0
     max_hold_days: 12
     time_stop_min_r: -0.5
-    trail_after_r: 1.0
-    trail_stop_r: 0.5
-    ratchet_tiers:
-      - [0.8, -0.3]
-      - [1.2, 0.15]
-      - [1.8, 0.8]
     velocity_stall_days: 4
     velocity_min_mfe_r: 0.3

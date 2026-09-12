@@ -76,6 +76,32 @@ def test_source_rules_cap_stop_and_target(tmp_path: Path) -> None:
     assert candidates[0]["target"] == 103.6
 
 
+def test_source_rules_clamp_minimum_stop_distance(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        _register(
+            conn,
+            source="thai-swing-dip",
+            entry=100,
+            stop=98,  # Only 2% risk, would suffer fee drag and noise
+            target=104,
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="US",
+            min_score=70,
+            as_of=date(2026, 7, 1),
+            dry_run=True,
+            source_rules={"thai-swing-dip": {"target_r": 2.0, "stop_pct_min": 4.5}},
+        )
+
+        candidates = auto_paper.eligible_signals(conn, config)
+
+    assert len(candidates) == 1
+    # Clamped to 4.5% risk distance
+    assert candidates[0]["stop"] == 95.5
+    # Target recalculated as entry + risk * target_r = 100 + 4.5 * 2.0 = 109.0
+    assert candidates[0]["target"] == 109.0
+
+
 def test_preserve_signal_plan_keeps_screener_execution_plan(tmp_path: Path) -> None:
     with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
         _register(
