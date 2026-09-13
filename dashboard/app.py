@@ -2206,6 +2206,8 @@ def api_signal_results():
         }
         return jsonify(_clean_nan(payload))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
