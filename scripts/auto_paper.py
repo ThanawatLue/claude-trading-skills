@@ -389,7 +389,7 @@ def _compute_symbol_atr_pct(
             continue
         seen.add(key)
         try:
-            where = ["symbol = ?"]
+            where = ["symbol = ?", "high IS NOT NULL", "low IS NOT NULL", "close IS NOT NULL"]
             params: list[Any] = [key]
             if as_of:
                 where.append("date <= ?")
@@ -405,19 +405,33 @@ def _compute_symbol_atr_pct(
     if not rows or len(rows) < 15:
         return None
 
-    recent_bars = rows[-15:]
+    valid_bars = [
+        r
+        for r in rows
+        if r["high"] is not None and r["low"] is not None and r["close"] is not None
+    ]
+    if len(valid_bars) < 15:
+        return None
+
+    recent_bars = valid_bars[-15:]
     tr_list = []
     for i in range(1, len(recent_bars)):
-        b_high = float(recent_bars[i]["high"])
-        b_low = float(recent_bars[i]["low"])
-        prev_c = float(recent_bars[i - 1]["close"])
-        tr = max(b_high - b_low, abs(b_high - prev_c), abs(b_low - prev_c))
-        tr_list.append(tr)
+        try:
+            b_high = float(recent_bars[i]["high"])
+            b_low = float(recent_bars[i]["low"])
+            prev_c = float(recent_bars[i - 1]["close"])
+            tr = max(b_high - b_low, abs(b_high - prev_c), abs(b_low - prev_c))
+            tr_list.append(tr)
+        except (TypeError, ValueError):
+            continue
 
     if len(tr_list) < 14:
         return None
     atr14 = sum(tr_list[-14:]) / 14.0
-    last_close = float(recent_bars[-1]["close"])
+    try:
+        last_close = float(recent_bars[-1]["close"])
+    except (TypeError, ValueError):
+        return None
     if last_close <= 0:
         return None
     return (atr14 / last_close) * 100.0
@@ -434,25 +448,30 @@ def _check_sector_rs_alignment(
         set_rows = conn.execute(
             """SELECT date, close FROM price_bar
                WHERE symbol in ('^SET.BK', 'SET.BK')
+                 AND close IS NOT NULL
                ORDER BY date ASC"""
         ).fetchall()
         if not set_rows or len(set_rows) < 21:
             return True
-        set_bars = [r for r in set_rows if (not as_of or r["date"] <= as_of.isoformat())]
+        set_bars = [
+            r
+            for r in set_rows
+            if (not as_of or r["date"] <= as_of.isoformat()) and r["close"] is not None
+        ]
         if len(set_bars) < 21:
             return True
-        set_ret = (
-            (float(set_bars[-1]["close"]) - float(set_bars[-21]["close"]))
-            / float(set_bars[-21]["close"])
-            * 100.0
-        )
+        c_now = float(set_bars[-1]["close"])
+        c_past = float(set_bars[-21]["close"])
+        if c_past <= 0:
+            return True
+        set_ret = ((c_now - c_past) / c_past) * 100.0
 
         candidates = [symbol, symbol.replace(".BK", ""), f"{symbol}.BK"]
         sym_rows = None
         for key in candidates:
             r = conn.execute(
                 """SELECT date, close FROM price_bar
-                   WHERE symbol=? ORDER BY date ASC""",
+                   WHERE symbol=? AND close IS NOT NULL ORDER BY date ASC""",
                 (key,),
             ).fetchall()
             if r and len(r) >= 21:
@@ -460,17 +479,21 @@ def _check_sector_rs_alignment(
                 break
         if not sym_rows:
             return True
-        sym_bars = [r for r in sym_rows if (not as_of or r["date"] <= as_of.isoformat())]
+        sym_bars = [
+            r
+            for r in sym_rows
+            if (not as_of or r["date"] <= as_of.isoformat()) and r["close"] is not None
+        ]
         if len(sym_bars) < 21:
             return True
-        sym_ret = (
-            (float(sym_bars[-1]["close"]) - float(sym_bars[-21]["close"]))
-            / float(sym_bars[-21]["close"])
-            * 100.0
-        )
+        sym_c_now = float(sym_bars[-1]["close"])
+        sym_c_past = float(sym_bars[-21]["close"])
+        if sym_c_past <= 0:
+            return True
+        sym_ret = ((sym_c_now - sym_c_past) / sym_c_past) * 100.0
 
         return (sym_ret - set_ret) >= min_relative_return
-    except sqlite3.OperationalError:
+    except (sqlite3.OperationalError, TypeError, ValueError):
         return True
 
 

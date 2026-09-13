@@ -2123,7 +2123,11 @@ def api_signal_results():
                 preserve_signal_plan=bool(paper_config.get("preserve_signal_plan", False)),
                 source_rules=paper_config.get("source_rules") or {},
                 use_dynamic_atr=bool(paper_config.get("use_dynamic_atr", False)),
-                atr_multiplier=float(paper_config.get("atr_multiplier", 1.2)),
+                atr_multiplier=float(
+                    paper_config.get("atr_multiplier")
+                    if paper_config.get("atr_multiplier") is not None
+                    else 1.2
+                ),
                 stop_pct_min=(
                     float(paper_config["stop_pct_min"])
                     if paper_config.get("stop_pct_min") is not None
@@ -2136,7 +2140,9 @@ def api_signal_results():
                 ),
                 use_sector_filter=bool(paper_config.get("use_sector_filter", False)),
                 min_sector_relative_return=float(
-                    paper_config.get("min_sector_relative_return", -2.0)
+                    paper_config.get("min_sector_relative_return")
+                    if paper_config.get("min_sector_relative_return") is not None
+                    else -2.0
                 ),
                 dry_run=not (auto_enabled and auto_execute),
             )
