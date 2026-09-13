@@ -7,13 +7,16 @@ exit rules for Thai equity swing trading.
 from __future__ import annotations
 
 import sqlite3
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "state" / "vm_market_cache.db" if (BASE_DIR / "state" / "vm_market_cache.db").exists() else BASE_DIR / "state" / "market_cache.db"
+DB_PATH = (
+    BASE_DIR / "state" / "vm_market_cache.db"
+    if (BASE_DIR / "state" / "vm_market_cache.db").exists()
+    else BASE_DIR / "state" / "market_cache.db"
+)
 
 
 @dataclass
@@ -39,7 +42,7 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
     conn.row_factory = sqlite3.Row
 
     signals = conn.execute(
-        """SELECT * FROM signal_ledger 
+        """SELECT * FROM signal_ledger
            WHERE market='TH' AND entry_price IS NOT NULL AND entry_price > 0
            ORDER BY signal_date ASC, raw_score DESC"""
     ).fetchall()
@@ -51,10 +54,17 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
     conn.close()
 
     for b in bar_rows:
-        if b["open"] is not None and b["high"] is not None and b["low"] is not None and b["close"] is not None:
+        if (
+            b["open"] is not None
+            and b["high"] is not None
+            and b["low"] is not None
+            and b["close"] is not None
+        ):
             bars_by_symbol.setdefault(b["symbol"], []).append(dict(b))
 
-    print(f"Loaded {len(signals)} signals, {len(bar_rows)} price bars across {len(bars_by_symbol)} symbols.\n")
+    print(
+        f"Loaded {len(signals)} signals, {len(bar_rows)} price bars across {len(bars_by_symbol)} symbols.\n"
+    )
 
     results_table = []
 
@@ -65,7 +75,7 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
         for sig in signals:
             src = sig["source_skill"]
             score = sig["raw_score"] or 0.0
-            
+
             # Filter score
             if "dip" in src and score < cfg.min_score_dip:
                 continue
@@ -102,23 +112,26 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
             entry_bar = sub_bars[1]
             actual_entry = float(entry_bar["open"]) if entry_bar["open"] else entry
             actual_stop = actual_entry - risk
-            target_1 = actual_entry + (risk * cfg.scale_out_r) if cfg.use_scale_out else actual_entry + (risk * cfg.target_r)
+            target_1 = (
+                actual_entry + (risk * cfg.scale_out_r)
+                if cfg.use_scale_out
+                else actual_entry + (risk * cfg.target_r)
+            )
             target_final = actual_entry + (risk * cfg.target_r)
 
             stop_price = actual_stop
             peak_high = actual_entry
             trade_bars = sub_bars[1:]
-            
+
             scaled_out = False
             scale_out_price = 0.0
-            scale_out_pnl = 0.0
 
             exit_price = float(trade_bars[-1]["close"])
             exit_reason = "end_of_data"
             exit_bar = trade_bars[-1]
 
             for d_idx, b in enumerate(trade_bars):
-                o, h, l, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+                o, h, low_val, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
                 peak_high = max(peak_high, h)
                 mfe_r = (peak_high - actual_entry) / risk if risk > 0 else 0.0
 
@@ -138,9 +151,11 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
                     stop_price = max(stop_price, actual_entry + (risk * 0.1))
 
                 # 3. Stop check
-                if l <= stop_price:
+                if low_val <= stop_price:
                     exit_price = min(o, stop_price)
-                    exit_reason = "closed_ratchet" if (stop_price > actual_stop + 1e-4) else "closed_stop"
+                    exit_reason = (
+                        "closed_ratchet" if (stop_price > actual_stop + 1e-4) else "closed_stop"
+                    )
                     exit_bar = b
                     break
 
@@ -153,8 +168,15 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
 
                 # 5. Velocity Stall check
                 curr_r = (c - actual_entry) / risk if risk > 0 else 0.0
-                stall_limit = cfg.velocity_stall_days if "momentum" in src else (cfg.velocity_stall_days + 1)
-                if cfg.use_velocity_stall and d_idx >= stall_limit and mfe_r < cfg.velocity_min_mfe_r and curr_r <= 0.0:
+                stall_limit = (
+                    cfg.velocity_stall_days if "momentum" in src else (cfg.velocity_stall_days + 1)
+                )
+                if (
+                    cfg.use_velocity_stall
+                    and d_idx >= stall_limit
+                    and mfe_r < cfg.velocity_min_mfe_r
+                    and curr_r <= 0.0
+                ):
                     exit_price = c
                     exit_reason = "closed_stalled"
                     exit_bar = b
@@ -172,8 +194,16 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
             if cfg.use_scale_out and scaled_out:
                 half_shares = shares // 2
                 rem_shares = shares - half_shares
-                pnl_1 = (scale_out_price - actual_entry) * half_shares - (actual_entry * half_shares * fee_rate) - (scale_out_price * half_shares * fee_rate)
-                pnl_2 = (exit_price - actual_entry) * rem_shares - (actual_entry * rem_shares * fee_rate) - (exit_price * rem_shares * fee_rate)
+                pnl_1 = (
+                    (scale_out_price - actual_entry) * half_shares
+                    - (actual_entry * half_shares * fee_rate)
+                    - (scale_out_price * half_shares * fee_rate)
+                )
+                pnl_2 = (
+                    (exit_price - actual_entry) * rem_shares
+                    - (actual_entry * rem_shares * fee_rate)
+                    - (exit_price * rem_shares * fee_rate)
+                )
                 net_pnl = pnl_1 + pnl_2
             else:
                 gross = (exit_price - actual_entry) * shares
@@ -183,12 +213,16 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
             realized_r = net_pnl / initial_risk_thb if initial_risk_thb > 0 else 0.0
             active_symbols[sym] = exit_bar["date"]
 
-            trade_records.append({
-                "realized_r": realized_r,
-                "realized_pnl": net_pnl,
-                "exit_reason": exit_reason,
-                "days": trade_bars.index(exit_bar) if exit_bar in trade_bars else len(trade_bars) - 1,
-            })
+            trade_records.append(
+                {
+                    "realized_r": realized_r,
+                    "realized_pnl": net_pnl,
+                    "exit_reason": exit_reason,
+                    "days": trade_bars.index(exit_bar)
+                    if exit_bar in trade_bars
+                    else len(trade_bars) - 1,
+                }
+            )
 
         # Calculate metrics
         total = len(trade_records)
@@ -202,21 +236,27 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
         profit_factor = (sum_win_thb / sum_loss_thb) if sum_loss_thb > 0 else 999.0
         avg_days = sum(t["days"] for t in trade_records) / total if total else 0.0
 
-        results_table.append({
-            "name": cfg.name,
-            "trades": total,
-            "wins": len(wins),
-            "win_rate": round(win_rate, 1),
-            "net_r": round(net_r, 2),
-            "net_pnl": round(net_pnl, 2),
-            "profit_factor": round(profit_factor, 2),
-            "avg_days": round(avg_days, 1),
-        })
+        results_table.append(
+            {
+                "name": cfg.name,
+                "trades": total,
+                "wins": len(wins),
+                "win_rate": round(win_rate, 1),
+                "net_r": round(net_r, 2),
+                "net_pnl": round(net_pnl, 2),
+                "profit_factor": round(profit_factor, 2),
+                "avg_days": round(avg_days, 1),
+            }
+        )
 
-    print(f"{'Configuration':<52} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6} {'AvgDays':>7}")
+    print(
+        f"{'Configuration':<52} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6} {'AvgDays':>7}"
+    )
     print("-" * 105)
     for r in results_table:
-        print(f"{r['name']:<52} {r['trades']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['profit_factor']:>6.2f} {r['avg_days']:>6.1f}d")
+        print(
+            f"{r['name']:<52} {r['trades']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['profit_factor']:>6.2f} {r['avg_days']:>6.1f}d"
+        )
 
 
 if __name__ == "__main__":

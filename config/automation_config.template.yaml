@@ -43,6 +43,18 @@ auto_paper:
   dynamic_decision: true
   min_expected_net_r: 0.05
   preserve_signal_plan: false
+  use_dynamic_atr: true
+  atr_multiplier: 1.2
+  stop_pct_min: 5.0
+  stop_pct_cap: 6.5
+  use_sector_filter: false
+  min_sector_relative_return: -2.0
+  use_scale_out: false
+  scale_out_r: 1.2
+  scale_out_fraction: 0.5
+  early_fakeout_enabled: true
+  early_fakeout_vol_ratio: 0.40
+  early_fakeout_max_mfe_r: 0.20
   regime_policy:
     NEW_ENTRY_ALLOWED:
       allow_open: true
@@ -58,10 +70,15 @@ auto_paper:
       min_score: 80
       max_new_per_run: 2
       max_open: 3
-      target_r: 2.0
+      target_r: 2.2
       stop_pct_min: 5.0
-      stop_pct_cap: 6.0
-      take_profit_r: 2.0
+      stop_pct_cap: 6.5
+      take_profit_r: 2.2
+      use_dynamic_atr: true
+      atr_multiplier: 1.2
+      early_fakeout_enabled: true
+      early_fakeout_vol_ratio: 0.40
+      early_fakeout_max_mfe_r: 0.20
       max_hold_days: 10
       time_stop_min_r: -0.5
       velocity_stall_days: 4
@@ -70,10 +87,15 @@ auto_paper:
       min_score: 78
       max_new_per_run: 2
       max_open: 3
-      target_r: 2.0
-      stop_pct_min: 4.5
-      stop_pct_cap: 6.0
-      take_profit_r: 2.0
+      target_r: 2.2
+      stop_pct_min: 5.0
+      stop_pct_cap: 6.5
+      take_profit_r: 2.2
+      use_dynamic_atr: true
+      atr_multiplier: 1.2
+      early_fakeout_enabled: true
+      early_fakeout_vol_ratio: 0.40
+      early_fakeout_max_mfe_r: 0.20
       max_hold_days: 10
       time_stop_min_r: -0.5
       velocity_stall_days: 4
@@ -81,10 +103,15 @@ auto_paper:
     vcp-screener:
       min_score: 75
       max_new_per_run: 1
-      target_r: 2.0
-      stop_pct_min: 4.5
-      stop_pct_cap: 6.0
-      take_profit_r: 2.0
+      target_r: 2.2
+      stop_pct_min: 5.0
+      stop_pct_cap: 6.5
+      take_profit_r: 2.2
+      use_dynamic_atr: true
+      atr_multiplier: 1.2
+      early_fakeout_enabled: true
+      early_fakeout_vol_ratio: 0.40
+      early_fakeout_max_mfe_r: 0.20
       max_hold_days: 12
       time_stop_min_r: -0.5
       velocity_stall_days: 4
@@ -92,20 +119,29 @@ auto_paper:
 
 paper_exit_rules:
   thai-swing-dip:
-    take_profit_r: 2.0
+    take_profit_r: 2.2
     max_hold_days: 10
     time_stop_min_r: -0.5
     velocity_stall_days: 4
     velocity_min_mfe_r: 0.3
+    early_fakeout_enabled: true
+    early_fakeout_vol_ratio: 0.40
+    early_fakeout_max_mfe_r: 0.20
   thai-swing-momentum:
-    take_profit_r: 2.0
+    take_profit_r: 2.2
     max_hold_days: 10
     time_stop_min_r: -0.5
     velocity_stall_days: 4
     velocity_min_mfe_r: 0.3
+    early_fakeout_enabled: true
+    early_fakeout_vol_ratio: 0.40
+    early_fakeout_max_mfe_r: 0.20
   vcp-screener:
-    take_profit_r: 2.0
+    take_profit_r: 2.2
     max_hold_days: 12
     time_stop_min_r: -0.5
     velocity_stall_days: 4
     velocity_min_mfe_r: 0.3
+    early_fakeout_enabled: true
+    early_fakeout_vol_ratio: 0.40
+    early_fakeout_max_mfe_r: 0.20

@@ -83,6 +83,12 @@ class AutoPaperConfig:
     fingerprint_min_closed: int = 2
     fingerprint_min_win_rate: float = 0.4
     fingerprint_max_avg_realized_r: float = -0.25
+    use_dynamic_atr: bool = False
+    atr_multiplier: float = 1.2
+    stop_pct_min: float | None = None
+    stop_pct_cap: float | None = None
+    use_sector_filter: bool = False
+    min_sector_relative_return: float = -2.0
 
 
 def _as_of(config: AutoPaperConfig) -> date:
@@ -368,8 +374,110 @@ def _open_capacity_for_score(config: AutoPaperConfig, score: float | None) -> in
     return base_capacity
 
 
+def _compute_symbol_atr_pct(
+    conn: sqlite3.Connection,
+    symbol: str,
+    as_of: date | None = None,
+) -> float | None:
+    """Calculate 14-period ATR % of close for symbol up to as_of date."""
+    candidates = [symbol, symbol.replace(".BK", ""), f"{symbol}.BK"]
+    seen: set[str] = set()
+    rows = None
+    for key in candidates:
+        key = key.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        try:
+            where = ["symbol = ?"]
+            params: list[Any] = [key]
+            if as_of:
+                where.append("date <= ?")
+                params.append(as_of.isoformat())
+            sql = f"""SELECT high, low, close FROM price_bar
+                     WHERE {" AND ".join(where)}
+                     ORDER BY date ASC"""
+            rows = conn.execute(sql, params).fetchall()
+            if rows and len(rows) >= 15:
+                break
+        except sqlite3.OperationalError:
+            return None
+    if not rows or len(rows) < 15:
+        return None
+
+    recent_bars = rows[-15:]
+    tr_list = []
+    for i in range(1, len(recent_bars)):
+        b_high = float(recent_bars[i]["high"])
+        b_low = float(recent_bars[i]["low"])
+        prev_c = float(recent_bars[i - 1]["close"])
+        tr = max(b_high - b_low, abs(b_high - prev_c), abs(b_low - prev_c))
+        tr_list.append(tr)
+
+    if len(tr_list) < 14:
+        return None
+    atr14 = sum(tr_list[-14:]) / 14.0
+    last_close = float(recent_bars[-1]["close"])
+    if last_close <= 0:
+        return None
+    return (atr14 / last_close) * 100.0
+
+
+def _check_sector_rs_alignment(
+    conn: sqlite3.Connection,
+    symbol: str,
+    as_of: date | None = None,
+    min_relative_return: float = -2.0,
+) -> bool:
+    """Return True if symbol's 20d return >= SET 20d return + min_relative_return."""
+    try:
+        set_rows = conn.execute(
+            """SELECT date, close FROM price_bar
+               WHERE symbol in ('^SET.BK', 'SET.BK')
+               ORDER BY date ASC"""
+        ).fetchall()
+        if not set_rows or len(set_rows) < 21:
+            return True
+        set_bars = [r for r in set_rows if (not as_of or r["date"] <= as_of.isoformat())]
+        if len(set_bars) < 21:
+            return True
+        set_ret = (
+            (float(set_bars[-1]["close"]) - float(set_bars[-21]["close"]))
+            / float(set_bars[-21]["close"])
+            * 100.0
+        )
+
+        candidates = [symbol, symbol.replace(".BK", ""), f"{symbol}.BK"]
+        sym_rows = None
+        for key in candidates:
+            r = conn.execute(
+                """SELECT date, close FROM price_bar
+                   WHERE symbol=? ORDER BY date ASC""",
+                (key,),
+            ).fetchall()
+            if r and len(r) >= 21:
+                sym_rows = r
+                break
+        if not sym_rows:
+            return True
+        sym_bars = [r for r in sym_rows if (not as_of or r["date"] <= as_of.isoformat())]
+        if len(sym_bars) < 21:
+            return True
+        sym_ret = (
+            (float(sym_bars[-1]["close"]) - float(sym_bars[-21]["close"]))
+            / float(sym_bars[-21]["close"])
+            * 100.0
+        )
+
+        return (sym_ret - set_ret) >= min_relative_return
+    except sqlite3.OperationalError:
+        return True
+
+
 def _derive_prices(
-    signal: sqlite3.Row, config: AutoPaperConfig
+    signal: sqlite3.Row,
+    config: AutoPaperConfig,
+    conn: sqlite3.Connection | None = None,
 ) -> tuple[float, float, float] | None:
     entry = signal["entry_price"]
     if entry is None or entry <= 0:
@@ -384,12 +492,37 @@ def _derive_prices(
         return None
     source_rule = _source_rule(signal, config)
     if not config.preserve_signal_plan:
-        stop_pct_cap = source_rule.get("stop_pct_cap")
+        use_dynamic_atr = source_rule.get(
+            "use_dynamic_atr", getattr(config, "use_dynamic_atr", False)
+        )
+        if use_dynamic_atr and conn is not None:
+            atr_pct = _compute_symbol_atr_pct(conn, signal["symbol"], _as_of(config))
+            if atr_pct is not None and atr_pct > 0:
+                atr_mult = float(
+                    source_rule.get("atr_multiplier", getattr(config, "atr_multiplier", 1.2))
+                )
+                dyn_min = source_rule.get(
+                    "stop_pct_min",
+                    source_rule.get("min_stop_pct", getattr(config, "stop_pct_min", None)),
+                )
+                dyn_cap = source_rule.get("stop_pct_cap", getattr(config, "stop_pct_cap", None))
+                stop_pct_min = float(dyn_min if dyn_min is not None else 5.0)
+                stop_pct_cap = float(dyn_cap if dyn_cap is not None else 6.5)
+                effective_stop_pct = max(stop_pct_min, min(stop_pct_cap, atr_mult * atr_pct))
+                risk = entry * (effective_stop_pct / 100.0)
+                stop = entry - risk
+                target_r = float(source_rule.get("target_r", config.target_r))
+                target = entry + (risk * target_r)
+
+        stop_pct_cap = source_rule.get("stop_pct_cap", getattr(config, "stop_pct_cap", None))
         if stop_pct_cap is not None:
             max_risk = entry * (float(stop_pct_cap) / 100.0)
             if entry - stop > max_risk:
                 stop = entry - max_risk
-        stop_pct_min = source_rule.get("stop_pct_min", source_rule.get("min_stop_pct"))
+        stop_pct_min = source_rule.get(
+            "stop_pct_min",
+            source_rule.get("min_stop_pct", getattr(config, "stop_pct_min", None)),
+        )
         if stop_pct_min is not None:
             min_risk = entry * (float(stop_pct_min) / 100.0)
             if entry - stop < min_risk:
@@ -552,6 +685,7 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
         capacity = _open_capacity_for_score(config, score)
         signal_date = date.fromisoformat(row["signal_date"])
         source_key = _normalize_source(row["source_skill"])
+        source_rule = _source_rule(row, config)
         if not _source_enabled(row, config):
             continue
         if score is None or float(score) < _source_min_score(row, config):
@@ -577,7 +711,19 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
         dual = _dual_check_for_row(conn, row, config)
         if dual is not None and not dual.get("passed"):
             continue
-        prices = _derive_prices(row, config)
+        use_sec_filter = source_rule.get(
+            "use_sector_filter", getattr(config, "use_sector_filter", False)
+        )
+        if use_sec_filter and (row["market"] or "").upper() == "TH":
+            min_rel = float(
+                source_rule.get(
+                    "min_sector_relative_return",
+                    getattr(config, "min_sector_relative_return", -2.0),
+                )
+            )
+            if not _check_sector_rs_alignment(conn, symbol, _as_of(config), min_rel):
+                continue
+        prices = _derive_prices(row, config, conn=conn)
         if prices is None:
             continue
         candidate = _candidate_from_prices(row, config, prices)
@@ -590,6 +736,15 @@ def eligible_signals(conn: sqlite3.Connection, config: AutoPaperConfig) -> list[
                 "gates": dual.get("gates") or {},
             }
         trace = _decision_trace(conn, row, candidate, config)
+        try:
+            entry_vol_row = conn.execute(
+                "SELECT volume FROM price_bar WHERE symbol=? ORDER BY date DESC LIMIT 1",
+                (row["symbol"],),
+            ).fetchone()
+            if entry_vol_row and entry_vol_row[0]:
+                trace["entry_volume"] = float(entry_vol_row[0])
+        except sqlite3.OperationalError:
+            pass
         candidate["decision_trace"] = trace
         candidate["decision_score"] = trace["components"]["decision_score"]
         candidate["expected_net_r"] = trace["components"]["expected_net_r"]
@@ -678,6 +833,7 @@ def explain_candidates(
         signal_date = date.fromisoformat(row["signal_date"])
         age_days = (_as_of(config) - signal_date).days
         source_key = _normalize_source(row["source_skill"])
+        source_rule = _source_rule(row, config)
         source_min_score = _source_min_score(row, config)
         source_max_age = _source_max_age_days(row, config)
         if not _source_enabled(row, config):
@@ -739,7 +895,19 @@ def explain_candidates(
                 "reject_reasons": dual.get("reject_reasons") or [],
                 "gates": dual.get("gates") or {},
             }
-        prices = _derive_prices(row, config)
+        use_sec_filter = source_rule.get(
+            "use_sector_filter", getattr(config, "use_sector_filter", False)
+        )
+        if use_sec_filter and (row["market"] or "").upper() == "TH":
+            min_rel = float(
+                source_rule.get(
+                    "min_sector_relative_return",
+                    getattr(config, "min_sector_relative_return", -2.0),
+                )
+            )
+            if not _check_sector_rs_alignment(conn, symbol, _as_of(config), min_rel):
+                reasons.append("weak_sector_rs")
+        prices = _derive_prices(row, config, conn=conn)
         candidate = _candidate_from_prices(row, config, prices) if prices else None
         trace = _decision_trace(conn, row, candidate, config) if candidate is not None else None
         if trace is not None:

@@ -95,6 +95,7 @@ STATUS_CLOSED_MANUAL = "closed_manual"
 STATUS_CLOSED_INVALIDATED = "closed_invalidated"
 STATUS_CLOSED_STALLED = "closed_stalled"
 STATUS_CLOSED_RATCHET = "closed_ratchet"
+STATUS_CLOSED_FAKEOUT = "closed_fakeout"
 CLOSED_STATUSES = (
     STATUS_CLOSED_STOP,
     STATUS_CLOSED_TARGET,
@@ -103,6 +104,7 @@ CLOSED_STATUSES = (
     STATUS_CLOSED_INVALIDATED,
     STATUS_CLOSED_STALLED,
     STATUS_CLOSED_RATCHET,
+    STATUS_CLOSED_FAKEOUT,
 )
 SOURCE_ALIASES = {
     "vcp": "vcp-screener",
@@ -346,13 +348,29 @@ def close_position(
         shares = row["shares"]
         initial_risk = float(row["initial_risk"] or 0)
 
-        if side == "long":
-            gross_pnl = (exit_price - entry) * shares
+        trace = _row_to_dict(row).get("decision_trace") or {}
+        scale_out_info = trace.get("scale_out")
+        if scale_out_info and scale_out_info.get("completed"):
+            closed_shares = int(scale_out_info.get("shares_closed", 0))
+            t1_net_pnl = float(scale_out_info.get("t1_net_pnl", 0.0))
+            rem_shares = max(0, shares - closed_shares)
+            if side == "long":
+                rem_gross = (exit_price - entry) * rem_shares
+            else:
+                rem_gross = (entry - exit_price) * rem_shares
+            rem_cost = exit_price * rem_shares * (row["transaction_cost_bps"] or 0.0) / 10_000
+            pnl = t1_net_pnl + rem_gross - rem_cost
+            t1_price = float(scale_out_info.get("t1_price", entry))
+            gross_pnl = ((t1_price - entry) * closed_shares if side == "long" else (entry - t1_price) * closed_shares) + rem_gross
+            exit_cost = (row["exit_cost"] or 0.0) + rem_cost
         else:
-            gross_pnl = (entry - exit_price) * shares
-        entry_cost = row["entry_cost"] or 0.0
-        exit_cost = exit_price * shares * (row["transaction_cost_bps"] or 0.0) / 10_000
-        pnl = gross_pnl - entry_cost - exit_cost
+            if side == "long":
+                gross_pnl = (exit_price - entry) * shares
+            else:
+                gross_pnl = (entry - exit_price) * shares
+            entry_cost = row["entry_cost"] or 0.0
+            exit_cost = exit_price * shares * (row["transaction_cost_bps"] or 0.0) / 10_000
+            pnl = gross_pnl - entry_cost - exit_cost
 
         realized_r = pnl / initial_risk if initial_risk > 0 else 0
         now = _now_iso()
@@ -412,6 +430,99 @@ def close_position(
         )
         out = conn.execute("SELECT * FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
     return _row_to_dict(out)
+
+
+def scale_out_position(
+    trade_id: int,
+    price: float,
+    fraction: float = 0.5,
+    notes: str = "",
+) -> dict[str, Any]:
+    """Partially close a position (e.g. 50% scale-out at TP1) and adjust stop to breakeven."""
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"trade id {trade_id} not found")
+        if row["status"] != STATUS_OPEN:
+            raise ValueError(f"trade {trade_id} is already closed (status={row['status']})")
+
+        trade_dict = _row_to_dict(row)
+        trace = trade_dict.get("decision_trace") or {}
+        if trace.get("scale_out", {}).get("completed"):
+            return {"id": trade_id, "action": "already_scaled_out"}
+
+        side = row["side"]
+        entry = row["entry_price"]
+        shares = row["shares"]
+        initial_risk = float(row["initial_risk"] or 0)
+        risk_per_share = (
+            (initial_risk / shares)
+            if (shares > 0 and initial_risk > 0)
+            else abs(entry - float(row["stop_price"]))
+        )
+
+        shares_closed = int(shares * fraction)
+        if shares >= 200:
+            shares_closed = max(100, (shares_closed // 100) * 100)
+        shares_closed = min(shares - 1, max(1, shares_closed))
+
+        cost_bps = float(row["transaction_cost_bps"] or 0.0)
+        entry_cost_part = entry * shares_closed * (cost_bps / 10000.0)
+        exit_cost_part = price * shares_closed * (cost_bps / 10000.0)
+        gross_part = (
+            (price - entry) * shares_closed if side == "long" else (entry - price) * shares_closed
+        )
+        t1_net_pnl = gross_part - entry_cost_part - exit_cost_part
+
+        # Move stop to breakeven (+0.05R buffer)
+        new_stop = (
+            round(entry + (risk_per_share * 0.05), 4)
+            if side == "long"
+            else round(entry - (risk_per_share * 0.05), 4)
+        )
+        current_stop = float(row["stop_price"])
+        if side == "long":
+            final_stop = max(current_stop, new_stop)
+        else:
+            final_stop = min(current_stop, new_stop)
+
+        now = _now_iso()
+        trace["scale_out"] = {
+            "completed": True,
+            "shares_closed": shares_closed,
+            "t1_price": price,
+            "t1_net_pnl": round(t1_net_pnl, 4),
+            "t1_at": now,
+            "initial_shares": shares,
+            "remaining_shares": shares - shares_closed,
+        }
+
+        merged_notes = row["journal_text"] or ""
+        scale_note = (
+            f"[SCALE-OUT {now}] closed {shares_closed}/{shares} @ {price:.2f} "
+            f"(PnL: {t1_net_pnl:+.2f})"
+        )
+        if notes:
+            scale_note += f" - {notes}"
+        merged_notes = (merged_notes + "\n---\n" if merged_notes else "") + scale_note
+
+        conn.execute(
+            """UPDATE paper_trade
+               SET stop_price=?, decision_trace_json=?, journal_text=?, last_updated=?
+               WHERE id=?""",
+            (final_stop, json.dumps(trace, ensure_ascii=False), merged_notes, now, trade_id),
+        )
+
+        return {
+            "id": trade_id,
+            "symbol": row["symbol"],
+            "action": "scaled_out",
+            "shares_closed": shares_closed,
+            "remaining_shares": shares - shares_closed,
+            "scale_price": price,
+            "scale_pnl": round(t1_net_pnl, 2),
+            "new_stop": final_stop,
+        }
 
 
 def list_positions(status_filter: str = "all", market: str | None = None) -> list[dict[str, Any]]:

@@ -718,3 +718,128 @@ def test_source_disabled_blocks_opens(tmp_path: Path) -> None:
 
     assert diagnostics["selected"] == []
     assert "source_disabled" in diagnostics["skipped"][0]["reasons"]
+
+
+def test_dynamic_atr_stop_clamping(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS price_bar (
+                symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL,
+                PRIMARY KEY (symbol, date)
+            )"""
+        )
+        for d in range(1, 21):
+            dt = f"2026-06-{d:02d}" if d <= 10 else f"2026-07-{(d-10):02d}"
+            conn.execute(
+                "INSERT INTO price_bar VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("ATRTEST.BK", dt, 100.0, 102.0, 98.0, 100.0, 500000.0),
+            )
+        _register(
+            conn,
+            signal_id="sig_atr",
+            symbol="ATRTEST.BK",
+            score=90,
+            signal_date="2026-07-10",
+            entry=100.0,
+            stop=90.0,
+            target=120.0,
+            source="thai-swing-momentum",
+            market="TH",
+        )
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            fingerprint_block=False,
+            source_rules={
+                "thai-swing-momentum": {
+                    "use_dynamic_atr": True,
+                    "atr_multiplier": 1.2,
+                    "stop_pct_min": 5.0,
+                    "stop_pct_cap": 6.5,
+                    "target_r": 2.2,
+                }
+            },
+            dry_run=True,
+        )
+        candidates = auto_paper.eligible_signals(conn, config)
+        assert len(candidates) == 1
+        assert candidates[0]["stop"] == 95.0
+        assert candidates[0]["target"] == 111.0
+        assert candidates[0]["decision_trace"]["entry_volume"] == 500000.0
+
+
+def test_sector_rs_alignment_filter(tmp_path: Path) -> None:
+    with signal_ledger.connect(tmp_path / "db.sqlite") as conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS price_bar (
+                symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL,
+                PRIMARY KEY (symbol, date)
+            )"""
+        )
+        for d in range(1, 22):
+            dt = f"2026-06-{d:02d}" if d <= 11 else f"2026-07-{(d-11):02d}"
+            p_set = 1000.0 if d == 1 else 1050.0
+            conn.execute(
+                "INSERT INTO price_bar VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("^SET.BK", dt, p_set, p_set, p_set, p_set, 1000000.0),
+            )
+            pw = 100.0 if d == 1 else 90.0
+            conn.execute(
+                "INSERT INTO price_bar VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("WEAK.BK", dt, pw, pw, pw, pw, 1000000.0),
+            )
+            ps = 100.0 if d == 1 else 115.0
+            conn.execute(
+                "INSERT INTO price_bar VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("STRONG.BK", dt, ps, ps, ps, ps, 1000000.0),
+            )
+
+        _register(
+            conn,
+            signal_id="sig_weak",
+            symbol="WEAK.BK",
+            score=90,
+            signal_date="2026-07-10",
+            entry=90.0,
+            stop=85.0,
+            target=100.0,
+            source="thai-swing-momentum",
+            market="TH",
+        )
+        _register(
+            conn,
+            signal_id="sig_strong",
+            symbol="STRONG.BK",
+            score=89,
+            signal_date="2026-07-10",
+            entry=115.0,
+            stop=108.0,
+            target=130.0,
+            source="thai-swing-momentum",
+            market="TH",
+        )
+
+        config = auto_paper.AutoPaperConfig(
+            market="TH",
+            min_score=70,
+            as_of=date(2026, 7, 10),
+            now=datetime(2026, 7, 10, 4, 0, tzinfo=timezone.utc),
+            fingerprint_block=False,
+            source_rules={
+                "thai-swing-momentum": {
+                    "use_sector_filter": True,
+                    "min_sector_relative_return": -2.0,
+                }
+            },
+            dry_run=True,
+        )
+        candidates = auto_paper.eligible_signals(conn, config)
+        assert len(candidates) == 1
+        assert candidates[0]["symbol"] == "STRONG.BK"
+
+        diag = auto_paper.explain_candidates(conn, config)
+        weak_diag = next(s for s in diag["skipped"] if s["symbol"] == "WEAK.BK")
+        assert "weak_sector_rs" in weak_diag["reasons"]
+

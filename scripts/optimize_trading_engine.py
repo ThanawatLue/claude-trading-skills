@@ -25,12 +25,12 @@ class SimStrategy:
     name: str
     allowed_sources: list[str]
     min_scores: dict[str, float]
-    min_stop_pct: float = 3.0      # Minimum stop % to avoid fee drag
-    max_stop_pct: float = 6.0      # Maximum stop % to keep positions meaningful
-    use_scale_out: bool = True     # Sell 50% at T1, 50% at T2
-    target_1_r: float = 1.0        # First target
-    target_2_r: float = 2.0        # Final target
-    use_breakeven: bool = True     # Move stop to BE (+0.05R) after T1 or MFE
+    min_stop_pct: float = 3.0  # Minimum stop % to avoid fee drag
+    max_stop_pct: float = 6.0  # Maximum stop % to keep positions meaningful
+    use_scale_out: bool = True  # Sell 50% at T1, 50% at T2
+    target_1_r: float = 1.0  # First target
+    target_2_r: float = 2.0  # Final target
+    use_breakeven: bool = True  # Move stop to BE (+0.05R) after T1 or MFE
     be_trigger_r: float = 1.0
     use_velocity_stall: bool = True
     stall_days: int = 4
@@ -43,13 +43,16 @@ def load_dataset(db_path: Path):
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
 
-    signals = [dict(r) for r in conn.execute(
-        """SELECT signal_id, symbol, market, source_skill, signal_date, 
+    signals = [
+        dict(r)
+        for r in conn.execute(
+            """SELECT signal_id, symbol, market, source_skill, signal_date,
                   raw_score, entry_price, stop_price, target_price
-           FROM signal_ledger 
+           FROM signal_ledger
            WHERE market='TH' AND entry_price IS NOT NULL AND entry_price > 0
            ORDER BY signal_date ASC, raw_score DESC"""
-    ).fetchall()]
+        ).fetchall()
+    ]
 
     bars_by_symbol: dict[str, list[dict[str, Any]]] = {}
     bar_rows = conn.execute(
@@ -58,7 +61,12 @@ def load_dataset(db_path: Path):
     conn.close()
 
     for b in bar_rows:
-        if b["open"] is not None and b["high"] is not None and b["low"] is not None and b["close"] is not None:
+        if (
+            b["open"] is not None
+            and b["high"] is not None
+            and b["low"] is not None
+            and b["close"] is not None
+        ):
             bars_by_symbol.setdefault(b["symbol"], []).append(dict(b))
 
     return signals, bars_by_symbol
@@ -67,9 +75,8 @@ def load_dataset(db_path: Path):
 def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -> dict[str, Any]:
     active_symbols: dict[str, str] = {}
     trades = []
-    account_cash = 30000.0
     risk_budget_thb = 300.0  # 1% risk
-    max_pos_thb = 6000.0     # 20% max per position
+    max_pos_thb = 6000.0  # 20% max per position
     fee_rate = strategy.commission_bps / 10000.0
 
     for sig in signals:
@@ -86,7 +93,7 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
         sig_date = sig["signal_date"]
         entry = float(sig["entry_price"])
         raw_stop = float(sig["stop_price"]) if sig["stop_price"] else entry * 0.95
-        
+
         # Risk clamp
         raw_risk_pct = (entry - raw_stop) / entry * 100.0
         if raw_risk_pct < strategy.min_stop_pct:
@@ -135,7 +142,7 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
         exit_reason = "end_of_data"
 
         for d_idx, b in enumerate(trade_bars):
-            o, h, l, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+            o, h, low_val, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
             peak_high = max(peak_high, h)
             mfe_r = (peak_high - actual_entry) / risk
 
@@ -149,12 +156,16 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
                 scaled_out = True
                 scale_price = max(o, t1_price)
                 half_shares = shares // 2
-                scale_pnl = (scale_price - actual_entry) * half_shares - (actual_entry * half_shares * fee_rate) - (scale_price * half_shares * fee_rate)
+                scale_pnl = (
+                    (scale_price - actual_entry) * half_shares
+                    - (actual_entry * half_shares * fee_rate)
+                    - (scale_price * half_shares * fee_rate)
+                )
                 # After scale out, guarantee remaining half stop is at Breakeven
                 stop_price = max(stop_price, actual_entry + (risk * 0.05))
 
             # Stop hit
-            if l <= stop_price:
+            if low_val <= stop_price:
                 exit_price = min(o, stop_price)
                 exit_reason = "ratchet_be" if stop_price > actual_stop + 1e-4 else "stop"
                 exit_bar = b
@@ -169,7 +180,12 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
 
             # Velocity Stall (dead trade)
             curr_r = (c - actual_entry) / risk
-            if strategy.use_velocity_stall and d_idx >= strategy.stall_days and mfe_r < strategy.stall_min_mfe and curr_r <= 0.0:
+            if (
+                strategy.use_velocity_stall
+                and d_idx >= strategy.stall_days
+                and mfe_r < strategy.stall_min_mfe
+                and curr_r <= 0.0
+            ):
                 exit_price = c
                 exit_reason = "stalled"
                 exit_bar = b
@@ -185,7 +201,11 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
         # Calculate Net PnL
         if strategy.use_scale_out and scaled_out:
             rem_shares = shares - (shares // 2)
-            rem_pnl = (exit_price - actual_entry) * rem_shares - (actual_entry * rem_shares * fee_rate) - (exit_price * rem_shares * fee_rate)
+            rem_pnl = (
+                (exit_price - actual_entry) * rem_shares
+                - (actual_entry * rem_shares * fee_rate)
+                - (exit_price * rem_shares * fee_rate)
+            )
             net_pnl = scale_pnl + rem_pnl
         else:
             gross = (exit_price - actual_entry) * shares
@@ -195,16 +215,27 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
         realized_r = net_pnl / initial_risk_thb if initial_risk_thb > 0 else 0.0
         active_symbols[sym] = exit_bar["date"]
 
-        trades.append({
-            "realized_r": realized_r,
-            "net_pnl": net_pnl,
-            "reason": exit_reason,
-            "days": trade_bars.index(exit_bar) if exit_bar in trade_bars else len(trade_bars) - 1,
-        })
+        trades.append(
+            {
+                "realized_r": realized_r,
+                "net_pnl": net_pnl,
+                "reason": exit_reason,
+                "days": trade_bars.index(exit_bar)
+                if exit_bar in trade_bars
+                else len(trade_bars) - 1,
+            }
+        )
 
     total = len(trades)
     if total == 0:
-        return {"name": strategy.name, "total": 0, "net_r": -999, "net_pnl": -999, "win_rate": 0, "pf": 0}
+        return {
+            "name": strategy.name,
+            "total": 0,
+            "net_r": -999,
+            "net_pnl": -999,
+            "win_rate": 0,
+            "pf": 0,
+        }
 
     wins = [t for t in trades if t["realized_r"] > 0]
     losses = [t for t in trades if t["realized_r"] <= 0]
@@ -272,15 +303,21 @@ def main():
     print("Running multi-dimensional optimization grid...")
     all_results = []
 
-    for (s_label, sources), min_stop, (t1, t2), (use_stall, stall_d, stall_mfe) in itertools.product(
-        source_sets, min_stops, targets, stalls
-    ):
+    for (s_label, sources), min_stop, (t1, t2), (
+        use_stall,
+        stall_d,
+        stall_mfe,
+    ) in itertools.product(source_sets, min_stops, targets, stalls):
         min_scores = {
             "thai-swing-momentum": 78.0,
             "thai-swing-dip": 85.0 if "High-Score" in s_label else 80.0,
             "vcp-screener": 70.0,
         }
-        cfg_name = f"{s_label} | Stop>={min_stop}% | T1:{t1}R T2:{t2}R | Stall:{stall_d}d" if use_stall else f"{s_label} | Stop>={min_stop}% | T1:{t1}R T2:{t2}R | NoStall"
+        cfg_name = (
+            f"{s_label} | Stop>={min_stop}% | T1:{t1}R T2:{t2}R | Stall:{stall_d}d"
+            if use_stall
+            else f"{s_label} | Stop>={min_stop}% | T1:{t1}R T2:{t2}R | NoStall"
+        )
         strat = SimStrategy(
             name=cfg_name,
             allowed_sources=sources,
@@ -303,18 +340,24 @@ def main():
     print("\n" + "=" * 110)
     print("                      TOP 15 BEST PERFORMING CONFIGURATIONS ACROSS ALL TESTS")
     print("=" * 110)
-    print(f"{'Rank':<5} {'Configuration':<60} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}")
+    print(
+        f"{'Rank':<5} {'Configuration':<60} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}"
+    )
     print("-" * 110)
 
     for idx, r in enumerate(all_results[:15], 1):
-        print(f"{idx:<5} {r['name']:<60} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}")
+        print(
+            f"{idx:<5} {r['name']:<60} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}"
+        )
 
     print("\n" + "=" * 110)
     print("                      TOP 5 CONFIGURATIONS FOR 'MOMENTUM ONLY'")
     print("=" * 110)
     momo_results = [r for r in all_results if "Momentum Only" in r["name"]]
     for idx, r in enumerate(momo_results[:5], 1):
-        print(f"{idx:<5} {r['name']:<60} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}")
+        print(
+            f"{idx:<5} {r['name']:<60} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}"
+        )
 
     print("\n" + "=" * 110)
 

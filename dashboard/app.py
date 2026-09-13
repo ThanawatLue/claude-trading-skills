@@ -2122,6 +2122,22 @@ def api_signal_results():
                 cooldown_after_loss_days=int(paper_config.get("cooldown_after_loss_days", 2)),
                 preserve_signal_plan=bool(paper_config.get("preserve_signal_plan", False)),
                 source_rules=paper_config.get("source_rules") or {},
+                use_dynamic_atr=bool(paper_config.get("use_dynamic_atr", False)),
+                atr_multiplier=float(paper_config.get("atr_multiplier", 1.2)),
+                stop_pct_min=(
+                    float(paper_config["stop_pct_min"])
+                    if paper_config.get("stop_pct_min") is not None
+                    else None
+                ),
+                stop_pct_cap=(
+                    float(paper_config["stop_pct_cap"])
+                    if paper_config.get("stop_pct_cap") is not None
+                    else None
+                ),
+                use_sector_filter=bool(paper_config.get("use_sector_filter", False)),
+                min_sector_relative_return=float(
+                    paper_config.get("min_sector_relative_return", -2.0)
+                ),
                 dry_run=not (auto_enabled and auto_execute),
             )
             auto_candidates = auto_paper.eligible_signals(conn, auto_config)

@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from paper_trade import (  # noqa: E402
+    STATUS_CLOSED_FAKEOUT,
     STATUS_CLOSED_INVALIDATED,
     STATUS_CLOSED_RATCHET,
     STATUS_CLOSED_STALLED,
@@ -29,8 +30,10 @@ from paper_trade import (  # noqa: E402
     STATUS_OPEN,
     _db,
     _now_iso,
+    _row_to_dict,
     close_position,
     record_mark,
+    scale_out_position,
 )
 
 # Backward-compatible patch target for older tests and callers. The active DB
@@ -44,32 +47,44 @@ SETUP_AWARE_SOURCES = frozenset(
 )
 DEFAULT_SOURCE_RULES = {
     "thai-swing-dip": {
-        "take_profit_r": 2.0,
+        "take_profit_r": 2.2,
         "max_hold_days": 10,
         "time_stop_min_r": -0.5,
         "velocity_stall_days": 4,
         "velocity_min_mfe_r": 0.3,
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
     },
     "thai-swing-momentum": {
-        "take_profit_r": 2.0,
+        "take_profit_r": 2.2,
         "max_hold_days": 10,
         "time_stop_min_r": -0.5,
         "velocity_stall_days": 4,
         "velocity_min_mfe_r": 0.3,
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
     },
     "vcp-screener": {
-        "take_profit_r": 2.0,
+        "take_profit_r": 2.2,
         "max_hold_days": 12,
         "time_stop_min_r": -0.5,
         "velocity_stall_days": 4,
         "velocity_min_mfe_r": 0.3,
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
     },
     "vcp": {
-        "take_profit_r": 2.0,
+        "take_profit_r": 2.2,
         "max_hold_days": 12,
         "time_stop_min_r": -0.5,
         "velocity_stall_days": 4,
         "velocity_min_mfe_r": 0.3,
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
     },
 }
 
@@ -155,8 +170,8 @@ def _maybe_invalidate_setup(row: sqlite3.Row, price: float) -> dict | None:
     }
 
 
-def _fetch_price(symbol: str) -> float | None:
-    """Get latest close price via yfinance. Returns None on failure."""
+def _fetch_quote(symbol: str) -> dict[str, float] | None:
+    """Get latest close price and volume via yfinance. Returns None on failure."""
     try:
         import yfinance as yf
 
@@ -164,16 +179,31 @@ def _fetch_price(symbol: str) -> float | None:
         h = t.history(period="2d")
         if h.empty:
             return None
-        return float(h["Close"].iloc[-1])
+        vol = (
+            float(h["Volume"].iloc[-1])
+            if ("Volume" in h.columns and not h["Volume"].empty)
+            else 0.0
+        )
+        return {
+            "price": float(h["Close"].iloc[-1]),
+            "volume": vol,
+        }
     except Exception as e:
         print(f"  fetch error for {symbol}: {e}", file=sys.stderr)
         return None
+
+
+def _fetch_price(symbol: str) -> float | None:
+    """Get latest close price via yfinance. Returns None on failure."""
+    quote = _fetch_quote(symbol)
+    return quote["price"] if quote else None
 
 
 def update_one(
     row: sqlite3.Row,
     price: float,
     source_rules: dict[str, dict[str, float]] | None = None,
+    volume: float | None = None,
 ) -> dict:
     """Update marks for one open position; auto-close if stop/target crossed."""
     source_rules = source_rules or DEFAULT_SOURCE_RULES
@@ -217,8 +247,37 @@ def update_one(
     trail_after_r = rule.get("trail_after_r")
     trail_stop_r = rule.get("trail_stop_r")
 
-    # Multi-tier MFE Ratchet or classic trail_after_r
+    # Native Scale-out check (if enabled and not yet completed)
+    use_scale_out = bool(rule.get("use_scale_out", False))
+    trade_dict = _row_to_dict(row)
+    trace = trade_dict.get("decision_trace") or {}
+    scale_info = trace.get("scale_out") or {}
+    scaled_out = bool(scale_info.get("completed"))
+    scale_out_result = None
+
     stop_price = float(row["stop_price"])
+    if use_scale_out and not scaled_out and risk_per_share > 0:
+        scale_out_r = float(rule.get("scale_out_r", 1.2))
+        scale_fraction = float(rule.get("scale_out_fraction", 0.5))
+        if side == "long":
+            t1_price = entry + (risk_per_share * scale_out_r)
+            hit_t1 = price >= t1_price or mfe_r >= scale_out_r or r_mult >= scale_out_r
+        else:
+            t1_price = entry - (risk_per_share * scale_out_r)
+            hit_t1 = price <= t1_price or mfe_r >= scale_out_r or r_mult >= scale_out_r
+
+        if hit_t1:
+            scale_price = t1_price if (side == "long" and price >= t1_price) else price
+            scale_out_result = scale_out_position(
+                int(row["id"]),
+                price=scale_price,
+                fraction=scale_fraction,
+                notes=f"TP1 reached at {scale_out_r:g}R",
+            )
+            stop_price = float(scale_out_result.get("new_stop", stop_price))
+            scaled_out = True
+
+    # Multi-tier MFE Ratchet or classic trail_after_r
     if ratchet_tiers and risk_per_share > 0:
         for tier in sorted(ratchet_tiers, key=lambda x: float(x[0])):
             trigger_r, lock_r = float(tier[0]), float(tier[1])
@@ -262,6 +321,31 @@ def update_one(
                         (round(stop_price, 4), row["id"]),
                     )
 
+    # Early Fakeout / Volume Collapse check (Day 1 or 2)
+    early_fakeout_enabled = bool(rule.get("early_fakeout_enabled", True))
+    hit_early_fakeout = False
+    if early_fakeout_enabled and days in (1, 2) and risk_per_share > 0:
+        fakeout_vol_ratio = float(rule.get("early_fakeout_vol_ratio", 0.40))
+        fakeout_max_mfe_r = float(rule.get("early_fakeout_max_mfe_r", 0.20))
+        entry_vol = float(trace.get("entry_volume") or 0.0)
+        if entry_vol <= 0:
+            entry_date = str(row["entry_at"])[:10]
+            with _db() as conn:
+                try:
+                    vol_row = conn.execute(
+                        "SELECT volume FROM price_bar WHERE symbol=? AND date <= ? ORDER BY date DESC LIMIT 1",
+                        (row["symbol"], entry_date),
+                    ).fetchone()
+                    if vol_row and vol_row[0]:
+                        entry_vol = float(vol_row[0])
+                except sqlite3.OperationalError:
+                    pass
+        curr_vol = float(volume if volume is not None else 0.0)
+        if entry_vol > 0 and curr_vol > 0:
+            vol_ratio = curr_vol / entry_vol
+            if vol_ratio < fakeout_vol_ratio and r_mult < 0.0 and mfe_r < fakeout_max_mfe_r:
+                hit_early_fakeout = True
+
     # Velocity Stall check (cut dead/stalled trades after N days without forward progress)
     velocity_stall_days = rule.get("velocity_stall_days")
     hit_velocity_stall = False
@@ -284,7 +368,7 @@ def update_one(
         max_hold_days is not None and days >= int(max_hold_days) and r_mult < time_stop_min_r
     )
 
-    # Auto-close cases (priority: stop > target > velocity > time)
+    # Auto-close cases (priority: stop > target > early_fakeout > velocity > time)
     if side == "long":
         hit_stop = price <= stop_price
         hit_target = price >= row["target_price"]
@@ -348,6 +432,25 @@ def update_one(
             "r": float(take_profit_r),
             "mfe_r": round(mfe_r, 2),
         }
+    if hit_early_fakeout:
+        close_position(
+            row["id"],
+            price,
+            status=STATUS_CLOSED_FAKEOUT,
+            notes=(
+                f"Auto-closed: early fakeout volume collapse on day {days}; "
+                f"vol ratio {curr_vol/entry_vol:.2f} < {fakeout_vol_ratio:.2f}, current R {r_mult:.2f}R"
+            ),
+        )
+        return {
+            "id": row["id"],
+            "symbol": row["symbol"],
+            "action": "auto_closed_fakeout",
+            "exit_price": price,
+            "r": round(r_mult, 2),
+            "mfe_r": round(mfe_r, 2),
+            "days": days,
+        }
     if hit_velocity_stall:
         close_position(
             row["id"],
@@ -396,7 +499,7 @@ def update_one(
                WHERE id=?""",
             (price, _now_iso(), pnl, r_mult, new_mae, new_mfe, days, row["id"]),
         )
-    return {
+    ret = {
         "id": row["id"],
         "symbol": row["symbol"],
         "action": "marked",
@@ -404,6 +507,9 @@ def update_one(
         "pnl": round(pnl, 2),
         "r": round(r_mult, 2),
     }
+    if scale_out_result:
+        ret["scale_out"] = scale_out_result
+    return ret
 
 
 def update_all() -> list[dict]:
@@ -421,8 +527,19 @@ def update_all() -> list[dict]:
     # Group by symbol to dedupe fetches
     unique_symbols = sorted({r["symbol"] for r in tracked})
     prices: dict[str, float | None] = {}
+    volumes: dict[str, float] = {}
     for sym in unique_symbols:
-        prices[sym] = _fetch_price(sym)
+        # Check if _fetch_price was patched or custom
+        p = _fetch_price(sym)
+        prices[sym] = p
+        if p is not None:
+            try:
+                q = _fetch_quote(sym)
+                volumes[sym] = q.get("volume", 0.0) if isinstance(q, dict) else 0.0
+            except Exception:
+                volumes[sym] = 0.0
+        else:
+            volumes[sym] = 0.0
 
     # TradingView fallback for Thai stocks (.BK)
     thai_failures = [
@@ -476,13 +593,15 @@ def update_all() -> list[dict]:
         "auto_closed_stalled": STATUS_CLOSED_STALLED,
         "auto_closed_time": STATUS_CLOSED_TIME,
         "auto_closed_invalidated": STATUS_CLOSED_INVALIDATED,
+        "auto_closed_fakeout": STATUS_CLOSED_FAKEOUT,
     }
     for row in opens:
         price = prices.get(row["symbol"])
         if price is None:
             results.append({"id": row["id"], "symbol": row["symbol"], "action": "fetch_failed"})
             continue
-        result = update_one(row, price, source_rules)
+        vol = volumes.get(row["symbol"])
+        result = update_one(row, price, source_rules, volume=vol)
         status = close_action_status.get(result.get("action") or "")
         if status and result.get("exit_price") is not None:
             try:

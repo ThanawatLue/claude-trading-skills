@@ -333,6 +333,16 @@ def _build_auto_config(
         fingerprint_min_closed=int(paper.get("fingerprint_min_closed", 2)),
         fingerprint_min_win_rate=float(paper.get("fingerprint_min_win_rate", 0.4)),
         fingerprint_max_avg_realized_r=float(paper.get("fingerprint_max_avg_realized_r", -0.25)),
+        use_dynamic_atr=bool(paper.get("use_dynamic_atr", False)),
+        atr_multiplier=float(paper.get("atr_multiplier", 1.2)),
+        stop_pct_min=(
+            float(paper["stop_pct_min"]) if paper.get("stop_pct_min") is not None else None
+        ),
+        stop_pct_cap=(
+            float(paper["stop_pct_cap"]) if paper.get("stop_pct_cap") is not None else None
+        ),
+        use_sector_filter=bool(paper.get("use_sector_filter", False)),
+        min_sector_relative_return=float(paper.get("min_sector_relative_return", -2.0)),
     )
 
 

@@ -1,4 +1,5 @@
 import gc
+import json
 import os
 import sqlite3
 import tempfile
@@ -450,6 +451,154 @@ class TestPaperTrade(unittest.TestCase):
         self.assertAlmostEqual(closed_pos["exit_price"], 99.0)
         self.assertAlmostEqual(closed_pos["realized_r"], -0.1)
 
+    def test_scale_out_position_close_combines_pnl(self):
+        with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+            pos = paper_trade.open_position(
+                symbol="SCALE.BK",
+                market="TH",
+                shares=200,
+                entry=100.0,
+                stop=90.0,  # Risk = 10 / share, total risk = 2000
+                target=120.0,
+                source="thai-swing-momentum",
+            )
+
+            # Manually simulate 50% scale-out in decision trace at 112.0 (+1.2R, 100 shares)
+            # 100 shares sold at 112.0 -> profit = 1,200
+            scale_trace = {
+                "scale_out": {
+                    "completed": True,
+                    "shares_closed": 100,
+                    "t1_price": 112.0,
+                    "t1_net_pnl": 1200.0,
+                }
+            }
+            with paper_trade._db() as conn:
+                conn.execute(
+                    "UPDATE paper_trade SET decision_trace_json=? WHERE id=?",
+                    (json.dumps(scale_trace), pos["id"]),
+                )
+
+            # Now close the remaining 100 shares at 120.0 (Target 2 hit)
+            # Remaining profit = (120 - 100) * 100 = 2,000
+            # Total profit = 1,200 + 2,000 = 3,200
+            # Realized R = 3,200 / 2,000 = 1.6R
+            with patch("paper_trade._now_iso", return_value="2026-07-05T09:00:00+00:00"):
+                closed = paper_trade.close_position(
+                    pos["id"],
+                    120.0,
+                    status=paper_trade.STATUS_CLOSED_TARGET,
+                )
+
+            self.assertEqual(closed["status"], paper_trade.STATUS_CLOSED_TARGET)
+            self.assertAlmostEqual(closed["realized_pnl"], 3200.0)
+            self.assertAlmostEqual(closed["realized_r"], 1.6)
+
+    def test_scale_out_position_direct(self):
+        with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+            pos = paper_trade.open_position(
+                symbol="PARTSALE.BK",
+                market="TH",
+                shares=200,
+                entry=100.0,
+                stop=90.0,
+                target=120.0,
+                source="thai-swing-momentum",
+            )
+        # Call scale_out_position at 112.0
+        with patch("paper_trade._now_iso", return_value="2026-07-02T09:00:00+00:00"):
+            res = paper_trade.scale_out_position(pos["id"], price=112.0, fraction=0.5)
+        self.assertEqual(res["action"], "scaled_out")
+        self.assertEqual(res["shares_closed"], 100)
+        self.assertEqual(res["remaining_shares"], 100)
+        self.assertAlmostEqual(res["scale_pnl"], 1200.0)
+        # Stop should be moved to breakeven (100.0 + 0.05 * 10 = 100.5)
+        self.assertAlmostEqual(res["new_stop"], 100.5)
+
+        # Check DB state
+        with paper_trade._db() as conn:
+            row = conn.execute("SELECT * FROM paper_trade WHERE id=?", (pos["id"],)).fetchone()
+            d = paper_trade._row_to_dict(row)
+            self.assertAlmostEqual(row["stop_price"], 100.5)
+            self.assertTrue(d["decision_trace"]["scale_out"]["completed"])
+
+    def test_update_marks_scale_out_and_breakeven_stop(self):
+        rules = {
+            "thai-swing-momentum": {
+                "use_scale_out": True,
+                "scale_out_r": 1.2,
+                "scale_out_fraction": 0.5,
+                "take_profit_r": 2.2,
+            }
+        }
+        with patch("update_marks._load_exit_rules", return_value=rules):
+            with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+                paper_trade.open_position(
+                    symbol="SCALETEST.BK",
+                    market="TH",
+                    shares=200,
+                    entry=100.0,
+                    stop=90.0,
+                    target=122.0,
+                    source="thai-swing-momentum",
+                )
+
+            # Day 1: price hits 112.0 (1.2R) -> scale out 50%, stop moved to 100.5
+            with patch("update_marks._now_iso", return_value="2026-07-02T09:00:00+00:00"):
+                with patch("update_marks._fetch_price", return_value=112.0):
+                    res1 = update_marks.update_all()
+            self.assertEqual(res1[0]["action"], "marked")
+            self.assertIn("scale_out", res1[0])
+            self.assertEqual(res1[0]["scale_out"]["shares_closed"], 100)
+
+            # Check stop price updated
+            pos = paper_trade.list_positions(status_filter="open")[0]
+            self.assertAlmostEqual(pos["stop_price"], 100.5)
+
+            # Day 2: price drops back to 100.0 -> hit breakeven stop
+            with patch("update_marks._now_iso", return_value="2026-07-03T09:00:00+00:00"):
+                with patch("update_marks._fetch_price", return_value=100.0):
+                    res2 = update_marks.update_all()
+            self.assertEqual(res2[0]["action"], "auto_closed_ratchet")
+            closed = paper_trade.list_positions(status_filter="closed")[0]
+            # Realized PnL = 1,200 (first half) + (100.5 - 100.0) * 100 (second half) = 1,250
+            self.assertAlmostEqual(closed["realized_pnl"], 1250.0)
+
+    def test_update_marks_early_fakeout(self):
+        rules = {
+            "thai-swing-momentum": {
+                "early_fakeout_enabled": True,
+                "early_fakeout_vol_ratio": 0.40,
+                "early_fakeout_max_mfe_r": 0.20,
+            }
+        }
+        trace = {"entry_volume": 1_000_000.0}
+        with patch("update_marks._load_exit_rules", return_value=rules):
+            with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+                paper_trade.open_position(
+                    symbol="FAKEOUT.BK",
+                    market="TH",
+                    shares=100,
+                    entry=100.0,
+                    stop=90.0,
+                    target=122.0,
+                    source="thai-swing-momentum",
+                    decision_trace=trace,
+                )
+
+            # Day 1: volume collapses to 200,000 (0.2x < 0.4x), price is 98.0 (R = -0.2 < 0), MFE was 0
+            with patch("update_marks._now_iso", return_value="2026-07-02T09:00:00+00:00"):
+                with patch("update_marks._fetch_quote", return_value={"price": 98.0, "volume": 200_000.0}):
+                    with patch("update_marks._fetch_price", return_value=98.0):
+                        res = update_marks.update_all()
+
+            self.assertEqual(res[0]["action"], "auto_closed_fakeout")
+            closed = paper_trade.list_positions(status_filter="closed")[0]
+            self.assertEqual(closed["status"], paper_trade.STATUS_CLOSED_FAKEOUT)
+            self.assertAlmostEqual(closed["exit_price"], 98.0)
+            self.assertAlmostEqual(closed["realized_r"], -0.2)
+
 
 if __name__ == "__main__":
     unittest.main()
+

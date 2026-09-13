@@ -8,16 +8,18 @@ Replays historical signals through daily price bars to compare:
 
 from __future__ import annotations
 
-import argparse
-import json
 import sqlite3
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_DB = BASE_DIR / "state" / "vm_market_cache.db" if (BASE_DIR / "state" / "vm_market_cache.db").exists() else BASE_DIR / "state" / "market_cache.db"
+DEFAULT_DB = (
+    BASE_DIR / "state" / "vm_market_cache.db"
+    if (BASE_DIR / "state" / "vm_market_cache.db").exists()
+    else BASE_DIR / "state" / "market_cache.db"
+)
+
 
 # SET Tick rounding
 def round_to_set_tick(price: float, direction: str = "down") -> float:
@@ -39,6 +41,7 @@ def round_to_set_tick(price: float, direction: str = "down") -> float:
         tick = 2.00
 
     import math
+
     if direction == "up":
         return round(math.ceil(price / tick) * tick, 2)
     elif direction == "down":
@@ -51,7 +54,9 @@ class ExitConfig:
     name: str
     target_r: float = 2.0
     use_ratchet: bool = True
-    ratchet_tiers: list[list[float]] = field(default_factory=lambda: [[0.8, -0.3], [1.2, 0.15], [1.8, 0.8]])
+    ratchet_tiers: list[list[float]] = field(
+        default_factory=lambda: [[0.8, -0.3], [1.2, 0.15], [1.8, 0.8]]
+    )
     use_velocity_stall: bool = True
     velocity_stall_days: int = 3
     velocity_min_mfe_r: float = 0.30
@@ -93,7 +98,7 @@ def run_replay(
 
     # Fetch signals
     signals = conn.execute(
-        """SELECT * FROM signal_ledger 
+        """SELECT * FROM signal_ledger
            WHERE market='TH' AND entry_price IS NOT NULL AND entry_price > 0
            ORDER BY signal_date ASC, raw_score DESC"""
     ).fetchall()
@@ -106,7 +111,12 @@ def run_replay(
     conn.close()
 
     for b in bar_rows:
-        if b["open"] is not None and b["high"] is not None and b["low"] is not None and b["close"] is not None:
+        if (
+            b["open"] is not None
+            and b["high"] is not None
+            and b["low"] is not None
+            and b["close"] is not None
+        ):
             bars_by_symbol.setdefault(b["symbol"], []).append(dict(b))
 
     results: list[TradeResult] = []
@@ -138,7 +148,7 @@ def run_replay(
             shares = max(100, int(6000.0 / entry // 100) * 100)
         initial_risk_thb = shares * risk
 
-        target = entry + (risk * config.target_r)
+        entry + (risk * config.target_r)
 
         bars = bars_by_symbol.get(sym, [])
         # Find bars after signal_date
@@ -161,7 +171,6 @@ def run_replay(
         trough_low = actual_entry
 
         trade_bars = sub_bars[1:]
-        closed = False
         exit_bar = trade_bars[-1]
         exit_price = float(exit_bar["close"])
         exit_reason = "end_of_data"
@@ -170,11 +179,11 @@ def run_replay(
             days_held = d_idx
             o = float(b["open"])
             h = float(b["high"])
-            l = float(b["low"])
+            low_val = float(b["low"])
             c = float(b["close"])
 
             peak_high = max(peak_high, h)
-            trough_low = min(trough_low, l)
+            trough_low = min(trough_low, low_val)
             mfe_gain = peak_high - actual_entry
             mfe_r = mfe_gain / risk if risk > 0 else 0.0
 
@@ -187,12 +196,13 @@ def run_replay(
                             stop_price = cand_stop
 
             # 2. Check Intraday Stop Hit
-            if l <= stop_price:
+            if low_val <= stop_price:
                 # Execution at stop (or open if gap down)
                 exit_price = min(o, stop_price)
-                exit_reason = "closed_ratchet" if (stop_price > actual_stop + 1e-4) else "closed_stop"
+                exit_reason = (
+                    "closed_ratchet" if (stop_price > actual_stop + 1e-4) else "closed_stop"
+                )
                 exit_bar = b
-                closed = True
                 break
 
             # 3. Check Intraday Target Hit
@@ -200,17 +210,24 @@ def run_replay(
                 exit_price = max(o, actual_target)
                 exit_reason = "closed_target"
                 exit_bar = b
-                closed = True
                 break
 
             # 4. Check Velocity / Momentum Decay Stall
             curr_r = (c - actual_entry) / risk if risk > 0 else 0.0
-            stall_limit = config.velocity_stall_days if "momentum" in src else (config.velocity_stall_days + 1)
-            if config.use_velocity_stall and days_held >= stall_limit and mfe_r < config.velocity_min_mfe_r and curr_r <= 0.0:
+            stall_limit = (
+                config.velocity_stall_days
+                if "momentum" in src
+                else (config.velocity_stall_days + 1)
+            )
+            if (
+                config.use_velocity_stall
+                and days_held >= stall_limit
+                and mfe_r < config.velocity_min_mfe_r
+                and curr_r <= 0.0
+            ):
                 exit_price = c
                 exit_reason = "closed_stalled"
                 exit_bar = b
-                closed = True
                 break
 
             # 5. Check Time Stop
@@ -218,7 +235,6 @@ def run_replay(
                 exit_price = c
                 exit_reason = "closed_time"
                 exit_bar = b
-                closed = True
                 break
 
         # Calculate PnL & R
@@ -231,7 +247,7 @@ def run_replay(
         peak_mfe_r = (peak_high - actual_entry) / risk if risk > 0 else 0.0
         peak_mae_r = (actual_entry - trough_low) / risk if risk > 0 else 0.0
 
-        days_count = (trade_bars.index(exit_bar) if exit_bar in trade_bars else len(trade_bars) - 1)
+        days_count = trade_bars.index(exit_bar) if exit_bar in trade_bars else len(trade_bars) - 1
 
         active_symbols[sym] = exit_bar["date"]
         results.append(
@@ -301,7 +317,7 @@ def run_replay(
 def main():
     db = DEFAULT_DB
     print(f"Replaying historical signals from {db}...")
-    
+
     # 1. Baseline: Old configuration (No ratchet, no velocity stall, static 2R, 15d time stop)
     old_cfg = ExitConfig(
         name="Baseline (Old System: Static 2R, No Ratchet, No Stall Exit)",
@@ -311,7 +327,7 @@ def main():
         max_hold_days=15,
         time_stop_min_r=-0.5,
     )
-    
+
     # 2. New Config: Institutional Multi-Tier MFE Ratchet + Velocity Stall
     new_cfg = ExitConfig(
         name="New System (MFE Ratchet + Velocity Stall Exit + Target 2R)",
