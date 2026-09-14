@@ -337,6 +337,7 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
         "pf": round(pf, 2),
         "fees": round(total_fees, 2),
         "reasons": reasons,
+        "trades": trades,
     }
 
 
