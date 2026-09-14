@@ -163,4 +163,6 @@ def test_arena_overview_endpoint(monkeypatch) -> None:
     assert data["quant"]["initial_capital"] == 30000.0
     assert data["jules"]["initial_capital"] == 30000.0
     assert "leader" in data
-
+    assert "dna" in data["jules"]
+    assert data["jules"]["dna"]["generation"] >= 1
+    assert len(data["jules"]["dna"]["rules"]) >= 1

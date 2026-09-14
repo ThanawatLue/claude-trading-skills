@@ -30,6 +30,8 @@ from typing import Any
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
@@ -37,6 +39,9 @@ if str(SRC_ROOT) not in sys.path:
 PAPER_SCRIPT_DIR = PROJECT_ROOT / "skills" / "paper-trade-simulator" / "scripts"
 if str(PAPER_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(PAPER_SCRIPT_DIR))
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import paper_trade
 
@@ -77,6 +82,7 @@ def _get_latest_price(symbol: str, market: str = "TH") -> float:
 
     try:
         import yfinance as yf
+
         ticker = yf.Ticker(clean_sym)
         hist = ticker.history(period="5d")
         if not hist.empty and "Close" in hist.columns:
@@ -84,20 +90,28 @@ def _get_latest_price(symbol: str, market: str = "TH") -> float:
     except Exception as e:
         logger.warning("yfinance lookup failed for %s: %s", clean_sym, e)
 
-    raise ValueError(f"Could not determine current market price for {clean_sym}. Please specify --entry manually.")
+    raise ValueError(
+        f"Could not determine current market price for {clean_sym}. Please specify --entry manually."
+    )
 
 
 def get_jules_status(market: str = "TH") -> dict[str, Any]:
     """Calculate exact portfolio metrics for Jules AI Fund."""
     open_pos = paper_trade.list_positions(status_filter="open", market=market, portfolio="jules")
-    closed_pos = paper_trade.list_positions(status_filter="closed", market=market, portfolio="jules")
+    closed_pos = paper_trade.list_positions(
+        status_filter="closed", market=market, portfolio="jules"
+    )
     stats = paper_trade.compute_stats(market=market, portfolio="jules")
 
     realized_pnl = float(stats.get("total_realized_pnl") or 0.0)
     unrealized_pnl = float(stats.get("total_unrealized_pnl") or 0.0)
-    total_open_cost = sum(float(r["entry_price"] * r["shares"] + (r.get("entry_cost") or 0)) for r in open_pos)
+    total_open_cost = sum(
+        float(r["entry_price"] * r["shares"] + (r.get("entry_cost") or 0)) for r in open_pos
+    )
     cash_balance = INITIAL_CAPITAL - total_open_cost + realized_pnl
-    equity = cash_balance + sum(float((r.get("last_price") or r["entry_price"]) * r["shares"]) for r in open_pos)
+    equity = cash_balance + sum(
+        float((r.get("last_price") or r["entry_price"]) * r["shares"]) for r in open_pos
+    )
     net_pnl = realized_pnl + unrealized_pnl
     net_return_pct = (net_pnl / INITIAL_CAPITAL) * 100.0 if INITIAL_CAPITAL > 0 else 0.0
 
@@ -156,7 +170,9 @@ def execute_buy(
     if stop_price >= entry_price:
         raise ValueError(f"Stop price ({stop_price}) must be less than entry price ({entry_price})")
     if target_price <= entry_price:
-        raise ValueError(f"Target price ({target_price}) must be greater than entry price ({entry_price})")
+        raise ValueError(
+            f"Target price ({target_price}) must be greater than entry price ({entry_price})"
+        )
 
     status = get_jules_status(market)
     if status["open_count"] >= MAX_OPEN_POSITIONS:
@@ -197,7 +213,14 @@ def execute_buy(
         decision_trace=decision_trace,
         portfolio="jules",
     )
-    logger.info("Jules AI Fund OPENED: %s %d shares @ %.2f (Stop: %.2f, Target: %.2f)", sym, shares, entry_price, stop_price, target_price)
+    logger.info(
+        "Jules AI Fund OPENED: %s %d shares @ %.2f (Stop: %.2f, Target: %.2f)",
+        sym,
+        shares,
+        entry_price,
+        stop_price,
+        target_price,
+    )
     return trade
 
 
@@ -209,7 +232,9 @@ def execute_sell(
     reason: str = "Jules take profit / risk exit",
 ) -> dict[str, Any]:
     """Close an active position for Jules AI Fund."""
-    open_positions = paper_trade.list_positions(status_filter="open", market=market, portfolio="jules")
+    open_positions = paper_trade.list_positions(
+        status_filter="open", market=market, portfolio="jules"
+    )
     target_pos = None
 
     if trade_id:
@@ -219,7 +244,9 @@ def execute_sell(
         target_pos = next((p for p in open_positions if p["symbol"].upper() == sym.upper()), None)
 
     if not target_pos:
-        raise ValueError(f"No active position found in Jules fund for symbol={symbol} id={trade_id}")
+        raise ValueError(
+            f"No active position found in Jules fund for symbol={symbol} id={trade_id}"
+        )
 
     exit_price = float(price) if price else _get_latest_price(target_pos["symbol"], market)
     tid = target_pos["id"]
@@ -236,7 +263,22 @@ def execute_sell(
         status=status,
         notes=reason,
     )
-    logger.info("Jules AI Fund CLOSED: %s id=%d @ %.2f (Status: %s, Realized PnL: %.2f)", target_pos["symbol"], tid, exit_price, status, closed.get("realized_pnl", 0))
+    logger.info(
+        "Jules AI Fund CLOSED: %s id=%d @ %.2f (Status: %s, Realized PnL: %.2f)",
+        target_pos["symbol"],
+        tid,
+        exit_price,
+        status,
+        closed.get("realized_pnl", 0),
+    )
+
+    try:
+        import scripts.jules_evolver as je
+
+        je.evolve_memory(market=market)
+    except Exception as e:
+        logger.warning("Auto-evolution after trade close failed: %s", e)
+
     return closed
 
 
@@ -245,7 +287,9 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
     ORDERS_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSED_ORDERS_DIR.mkdir(parents=True, exist_ok=True)
 
-    order_files = sorted(glob.glob(str(ORDERS_DIR / "*.yaml")) + glob.glob(str(ORDERS_DIR / "*.json")))
+    order_files = sorted(
+        glob.glob(str(ORDERS_DIR / "*.yaml")) + glob.glob(str(ORDERS_DIR / "*.json"))
+    )
     results = []
 
     for fpath in order_files:
@@ -319,12 +363,14 @@ def get_scan_candidates(limit: int = 10, market: str = "TH") -> list[dict[str, A
                 if sym in seen:
                     continue
                 seen.add(sym)
-                candidates.append({
-                    "symbol": sym,
-                    "date": r["date"],
-                    "close": r["close"],
-                    "volume": r["volume"],
-                })
+                candidates.append(
+                    {
+                        "symbol": sym,
+                        "date": r["date"],
+                        "close": r["close"],
+                        "volume": r["volume"],
+                    }
+                )
                 if len(candidates) >= limit:
                     break
     except Exception as e:
@@ -341,7 +387,12 @@ def main():
 
     b = sub.add_parser("buy")
     b.add_argument("--symbol", required=True, help="Stock ticker (e.g. BDMS.BK)")
-    b.add_argument("--shares", type=int, required=True, help="Number of shares (SET board lot = multiple of 100)")
+    b.add_argument(
+        "--shares",
+        type=int,
+        required=True,
+        help="Number of shares (SET board lot = multiple of 100)",
+    )
     b.add_argument("--entry", type=float, help="Entry price (auto-fetched if omitted)")
     b.add_argument("--stop", type=float, help="Stop loss price (auto 6 percent if omitted)")
     b.add_argument("--target", type=float, help="Take profit target price (auto 2.2R if omitted)")
@@ -361,6 +412,8 @@ def main():
 
     sub.add_parser("process-orders")
     sub.add_parser("arena")
+    sub.add_parser("briefing")
+    sub.add_parser("evolve")
 
     args = parser.parse_args()
 
@@ -387,7 +440,13 @@ def main():
         )
         print(json.dumps(out, ensure_ascii=False, indent=2))
     elif args.cmd == "scan":
-        print(json.dumps(get_scan_candidates(limit=args.limit, market=args.market), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                get_scan_candidates(limit=args.limit, market=args.market),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     elif args.cmd == "process-orders":
         out = process_orders_queue()
         print(json.dumps(out, ensure_ascii=False, indent=2))
@@ -395,6 +454,14 @@ def main():
         q_stats = paper_trade.compute_stats(portfolio="quant")
         j_stats = paper_trade.compute_stats(portfolio="jules")
         print(json.dumps({"quant": q_stats, "jules": j_stats}, ensure_ascii=False, indent=2))
+    elif args.cmd == "briefing":
+        import scripts.jules_evolver as je
+
+        print(je.get_pre_trade_briefing())
+    elif args.cmd == "evolve":
+        import scripts.jules_evolver as je
+
+        print(json.dumps(je.evolve_memory(), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -4503,6 +4503,20 @@ async function loadArenaDashboard() {
     const jPf = document.getElementById('jPf'); if (jPf) jPf.textContent = (j.profit_factor || 0).toFixed(2);
     const jHc = document.getElementById('jHoldingsCount'); if (jHc) jHc.textContent = `${j.open_count || 0}/4 ตัว`;
 
+    // Render Trader DNA & Rules
+    if (j.dna) {
+      const dnaGenEl = document.getElementById('jDnaGen');
+      if (dnaGenEl) dnaGenEl.textContent = `Gen ${j.dna.generation || 1}`;
+      const rulesEl = document.getElementById('jDnaRules');
+      if (rulesEl) {
+        if (j.dna.rules && j.dna.rules.length > 0) {
+          rulesEl.innerHTML = j.dna.rules.map(r => `<li style="margin-bottom:2px">${_srEscape(r)}</li>`).join('');
+        } else {
+          rulesEl.innerHTML = '<li style="color:var(--muted)">ยังไม่มีการบันทึกกฎเพิ่มเติม</li>';
+        }
+      }
+    }
+
     // Render Holdings
     const renderOpenTable = (rows, tbodyId) => {
       const el = document.getElementById(tbodyId);

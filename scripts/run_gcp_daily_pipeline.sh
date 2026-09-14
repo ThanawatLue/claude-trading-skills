@@ -29,6 +29,12 @@ run_locked_pipeline() {
   uv run python scripts/run_daily_signal_pipeline.py \
     --config state/automation_config.yaml \
     --market "$MARKET"
+
+  echo "Processing Jules AI Fund order queue: $(date -Is)"
+  uv run python scripts/jules_fund.py process-orders --market "$MARKET" || echo "Warning: Jules order queue processing encountered an error; continuing."
+
+  echo "Running Jules AI Autonomous Self-Improvement Evolver: $(date -Is)"
+  uv run python scripts/jules_evolver.py run || echo "Warning: Jules evolution engine encountered an error; continuing."
 }
 
 {

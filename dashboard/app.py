@@ -2213,6 +2213,7 @@ def api_signal_results():
         return jsonify(_clean_nan(payload))
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
@@ -2358,9 +2359,7 @@ def api_arena_overview():
         win_rate = float(stats.get("win_rate") or 0.0)
 
         gross_wins = sum(
-            float(r.get("realized_pnl", 0))
-            for r in closed_rows
-            if (r.get("realized_pnl") or 0) > 0
+            float(r.get("realized_pnl", 0)) for r in closed_rows if (r.get("realized_pnl") or 0) > 0
         )
         gross_losses = abs(
             sum(
@@ -2394,10 +2393,14 @@ def api_arena_overview():
             "losses": losses,
         }
 
-    q_fund = _fund_payload(
-        "Quant Systematic Champion", quant_stats, quant_open, quant_closed
-    )
+    q_fund = _fund_payload("Quant Systematic Champion", quant_stats, quant_open, quant_closed)
     j_fund = _fund_payload("Jules AI Fund", jules_stats, jules_open, jules_closed)
+    try:
+        from scripts.jules_evolver import load_dna
+
+        j_fund["dna"] = load_dna()
+    except Exception:
+        j_fund["dna"] = {"generation": 1, "rules": []}
 
     if q_fund["net_pnl"] > j_fund["net_pnl"]:
         leader = "Quant Champion"
