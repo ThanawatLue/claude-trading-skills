@@ -31,12 +31,12 @@ class PaperService:
         return close_position(**kwargs)
 
     @staticmethod
-    def list(status: str, market: str | None = None) -> list[dict[str, Any]]:
-        return list_positions(status, market)
+    def list(status: str, market: str | None = None, portfolio: str | None = None) -> list[dict[str, Any]]:
+        return list_positions(status, market, portfolio=portfolio)
 
     @staticmethod
-    def stats(market: str | None = None) -> dict[str, Any]:
-        return compute_stats(market)
+    def stats(market: str | None = None, portfolio: str | None = None) -> dict[str, Any]:
+        return compute_stats(market, portfolio=portfolio)
 
     @staticmethod
     def fingerprints(market: str | None = None) -> dict[str, Any]:

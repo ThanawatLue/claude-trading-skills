@@ -71,10 +71,12 @@ CREATE TABLE IF NOT EXISTS paper_trade (
     journal_emotion TEXT,
     journal_text    TEXT,
 
-    days_held       INTEGER
+    days_held       INTEGER,
+    portfolio       TEXT    NOT NULL DEFAULT 'quant'
 );
 CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_trade(status);
 CREATE INDEX IF NOT EXISTS idx_paper_symbol ON paper_trade(symbol);
+CREATE INDEX IF NOT EXISTS idx_paper_portfolio ON paper_trade(portfolio);
 
 CREATE TABLE IF NOT EXISTS paper_trade_mark (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,10 +126,12 @@ def _db() -> sqlite3.Connection:
         "entry_cost": "REAL NOT NULL DEFAULT 0",
         "exit_cost": "REAL NOT NULL DEFAULT 0",
         "decision_trace_json": "TEXT",
+        "portfolio": "TEXT NOT NULL DEFAULT 'quant'",
     }
     for column, definition in migrations.items():
         if column not in existing:
             conn.execute(f"ALTER TABLE paper_trade ADD COLUMN {column} {definition}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_paper_portfolio ON paper_trade(portfolio)")
     mark_migration(conn, "paper_trade", 2)
     return conn
 
@@ -239,6 +243,7 @@ def open_position(
     emotion: str | None = None,
     transaction_cost_bps: float = 0.0,
     decision_trace: dict[str, Any] | None = None,
+    portfolio: str = "quant",
 ) -> dict[str, Any]:
     """Open a new paper position. Returns the created row."""
     if shares <= 0:
@@ -247,6 +252,7 @@ def open_position(
         raise ValueError("entry/stop/target must be > 0")
     if transaction_cost_bps < 0:
         raise ValueError("transaction_cost_bps must be >= 0")
+    clean_portfolio = (portfolio or "quant").strip().lower()
     if side == "long":
         if stop >= entry:
             raise ValueError("for long, stop must be < entry")
@@ -278,8 +284,8 @@ def open_position(
                (symbol, market, side, status, entry_price, entry_at, shares,
                stop_price, target_price, initial_risk, source, source_score,
                  notes_entry, decision_trace_json, transaction_cost_bps, entry_cost, exit_cost, last_price, last_updated, unrealized_pnl, unrealized_r,
-                mae, mfe, journal_emotion, days_held)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                mae, mfe, journal_emotion, days_held, portfolio)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 symbol.upper(),
                 market.upper(),
@@ -308,6 +314,7 @@ def open_position(
                 entry,
                 emotion,
                 0,
+                clean_portfolio,
             ),
         )
         new_id = cur.lastrowid
@@ -525,8 +532,12 @@ def scale_out_position(
         }
 
 
-def list_positions(status_filter: str = "all", market: str | None = None) -> list[dict[str, Any]]:
-    """List positions filtered by status and optionally market."""
+def list_positions(
+    status_filter: str = "all",
+    market: str | None = None,
+    portfolio: str | None = None,
+) -> list[dict[str, Any]]:
+    """List positions filtered by status and optionally market or portfolio."""
     where = []
     params: list[Any] = []
     if status_filter == "open":
@@ -538,6 +549,9 @@ def list_positions(status_filter: str = "all", market: str | None = None) -> lis
     if market:
         where.append("market = ?")
         params.append(market.upper())
+    if portfolio:
+        where.append("COALESCE(portfolio, 'quant') = ?")
+        params.append(portfolio.strip().lower())
     sql = "SELECT * FROM paper_trade"
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -794,13 +808,21 @@ def _aggregate_by(rows: list[sqlite3.Row], key_fn) -> dict[str, Any]:
     return {key: _group_stats(group) for key, group in sorted(groups.items())}
 
 
-def compute_stats(market: str | None = None) -> dict[str, Any]:
+def compute_stats(
+    market: str | None = None,
+    portfolio: str | None = None,
+) -> dict[str, Any]:
     """Aggregate performance and discipline metrics."""
-    where = ""
+    where_clauses = []
     params: list[Any] = []
     if market:
-        where = " WHERE market = ?"
+        where_clauses.append("market = ?")
         params.append(market.upper())
+    if portfolio:
+        where_clauses.append("COALESCE(portfolio, 'quant') = ?")
+        params.append(portfolio.strip().lower())
+
+    where = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     with _db() as conn:
         rows = conn.execute(f"SELECT * FROM paper_trade{where}", params).fetchall()
@@ -919,6 +941,7 @@ def main():
     o.add_argument("--source-score", type=float)
     o.add_argument("--notes")
     o.add_argument("--emotion", choices=sorted(VALID_EMOTIONS))
+    o.add_argument("--portfolio", default="quant")
 
     c = sub.add_parser("close")
     c.add_argument("--id", type=int, required=True)
@@ -930,9 +953,11 @@ def main():
     lst = sub.add_parser("list")
     lst.add_argument("--status", default="all", choices=["open", "closed", "all"])
     lst.add_argument("--market", choices=["TH", "US"])
+    lst.add_argument("--portfolio")
 
     st = sub.add_parser("stats")
     st.add_argument("--market", choices=["TH", "US"])
+    st.add_argument("--portfolio")
 
     fp = sub.add_parser("fingerprint")
     fp.add_argument("--market", choices=["TH", "US"])
@@ -957,16 +982,17 @@ def main():
             args.source_score,
             args.notes,
             args.emotion,
+            portfolio=args.portfolio,
         )
         _print_json(out)
     elif args.cmd == "close":
         out = close_position(args.id, args.exit_price, args.status, args.emotion, args.notes)
         _print_json(out)
     elif args.cmd == "list":
-        out = list_positions(args.status, args.market)
+        out = list_positions(args.status, args.market, portfolio=args.portfolio)
         _print_json(out)
     elif args.cmd == "stats":
-        out = compute_stats(args.market)
+        out = compute_stats(args.market, portfolio=args.portfolio)
         _print_json(out)
     elif args.cmd == "fingerprint":
         out = compute_fingerprints(args.market)

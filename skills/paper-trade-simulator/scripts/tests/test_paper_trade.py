@@ -598,6 +598,42 @@ class TestPaperTrade(unittest.TestCase):
             self.assertAlmostEqual(closed["exit_price"], 98.0)
             self.assertAlmostEqual(closed["realized_r"], -0.2)
 
+    def test_portfolio_isolation(self):
+        # Open 1 quant position and 1 jules position
+        q = paper_trade.open_position(
+            symbol="CPALL.BK", market="TH", shares=100, entry=60.0, stop=57.0, target=66.0, portfolio="quant"
+        )
+        j = paper_trade.open_position(
+            symbol="BDMS.BK", market="TH", shares=100, entry=28.0, stop=26.0, target=32.0, portfolio="jules"
+        )
+
+        self.assertEqual(q["portfolio"], "quant")
+        self.assertEqual(j["portfolio"], "jules")
+
+        # Test list_positions filtering
+        quant_open = paper_trade.list_positions(status_filter="open", portfolio="quant")
+        jules_open = paper_trade.list_positions(status_filter="open", portfolio="jules")
+
+        self.assertEqual(len(quant_open), 1)
+        self.assertEqual(quant_open[0]["symbol"], "CPALL.BK")
+        self.assertEqual(len(jules_open), 1)
+        self.assertEqual(jules_open[0]["symbol"], "BDMS.BK")
+
+        # Close jules position with a win
+        paper_trade.close_position(j["id"], exit_price=30.0, status="closed_target")
+
+        # Check compute_stats isolation
+        quant_stats = paper_trade.compute_stats(portfolio="quant")
+        jules_stats = paper_trade.compute_stats(portfolio="jules")
+
+        self.assertEqual(quant_stats["open_positions"], 1)
+        self.assertEqual(quant_stats["closed_trades"], 0)
+
+        self.assertEqual(jules_stats["open_positions"], 0)
+        self.assertEqual(jules_stats["closed_trades"], 1)
+        self.assertEqual(jules_stats["wins"], 1)
+        self.assertAlmostEqual(jules_stats["total_realized_pnl"], 200.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -132,5 +132,40 @@
 ## 5. การตรวจสอบความปลอดภัย (CI/CD Safety Gate)
 
 ทุกครั้งที่ **Jules Agent Beta** เปิด Pull Request (PR) บน GitHub:
-1. **GitHub Actions CI (`.github/workflows/ci.yml`):** จะรัน Unit Test 331 ข้ออัตโนมัติทันที
+1. **GitHub Actions CI (`.github/workflows/ci.yml`):** จะรัน Unit Test 338 ข้ออัตโนมัติทันที
 2. **Auto Deploy (`.github/workflows/deploy.yml`):** เมื่อคุณตรวจสอบ PR และกดปุ่ม **Merge to main** บน GitHub ระบบจะนำโค้ดใหม่ไปรันบน Google Cloud VM ทันทีโดยที่คุณไม่ต้องพิมพ์คำสั่ง SSH เองเลยครับ!
+
+---
+
+## 6. สมรภูมิประชันผลงาน: The Great Alpha Arena (Quant Champion vs Jules AI Fund)
+
+ระบบได้แบ่งพอร์ตการทดลองออกเป็น 2 กองทุนคู่ขนาน (เงินทุนตั้งต้นกองละ ฿30,000.00):
+* **🤖 กองทุนที่ 1: Quant Systematic Fund (ฝั่งคุณ + Engine)** เทรดตามระเบียบวินัยและอินดิเคเตอร์ทางเทคนิค
+* **🧠 กองทุนที่ 2: Jules AI Autonomous Fund (ฝั่ง AI Coach + Jules)** เทรดตามปัจจัยพื้นฐาน, โมเดลธุรกิจ, ข่าวสาร, และการตัดสินใจเชิงตรรกะ
+
+### คำสั่งสำหรับ Jules ในการส่งคำสั่งซื้อขาย:
+1. **ตรวจเช็กสถานะพอร์ตของ Jules:**
+   ```bash
+   python scripts/jules_fund.py status
+   ```
+2. **สั่งซื้อหุ้นเข้าพอร์ต Jules:**
+   ```bash
+   python scripts/jules_fund.py buy --symbol BDMS.BK --shares 1000 --thesis "งบ Q2 โตเด่น ได้แรงหนุนผู้ป่วยต่างชาติ"
+   ```
+3. **สั่งขายหุ้นทำกำไร/ตัดขาดทุน:**
+   ```bash
+   python scripts/jules_fund.py sell --symbol BDMS.BK --reason "ราคาแตะเป้าหมาย 2.2R"
+   ```
+4. **ส่งคำสั่งผ่าน GitHub Commit (Queue):**
+   Jules สามารถสร้างไฟล์คำสั่งซื้อ เช่น `state/jules_orders/buy_BDMS.yaml` แล้ว Commit ขึ้น GitHub เพื่อให้ระบบบน Cloud ดึงไปเคาะซื้ออัตโนมัติ:
+   ```yaml
+   action: "buy"
+   symbol: "BDMS.BK"
+   shares: 1000
+   thesis: "โรงพยาบาลเอกชนกำไรแข็งแกร่ง"
+   ```
+5. **ติดตามผลการประชันแบบ Real-Time บน Dashboard:**
+   เข้าแท็บ **⚔️ AI Battle Arena** ที่ `http://35.212.209.201/` หรือเรียกผ่าน API:
+   ```bash
+   curl http://35.212.209.201/api/arena/overview?market=TH
+   ```

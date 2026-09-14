@@ -2299,20 +2299,129 @@ def api_paper_close():
 
 @app.route("/api/paper/list")
 def api_paper_list():
-    """List positions. Query: ?status=open|closed|all&market=TH|US"""
+    """List positions. Query: ?status=open|closed|all&market=TH|US&portfolio=quant|jules"""
     status = request.args.get("status", "all").strip().lower()
     if status not in {"open", "closed", "all"}:
         return jsonify({"error": "status must be open, closed, or all"}), 400
     market = request.args.get("market")
-    rows = paper_list(status, market)
+    portfolio = request.args.get("portfolio")
+    try:
+        rows = paper_list(status, market, portfolio=portfolio)
+    except TypeError:
+        rows = paper_list(status, market)
     return jsonify(_clean_nan(rows))
 
 
 @app.route("/api/paper/stats")
 def api_paper_stats():
-    """Portfolio statistics. Query: ?market=TH|US"""
+    """Portfolio statistics. Query: ?market=TH|US&portfolio=quant|jules"""
     market = request.args.get("market")
-    return jsonify(_clean_nan(paper_stats(market)))
+    portfolio = request.args.get("portfolio")
+    try:
+        stats = paper_stats(market, portfolio=portfolio)
+    except TypeError:
+        stats = paper_stats(market)
+    return jsonify(_clean_nan(stats))
+
+
+@app.route("/api/arena/overview")
+def api_arena_overview():
+    """Head-to-head arena comparison between Systematic Quant and Jules AI Fund."""
+    market = request.args.get("market", "TH")
+    quant_stats = paper_stats(market=market, portfolio="quant")
+    jules_stats = paper_stats(market=market, portfolio="jules")
+    quant_open = paper_list(status="open", market=market, portfolio="quant")
+    jules_open = paper_list(status="open", market=market, portfolio="jules")
+    quant_closed = paper_list(status="closed", market=market, portfolio="quant")
+    jules_closed = paper_list(status="closed", market=market, portfolio="jules")
+
+    initial_capital = 30000.0
+
+    def _fund_payload(name, stats, open_rows, closed_rows):
+        realized_pnl = float(stats.get("total_realized_pnl") or 0.0)
+        unrealized_pnl = float(stats.get("total_unrealized_pnl") or 0.0)
+        total_open_cost = sum(
+            float(r.get("entry_price", 0) * r.get("shares", 0) + r.get("entry_cost", 0))
+            for r in open_rows
+        )
+        cash_balance = initial_capital - total_open_cost + realized_pnl
+        equity = cash_balance + sum(
+            float((r.get("last_price") or r.get("entry_price", 0)) * r.get("shares", 0))
+            for r in open_rows
+        )
+        net_pnl = realized_pnl + unrealized_pnl
+        net_return_pct = (net_pnl / initial_capital) * 100.0 if initial_capital > 0 else 0.0
+
+        wins = int(stats.get("wins") or 0)
+        losses = int(stats.get("losses") or 0)
+        closed_count = int(stats.get("closed_trades") or 0)
+        win_rate = float(stats.get("win_rate") or 0.0)
+
+        gross_wins = sum(
+            float(r.get("realized_pnl", 0))
+            for r in closed_rows
+            if (r.get("realized_pnl") or 0) > 0
+        )
+        gross_losses = abs(
+            sum(
+                float(r.get("realized_pnl", 0))
+                for r in closed_rows
+                if (r.get("realized_pnl") or 0) < 0
+            )
+        )
+        profit_factor = (
+            (gross_wins / gross_losses)
+            if gross_losses > 0
+            else (gross_wins if gross_wins > 0 else 0.0)
+        )
+
+        return {
+            "name": name,
+            "initial_capital": initial_capital,
+            "cash_balance": round(cash_balance, 2),
+            "equity": round(equity, 2),
+            "net_pnl": round(net_pnl, 2),
+            "net_return_pct": round(net_return_pct, 2),
+            "realized_pnl": round(realized_pnl, 2),
+            "unrealized_pnl": round(unrealized_pnl, 2),
+            "win_rate": round(win_rate, 3),
+            "profit_factor": round(profit_factor, 2),
+            "open_positions": open_rows,
+            "open_count": len(open_rows),
+            "closed_trades": closed_rows[:10],
+            "closed_count": closed_count,
+            "wins": wins,
+            "losses": losses,
+        }
+
+    q_fund = _fund_payload(
+        "Quant Systematic Champion", quant_stats, quant_open, quant_closed
+    )
+    j_fund = _fund_payload("Jules AI Fund", jules_stats, jules_open, jules_closed)
+
+    if q_fund["net_pnl"] > j_fund["net_pnl"]:
+        leader = "Quant Champion"
+        diff = q_fund["net_pnl"] - j_fund["net_pnl"]
+    elif j_fund["net_pnl"] > q_fund["net_pnl"]:
+        leader = "Jules AI Fund"
+        diff = j_fund["net_pnl"] - q_fund["net_pnl"]
+    else:
+        leader = "Tied"
+        diff = 0.0
+
+    return jsonify(
+        _clean_nan(
+            {
+                "status": "ok",
+                "market": market,
+                "leader": leader,
+                "lead_diff_thb": round(diff, 2),
+                "quant": q_fund,
+                "jules": j_fund,
+                "as_of": quant_stats.get("as_of"),
+            }
+        )
+    )
 
 
 @app.route("/api/paper/fingerprint")

@@ -150,3 +150,17 @@ def test_run_stream_disables_proxy_buffering() -> None:
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-cache, no-transform"
     assert response.headers["X-Accel-Buffering"] == "no"
+
+
+def test_arena_overview_endpoint(monkeypatch) -> None:
+    client = dashboard_app.app.test_client()
+    response = client.get("/api/arena/overview?market=TH")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["status"] == "ok"
+    assert "quant" in data
+    assert "jules" in data
+    assert data["quant"]["initial_capital"] == 30000.0
+    assert data["jules"]["initial_capital"] == 30000.0
+    assert "leader" in data
+

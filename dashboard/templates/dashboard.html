@@ -99,6 +99,7 @@
   <button class="dashboard-tab" id="tab-decisions" type="button" onclick="setDashboardTab('decisions')" aria-selected="false">Trade Decisions</button>
   <button class="dashboard-tab" id="tab-edge" type="button" onclick="setDashboardTab('edge')" aria-selected="false">Edge Lab</button>
   <button class="dashboard-tab" id="tab-results" type="button" onclick="setDashboardTab('results')" aria-selected="false">Signal Results</button>
+  <button class="dashboard-tab" id="tab-arena" type="button" onclick="setDashboardTab('arena')" aria-selected="false">⚔️ AI Battle Arena</button>
 </nav>
 
 <div id="mainDashboard">
@@ -808,6 +809,155 @@
   </div>
 </div>
 
+<!-- AI BATTLE ARENA DASHBOARD -->
+<div id="aiBattleArenaDashboard" style="display:none;margin-top:16px">
+  <!-- Arena Header Banner -->
+  <div class="card" style="margin-bottom:20px;background:linear-gradient(135deg,rgba(0,212,255,0.08) 0%,rgba(156,39,176,0.08) 100%);border:1px solid rgba(0,212,255,0.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2 style="margin:0 0 6px 0;display:flex;align-items:center;gap:10px;font-size:1.4rem">
+          <span>⚔️ The Great Alpha Arena</span>
+          <span style="font-size:.8rem;padding:3px 10px;border-radius:20px;background:rgba(0,230,118,0.15);color:var(--green);border:1px solid rgba(0,230,118,0.3)">LIVE TOURNAMENT</span>
+        </h2>
+        <div style="font-size:.85rem;color:var(--muted)">
+          การประชันผลงานแบบ Head-to-Head: <strong>🤖 Quant Champion (คุณ)</strong> ปะทะ <strong>🧠 Jules AI Fund (ผม + Jules)</strong> • ทุนตั้งต้นฝั่งละ ฿30,000
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="arenaLeaderBanner" style="padding:8px 16px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);font-weight:bold;font-size:.9rem">
+          🏁 สถานะ: กำลังโหลดข้อมูล...
+        </div>
+        <button class="btn-secondary" onclick="loadArenaDashboard()" style="padding:8px 14px;border-radius:8px;cursor:pointer">🔄 รีเฟรชสนามแข่ง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Head-to-Head Arena Dual Cards -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:20px;margin-bottom:24px">
+    <!-- Left Card: Quant Systematic Champion -->
+    <div class="card" style="border-top:4px solid var(--cyan)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-size:.75rem;color:var(--cyan);font-weight:700;text-transform:uppercase;letter-spacing:.5px">The Defending Champion</div>
+          <h3 style="margin:4px 0 2px 0;font-size:1.15rem">🤖 Quant Systematic Fund</h3>
+          <div style="font-size:.78rem;color:var(--muted)">Manager: คุณ + Systematic Rules Engine</div>
+        </div>
+        <div style="text-align:right">
+          <span id="quantBadge" style="font-size:.75rem;padding:3px 8px;border-radius:6px;background:rgba(0,212,255,0.12);color:var(--cyan);border:1px solid rgba(0,212,255,0.3);font-weight:600">Pure Quant</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+        <div class="metric"><b>พอร์ต (Equity)</b><br><span id="qEquity" style="font-size:1.05rem;font-weight:700">฿30,000.00</span></div>
+        <div class="metric"><b>เงินสด (Cash)</b><br><span id="qCash" style="font-size:1.05rem;font-weight:700">฿30,000.00</span></div>
+        <div class="metric"><b>ผลตอบแทนรวม</b><br><span id="qReturn" style="font-size:1.05rem;font-weight:700">0.00%</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+        <div class="metric"><b>กำไรสุทธิ (Net PnL)</b><br><span id="qNetPnl" style="font-size:.95rem">฿0.00</span></div>
+        <div class="metric"><b>Win Rate</b><br><span id="qWinRate" style="font-size:.95rem">0.0%</span></div>
+        <div class="metric"><b>Profit Factor</b><br><span id="qPf" style="font-size:.95rem">0.00</span></div>
+      </div>
+
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:8px;color:var(--text);display:flex;justify-content:space-between">
+        <span>📌 หุ้นที่ถืออยู่ (Active Holdings)</span>
+        <span id="qHoldingsCount" style="font-size:.75rem;color:var(--muted)">0/4 ตัว</span>
+      </div>
+      <div style="overflow-x:auto;margin-bottom:16px">
+        <table class="signal-table" style="font-size:.8rem">
+          <thead>
+            <tr><th>Symbol</th><th>หุ้น</th><th>ทุน</th><th>ราคาล่าสุด</th><th>กำไร/ขาดทุน</th></tr>
+          </thead>
+          <tbody id="quantOpenRows">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">ยังไม่มีสถานะถือครอง</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:8px;color:var(--text)">
+        📜 ประวัติการเทรดล่าสุด (Closed Trades)
+      </div>
+      <div style="overflow-x:auto">
+        <table class="signal-table" style="font-size:.8rem">
+          <thead>
+            <tr><th>Symbol</th><th>เข้า</th><th>ออก</th><th>ผลลัพธ์</th><th>เหตุผลการปิด</th></tr>
+          </thead>
+          <tbody id="quantClosedRows">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">ยังไม่มีประวัติเทรดในรอบนี้</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right Card: Jules AI Autonomous Fund -->
+    <div class="card" style="border-top:4px solid var(--purple)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-size:.75rem;color:var(--purple);font-weight:700;text-transform:uppercase;letter-spacing:.5px">The AI Challenger</div>
+          <h3 style="margin:4px 0 2px 0;font-size:1.15rem">🧠 Jules AI Autonomous Fund</h3>
+          <div style="font-size:.78rem;color:var(--muted)">Manager: Jules AI + Antigravity (AI Coach)</div>
+        </div>
+        <div style="text-align:right">
+          <span id="julesBadge" style="font-size:.75rem;padding:3px 8px;border-radius:6px;background:rgba(156,39,176,0.15);color:var(--purple);border:1px solid rgba(156,39,176,0.3);font-weight:600">Cognitive AI</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+        <div class="metric"><b>พอร์ต (Equity)</b><br><span id="jEquity" style="font-size:1.05rem;font-weight:700">฿30,000.00</span></div>
+        <div class="metric"><b>เงินสด (Cash)</b><br><span id="jCash" style="font-size:1.05rem;font-weight:700">฿30,000.00</span></div>
+        <div class="metric"><b>ผลตอบแทนรวม</b><br><span id="jReturn" style="font-size:1.05rem;font-weight:700">0.00%</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+        <div class="metric"><b>กำไรสุทธิ (Net PnL)</b><br><span id="jNetPnl" style="font-size:.95rem">฿0.00</span></div>
+        <div class="metric"><b>Win Rate</b><br><span id="jWinRate" style="font-size:.95rem">0.0%</span></div>
+        <div class="metric"><b>Profit Factor</b><br><span id="jPf" style="font-size:.95rem">0.00</span></div>
+      </div>
+
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:8px;color:var(--text);display:flex;justify-content:space-between">
+        <span>📌 หุ้นที่ถืออยู่ (Active Holdings)</span>
+        <span id="jHoldingsCount" style="font-size:.75rem;color:var(--muted)">0/4 ตัว</span>
+      </div>
+      <div style="overflow-x:auto;margin-bottom:16px">
+        <table class="signal-table" style="font-size:.8rem">
+          <thead>
+            <tr><th>Symbol</th><th>หุ้น</th><th>ทุน</th><th>ราคาล่าสุด</th><th>กำไร/ขาดทุน</th></tr>
+          </thead>
+          <tbody id="julesOpenRows">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">ยังไม่มีสถานะถือครอง</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="font-size:.85rem;font-weight:700;margin-bottom:8px;color:var(--text)">
+        📜 ประวัติการเทรดล่าสุด (Closed Trades)
+      </div>
+      <div style="overflow-x:auto">
+        <table class="signal-table" style="font-size:.8rem">
+          <thead>
+            <tr><th>Symbol</th><th>เข้า</th><th>ออก</th><th>ผลลัพธ์</th><th>เหตุผลการปิด</th></tr>
+          </thead>
+          <tbody id="julesClosedRows">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">ยังไม่มีประวัติเทรดในรอบนี้</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fair Play Rules of Engagement -->
+  <div class="card" style="background:var(--bg2);border:1px solid var(--border)">
+    <div style="font-size:.88rem;font-weight:700;color:var(--gold);margin-bottom:8px">
+      🤝 กติกาการแข่งขันที่เป็นธรรม (Fair Play Tournament Rules)
+    </div>
+    <div style="font-size:.8rem;color:var(--muted);line-height:1.6">
+      • <strong>ทุนเริ่มต้นเท่ากัน:</strong> กองทุนละ ฿30,000.00 (รวมมูลค่าพอร์ตทดสอบ ฿60,000)<br>
+      • <strong>คิดต้นทุนจริง:</strong> หักค่าคอมมิชชั่น InnovestX 0.21692% ทั้งขาซื้อและขาขาย และบังคับซื้อขายเป็น SET Board Lot 100 หุ้น<br>
+      • <strong>คุมความเสี่ยงสูงสุด:</strong> จำกัดการถือสถานะพร้อมกันไม่เกิน 4 ตัวต่อกองทุน เพื่อป้องกันการทุ่มเงินซื้อตัวเดียว<br>
+      • <strong>ความโปร่งใส 100%:</strong> ไม่มีใครแก้ไขตัวเลขในฐานข้อมูลได้ ทุกคำสั่งมี Timestamp, Decision Trace และบันทึกลง Git แบบเปิดเผย
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 

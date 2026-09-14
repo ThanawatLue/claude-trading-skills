@@ -4401,18 +4401,22 @@ function setDashboardTab(tab) {
   const decisions = document.getElementById('tradeDecisionsDashboard');
   const edge = document.getElementById('edgeLabDashboard');
   const results = document.getElementById('signalResultsDashboard');
+  const arena = document.getElementById('aiBattleArenaDashboard');
   const mainTab = document.getElementById('tab-main');
   const decisionsTab = document.getElementById('tab-decisions');
   const edgeTab = document.getElementById('tab-edge');
   const resultsTab = document.getElementById('tab-results');
+  const arenaTab = document.getElementById('tab-arena');
   const isMain = tab === 'main';
   const isDecisions = tab === 'decisions';
   const isEdge = tab === 'edge';
   const isResults = tab === 'results';
+  const isArena = tab === 'arena';
   if (main) main.style.display = isMain ? '' : 'none';
   if (decisions) decisions.style.display = isDecisions ? '' : 'none';
   if (edge) edge.style.display = isEdge ? '' : 'none';
   if (results) results.style.display = isResults ? '' : 'none';
+  if (arena) arena.style.display = isArena ? '' : 'none';
   if (mainTab) {
     mainTab.classList.toggle('active', isMain);
     mainTab.setAttribute('aria-selected', String(isMain));
@@ -4429,10 +4433,133 @@ function setDashboardTab(tab) {
     resultsTab.classList.toggle('active', isResults);
     resultsTab.setAttribute('aria-selected', String(isResults));
   }
+  if (arenaTab) {
+    arenaTab.classList.toggle('active', isArena);
+    arenaTab.setAttribute('aria-selected', String(isArena));
+  }
   localStorage.setItem('dashboardTab', tab);
   if (isDecisions) loadTradeDecisions();
   if (isEdge) loadEdgeLab();
   if (isResults) loadSignalResults();
+  if (isArena) loadArenaDashboard();
+}
+
+async function loadArenaDashboard() {
+  const leaderBanner = document.getElementById('arenaLeaderBanner');
+  try {
+    const market = currentMarket || 'TH';
+    const res = await fetch(`/api/arena/overview?market=${market}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const q = data.quant || {};
+    const j = data.jules || {};
+
+    if (leaderBanner) {
+      if (data.leader === 'Quant Champion') {
+        leaderBanner.innerHTML = `🏆 ผู้นำ: <span style="color:var(--cyan)">Quant Champion</span> (+฿${(data.lead_diff_thb || 0).toFixed(2)})`;
+      } else if (data.leader === 'Jules AI Fund') {
+        leaderBanner.innerHTML = `🏆 ผู้นำ: <span style="color:var(--purple)">Jules AI Fund</span> (+฿${(data.lead_diff_thb || 0).toFixed(2)})`;
+      } else {
+        leaderBanner.innerHTML = `🤝 สถานะ: <span style="color:var(--gold)">เสมอกัน (Tied)</span>`;
+      }
+    }
+
+    const cur = market === 'TH' ? '฿' : '$';
+    const fmtMoney = (v) => `${cur}${(v || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    const pnlColor = (v) => (v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--muted)');
+    const fmtPnl = (v) => `${v > 0 ? '+' : ''}${fmtMoney(v)}`;
+
+    // Quant Fund Stats
+    const qEq = document.getElementById('qEquity'); if (qEq) qEq.textContent = fmtMoney(q.equity);
+    const qCash = document.getElementById('qCash'); if (qCash) qCash.textContent = fmtMoney(q.cash_balance);
+    const qRetEl = document.getElementById('qReturn');
+    if (qRetEl) {
+      qRetEl.textContent = `${q.net_return_pct > 0 ? '+' : ''}${(q.net_return_pct || 0).toFixed(2)}%`;
+      qRetEl.style.color = pnlColor(q.net_return_pct);
+    }
+    const qPnlEl = document.getElementById('qNetPnl');
+    if (qPnlEl) {
+      qPnlEl.textContent = fmtPnl(q.net_pnl);
+      qPnlEl.style.color = pnlColor(q.net_pnl);
+    }
+    const qWr = document.getElementById('qWinRate'); if (qWr) qWr.textContent = `${((q.win_rate || 0) * 100).toFixed(1)}% (${q.wins || 0}W/${q.losses || 0}L)`;
+    const qPf = document.getElementById('qPf'); if (qPf) qPf.textContent = (q.profit_factor || 0).toFixed(2);
+    const qHc = document.getElementById('qHoldingsCount'); if (qHc) qHc.textContent = `${q.open_count || 0}/4 ตัว`;
+
+    // Jules Fund Stats
+    const jEq = document.getElementById('jEquity'); if (jEq) jEq.textContent = fmtMoney(j.equity);
+    const jCash = document.getElementById('jCash'); if (jCash) jCash.textContent = fmtMoney(j.cash_balance);
+    const jRetEl = document.getElementById('jReturn');
+    if (jRetEl) {
+      jRetEl.textContent = `${j.net_return_pct > 0 ? '+' : ''}${(j.net_return_pct || 0).toFixed(2)}%`;
+      jRetEl.style.color = pnlColor(j.net_return_pct);
+    }
+    const jPnlEl = document.getElementById('jNetPnl');
+    if (jPnlEl) {
+      jPnlEl.textContent = fmtPnl(j.net_pnl);
+      jPnlEl.style.color = pnlColor(j.net_pnl);
+    }
+    const jWr = document.getElementById('jWinRate'); if (jWr) jWr.textContent = `${((j.win_rate || 0) * 100).toFixed(1)}% (${j.wins || 0}W/${j.losses || 0}L)`;
+    const jPf = document.getElementById('jPf'); if (jPf) jPf.textContent = (j.profit_factor || 0).toFixed(2);
+    const jHc = document.getElementById('jHoldingsCount'); if (jHc) jHc.textContent = `${j.open_count || 0}/4 ตัว`;
+
+    // Render Holdings
+    const renderOpenTable = (rows, tbodyId) => {
+      const el = document.getElementById(tbodyId);
+      if (!el) return;
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">ยังไม่มีสถานะถือครอง</td></tr>';
+        return;
+      }
+      el.innerHTML = rows.map(r => {
+        const sym = (r.symbol || '').replace('.BK', '');
+        const pnl = r.unrealized_pnl || 0;
+        const pnlText = fmtPnl(pnl);
+        const last = r.last_price || r.entry_price;
+        return `<tr>
+          <td><strong style="color:var(--cyan)">${_srEscape(sym)}</strong></td>
+          <td>${(r.shares || 0).toLocaleString()}</td>
+          <td>${cur}${(r.entry_price || 0).toFixed(2)}</td>
+          <td>${cur}${last.toFixed(2)}</td>
+          <td style="color:${pnlColor(pnl)};font-weight:600">${pnlText}</td>
+        </tr>`;
+      }).join('');
+    };
+
+    renderOpenTable(q.open_positions, 'quantOpenRows');
+    renderOpenTable(j.open_positions, 'julesOpenRows');
+
+    // Render Closed Trades
+    const renderClosedTable = (rows, tbodyId) => {
+      const el = document.getElementById(tbodyId);
+      if (!el) return;
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">ยังไม่มีประวัติเทรดในรอบนี้</td></tr>';
+        return;
+      }
+      el.innerHTML = rows.map(r => {
+        const sym = (r.symbol || '').replace('.BK', '');
+        const pnl = r.realized_pnl || 0;
+        const pnlText = fmtPnl(pnl);
+        const exit = r.exit_price || r.entry_price;
+        const reason = r.notes || r.status || '-';
+        return `<tr>
+          <td><strong style="color:var(--text)">${_srEscape(sym)}</strong></td>
+          <td>${cur}${(r.entry_price || 0).toFixed(2)}</td>
+          <td>${cur}${exit.toFixed(2)}</td>
+          <td style="color:${pnlColor(pnl)};font-weight:600">${pnlText}</td>
+          <td style="color:var(--muted);font-size:.75rem">${_srEscape(reason)}</td>
+        </tr>`;
+      }).join('');
+    };
+
+    renderClosedTable(q.closed_trades, 'quantClosedRows');
+    renderClosedTable(j.closed_trades, 'julesClosedRows');
+
+  } catch (err) {
+    console.error('Failed to load arena dashboard:', err);
+    if (leaderBanner) leaderBanner.textContent = '❌ โหลดข้อมูลสนามแข่งไม่สำเร็จ';
+  }
 }
 
 function _srEscape(v) {
@@ -5181,7 +5308,7 @@ window.onload = async () => {
   await loadData();
   await paperRefresh();
   const savedTab = localStorage.getItem('dashboardTab') || 'main';
-  if (savedTab === 'results' || savedTab === 'decisions' || savedTab === 'edge') setDashboardTab(savedTab);
+  if (savedTab === 'results' || savedTab === 'decisions' || savedTab === 'edge' || savedTab === 'arena') setDashboardTab(savedTab);
   else loadSignalResults();
 };
 
