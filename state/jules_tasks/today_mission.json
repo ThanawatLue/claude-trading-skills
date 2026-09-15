@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-09-15T03:18:21+00:00",
+  "market": "TH",
+  "dna_generation": 2,
+  "available_slots": 4,
+  "candidates": [
+    {
+      "symbol": "TIDLOR.BK",
+      "company_name": "Tidlor Holdings Public Company Limited",
+      "sector": "Financial Services",
+      "price": 19.200000762939453,
+      "score": 67.8,
+      "source": "CANSLIM Screener",
+      "highlights": "CANSLIM Score: 67.8 | 52w Dist: -14.7%",
+      "shares": 300,
+      "stop": 18.05,
+      "target": 21.73,
+      "est_cost": 5760.0
+    },
+    {
+      "symbol": "GULF.BK",
+      "company_name": "Gulf Development Public Company Limited",
+      "sector": "Utilities",
+      "price": 63.0,
+      "score": 67.5,
+      "source": "CANSLIM Screener",
+      "highlights": "CANSLIM Score: 67.5 | 52w Dist: -8.0%",
+      "shares": 100,
+      "stop": 59.22,
+      "target": 71.32,
+      "est_cost": 6300.0
+    },
+    {
+      "symbol": "AMATA.BK",
+      "company_name": "Amata Corporation Public Company Limited",
+      "sector": "Real Estate",
+      "price": 26.5,
+      "score": 63.8,
+      "source": "CANSLIM Screener",
+      "highlights": "CANSLIM Score: 63.8 | 52w Dist: -5.4%",
+      "shares": 200,
+      "stop": 24.91,
+      "target": 30.0,
+      "est_cost": 5300.0
+    },
+    {
+      "symbol": "SINGER.BK",
+      "company_name": "Singer Thailand Public Company Limited",
+      "sector": "Financial Services",
+      "price": 9.949999809265137,
+      "score": 62.5,
+      "source": "CANSLIM Screener",
+      "highlights": "CANSLIM Score: 62.5 | 52w Dist: -1.5%",
+      "shares": 700,
+      "stop": 9.35,
+      "target": 11.27,
+      "est_cost": 6965.0
+    }
+  ]
+}

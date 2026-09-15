@@ -1,0 +1,20 @@
+{
+  "generation": 2,
+  "total_analyzed_trades": 1,
+  "last_evolved_at": "2026-09-15T03:18:21+00:00",
+  "win_rate": 1.0,
+  "profit_factor": 1.935,
+  "rules": [
+    "Always verify positive Q2/Q3 net profit growth before entering.",
+    "Avoid stocks trading within 5 days of XD dividend record date.",
+    "Cut positions early if volume contracts by more than 60% on day 1 post-entry.",
+    "Hold winning momentum trades until 2.2R target without premature manual closure."
+  ],
+  "sector_experience": {},
+  "strengths": [
+    "Discretionary catalyst detection",
+    "Strict 30k capital discipline",
+    "High patience on winners (letting profits run to full target)"
+  ],
+  "weaknesses_to_correct": []
+}

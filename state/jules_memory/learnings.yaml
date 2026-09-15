@@ -1,0 +1,18 @@
+updated_at: '2026-09-15T03:18:21+00:00'
+generation: 2
+active_rules:
+- Always verify positive Q2/Q3 net profit growth before entering.
+- Avoid stocks trading within 5 days of XD dividend record date.
+- Cut positions early if volume contracts by more than 60% on day 1 post-entry.
+- Hold winning momentum trades until 2.2R target without premature manual closure.
+strengths:
+- Discretionary catalyst detection
+- Strict 30k capital discipline
+- High patience on winners (letting profits run to full target)
+weaknesses_to_correct: []
+recent_learnings: []
+stats_summary:
+  total_trades: 1
+  win_rate: 1.0
+  wins: 1
+  losses: 0

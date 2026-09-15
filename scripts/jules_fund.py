@@ -414,6 +414,8 @@ def main():
     sub.add_parser("arena")
     sub.add_parser("briefing")
     sub.add_parser("evolve")
+    sub.add_parser("scout")
+    sub.add_parser("mission")
 
     args = parser.parse_args()
 
@@ -462,6 +464,17 @@ def main():
         import scripts.jules_evolver as je
 
         print(json.dumps(je.evolve_memory(), ensure_ascii=False, indent=2))
+    elif args.cmd == "scout":
+        import scripts.jules_scout as js
+
+        js.generate_today_mission()
+        print(f"Mission generated: {js.MISSION_MD}")
+    elif args.cmd == "mission":
+        import scripts.jules_scout as js
+
+        if not js.MISSION_MD.exists():
+            js.generate_today_mission()
+        print(js.MISSION_MD.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
