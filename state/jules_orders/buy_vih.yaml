@@ -1,0 +1,8 @@
+symbol: VIH.BK
+action: buy
+market: TH
+shares: 700
+entry_price: 9.15
+stop_price: 8.87
+target_price: 9.71
+thesis: "Thai Swing Momentum setup with 9.8x volume surge in defensive Healthcare sector. Tight 3% stop with 2.0R payoff."
