@@ -20,10 +20,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้ากำไร (2.2R) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.05 (-6%) | ฿21.73 (+2.2R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
-| **2. GULF.BK** | ฿63.00 | **100** หุ้น | ฿6,300.00 | ฿59.22 (-6%) | ฿71.32 (+2.2R) | CANSLIM Score: 67.5 | 52w Dist: -8.0% |
-| **3. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿24.91 (-6%) | ฿30.00 (+2.2R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
-| **4. SINGER.BK** | ฿9.95 | **700** หุ้น | ฿6,965.00 | ฿9.35 (-6%) | ฿11.27 (+2.2R) | CANSLIM Score: 62.5 | 52w Dist: -1.5% |
+| **1. CENTEL.BK** | ฿43.50 | **100** หุ้น | ฿4,350.00 | ฿40.89 (-6%) | ฿49.24 (+2.2R) | CANSLIM Score: 69.4 | 52w Dist: -2.8% |
+| **2. PTTGC.BK** | ฿49.25 | **100** หุ้น | ฿4,925.00 | ฿46.29 (-6%) | ฿55.76 (+2.2R) | CANSLIM Score: 65.5 | 52w Dist: -3.4% |
+| **3. KCE.BK** | ฿65.75 | **100** หุ้น | ฿6,575.00 | ฿61.80 (-6%) | ฿74.44 (+2.2R) | CANSLIM Score: 65.0 | 52w Dist: -1.5% |
+| **4. IVL.BK** | ฿28.50 | **200** หุ้น | ฿5,700.00 | ฿26.79 (-6%) | ฿32.26 (+2.2R) | CANSLIM Score: 59.5 | 52w Dist: -5.0% |
 
 ---
 
@@ -40,49 +40,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: TIDLOR.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
+# Order Template 1: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "TIDLOR.BK"
-shares: 300
-entry_price: 19.20
-stop_price: 18.05
-target_price: 21.73
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง]"
-```
-
-```yaml
-# Order Template 2: GULF.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GULF.yaml
-action: buy
-symbol: "GULF.BK"
+symbol: "CENTEL.BK"
 shares: 100
-entry_price: 63.00
-stop_price: 59.22
-target_price: 71.32
+entry_price: 43.50
+stop_price: 40.89
+target_price: 49.24
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง]"
 ```
 
 ```yaml
-# Order Template 3: AMATA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
+# Order Template 2: PTTGC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTTGC.yaml
 action: buy
-symbol: "AMATA.BK"
+symbol: "PTTGC.BK"
+shares: 100
+entry_price: 49.25
+stop_price: 46.29
+target_price: 55.76
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง]"
+```
+
+```yaml
+# Order Template 3: KCE.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_KCE.yaml
+action: buy
+symbol: "KCE.BK"
+shares: 100
+entry_price: 65.75
+stop_price: 61.80
+target_price: 74.44
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง]"
+```
+
+```yaml
+# Order Template 4: IVL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_IVL.yaml
+action: buy
+symbol: "IVL.BK"
 shares: 200
-entry_price: 26.50
-stop_price: 24.91
-target_price: 30.00
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง]"
-```
-
-```yaml
-# Order Template 4: SINGER.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SINGER.yaml
-action: buy
-symbol: "SINGER.BK"
-shares: 700
-entry_price: 9.95
-stop_price: 9.35
-target_price: 11.27
+entry_price: 28.50
+stop_price: 26.79
+target_price: 32.26
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง]"
 ```
