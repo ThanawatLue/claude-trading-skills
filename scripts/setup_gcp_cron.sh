@@ -33,6 +33,14 @@ MARKS_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs && curl -fsS -X POST --max-time
 CRON_TH_MARKS="30 3-10 * * 1-5 $MARKS_CMD"
 CRON_US_MARKS="30 14 * * 1-5 $MARKS_CMD"
 
+# Jules AI Autonomous Fund schedules (UTC times for ICT Bangkok hours):
+# 08:30 ICT -> 01:30 UTC: Morning Scout & Daily Mission Publisher
+CRON_JULES_SCOUT="30 1 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_morning_scout.sh"
+# 09:00-16:45 ICT -> 02:00-09:45 UTC: Check and execute pending orders every 15 mins
+CRON_JULES_ORDERS="*/15 2-9 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh"
+# 17:05 ICT -> 10:05 UTC: Post-Market Evolutionary Review & Trader DNA sync
+CRON_JULES_EVOLVE="5 10 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_post_market.sh"
+
 CURRENT_CRON=$(mktemp)
 CLEAN_CRON=$(mktemp)
 
@@ -77,6 +85,10 @@ awk '
     /api\/run\?market=(TH|US)/ { next }
     /run_gcp_daily_pipeline\.sh (TH|US)/ { next }
     /api\/paper\/update_marks/ { next }
+    /Jules AI Autonomous Fund/ { next }
+    /run_gcp_morning_scout\.sh/ { next }
+    /run_gcp_order_processor\.sh/ { next }
+    /run_gcp_post_market\.sh/ { next }
     { print }
 ' "$CURRENT_CRON" > "$CLEAN_CRON"
 
@@ -94,6 +106,12 @@ awk '
     echo "$CRON_US_PIPE"
     echo "# Automated Paper Mark Updates (US Market)"
     echo "$CRON_US_MARKS"
+    echo "# Jules AI Autonomous Fund: Morning Scout (08:30 ICT)"
+    echo "$CRON_JULES_SCOUT"
+    echo "# Jules AI Autonomous Fund: Order Processor (Every 15m 09:00-16:45 ICT)"
+    echo "$CRON_JULES_ORDERS"
+    echo "# Jules AI Autonomous Fund: Post-Market Evolution (17:05 ICT)"
+    echo "$CRON_JULES_EVOLVE"
     echo "# END TONG_TRADING_AUTOMATION"
 } >> "$CLEAN_CRON"
 
