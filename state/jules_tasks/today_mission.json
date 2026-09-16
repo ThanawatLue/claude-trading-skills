@@ -1,60 +1,60 @@
 {
-  "generated_at": "2026-09-15T03:25:37+00:00",
+  "generated_at": "2026-09-16T01:30:08+00:00",
   "market": "TH",
   "dna_generation": 2,
-  "available_slots": 4,
+  "available_slots": 3,
   "candidates": [
     {
       "symbol": "CENTEL.BK",
       "company_name": "Central Plaza Hotel Public Company Limited",
       "sector": "Consumer Cyclical",
-      "price": 43.5,
+      "price": 44.5,
       "score": 69.4,
       "source": "CANSLIM Screener",
-      "highlights": "CANSLIM Score: 69.4 | 52w Dist: -2.8%",
+      "highlights": "CANSLIM Score: 69.4 | 52w Dist: -0.6%",
       "shares": 100,
-      "stop": 40.89,
-      "target": 49.24,
-      "est_cost": 4350.0
+      "stop": 41.83,
+      "target": 50.37,
+      "est_cost": 4450.0
     },
     {
       "symbol": "PTTGC.BK",
       "company_name": "PTT Global Chemical Public Company Limited",
       "sector": "Basic Materials",
-      "price": 49.25,
+      "price": 49.75,
       "score": 65.5,
       "source": "CANSLIM Screener",
-      "highlights": "CANSLIM Score: 65.5 | 52w Dist: -3.4%",
+      "highlights": "CANSLIM Score: 65.5 | 52w Dist: -2.5%",
       "shares": 100,
-      "stop": 46.29,
-      "target": 55.76,
-      "est_cost": 4925.0
+      "stop": 46.77,
+      "target": 56.31,
+      "est_cost": 4975.0
     },
     {
       "symbol": "KCE.BK",
       "company_name": "KCE Electronics Public Company Limited",
       "sector": "Technology",
-      "price": 65.75,
+      "price": 67.5,
       "score": 65.0,
       "source": "CANSLIM Screener",
-      "highlights": "CANSLIM Score: 65.0 | 52w Dist: -1.5%",
+      "highlights": "CANSLIM Score: 65.0 | 52w Dist: 1.1%",
       "shares": 100,
-      "stop": 61.8,
-      "target": 74.44,
-      "est_cost": 6575.0
+      "stop": 63.45,
+      "target": 76.41,
+      "est_cost": 6750.0
     },
     {
       "symbol": "IVL.BK",
       "company_name": "Indorama Ventures Public Company Limited",
       "sector": "Basic Materials",
-      "price": 28.5,
-      "score": 59.5,
+      "price": 29.25,
+      "score": 62.5,
       "source": "CANSLIM Screener",
-      "highlights": "CANSLIM Score: 59.5 | 52w Dist: -5.0%",
+      "highlights": "CANSLIM Score: 62.5 | 52w Dist: -2.5%",
       "shares": 200,
-      "stop": 26.79,
-      "target": 32.26,
-      "est_cost": 5700.0
+      "stop": 27.49,
+      "target": 33.12,
+      "est_cost": 5850.0
     }
   ]
 }
