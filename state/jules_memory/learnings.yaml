@@ -1,4 +1,4 @@
-updated_at: '2026-09-15T03:18:21+00:00'
+updated_at: '2026-09-16T10:42:09+00:00'
 generation: 2
 active_rules:
 - Always verify positive Q2/Q3 net profit growth before entering.
@@ -13,6 +13,6 @@ weaknesses_to_correct: []
 recent_learnings: []
 stats_summary:
   total_trades: 1
-  win_rate: 1.0
-  wins: 1
-  losses: 0
+  win_rate: 0.0
+  wins: 0
+  losses: 1

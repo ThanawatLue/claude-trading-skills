@@ -1,9 +1,9 @@
 {
   "generation": 2,
   "total_analyzed_trades": 1,
-  "last_evolved_at": "2026-09-15T03:18:21+00:00",
-  "win_rate": 1.0,
-  "profit_factor": 1.935,
+  "last_evolved_at": "2026-09-16T10:42:09+00:00",
+  "win_rate": 0.0,
+  "profit_factor": -1.14,
   "rules": [
     "Always verify positive Q2/Q3 net profit growth before entering.",
     "Avoid stocks trading within 5 days of XD dividend record date.",
