@@ -15,7 +15,7 @@ cd "$PROJECT_ROOT"
 {
   echo "=== Post-Market Evolution Start: $(date -Is) ==="
   git pull origin main || true
-  uv run python scripts/jules_evolver.py --review
+  uv run python scripts/jules_evolver.py run
   if git status --porcelain state/jules_memory/ | grep -q .; then
     git add state/jules_memory/
     git commit -m "chore(jules): evolve trader DNA post-market $(date +%Y-%m-%d)" --no-verify || true
