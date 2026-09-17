@@ -23,7 +23,7 @@ import logging
 import shutil
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +53,7 @@ logger = logging.getLogger("jules_fund")
 DB_PATH = PROJECT_ROOT / "state" / "market_cache.db"
 ORDERS_DIR = PROJECT_ROOT / "state" / "jules_orders"
 PROCESSED_ORDERS_DIR = ORDERS_DIR / "processed"
+QUARANTINE_ORDERS_DIR = ORDERS_DIR / "quarantine"
 
 INITIAL_CAPITAL = 30000.0  # THB
 DEFAULT_FEE_BPS = 21.692  # InnovestX cash balance fee per side (0.21692%)
@@ -89,6 +90,23 @@ def _get_latest_price(symbol: str, market: str = "TH") -> float:
             return float(hist["Close"].iloc[-1])
     except Exception as e:
         logger.warning("yfinance lookup failed for %s: %s", clean_sym, e)
+
+    # TradingView Screener Fallback (resilient on cloud VMs when Yahoo is blocked)
+    if market == "TH":
+        try:
+            from scripts.lib.tv_client import get_thai_stocks
+
+            tv_stocks = get_thai_stocks()
+            clean_root = clean_sym.replace(".BK", "")
+            for item in tv_stocks:
+                if (
+                    item.get("name") == clean_root
+                    and item.get("close")
+                    and float(item["close"]) > 0
+                ):
+                    return float(item["close"])
+        except Exception as tv_err:
+            logger.debug("TradingView lookup failed for %s: %s", clean_sym, tv_err)
 
     raise ValueError(
         f"Could not determine current market price for {clean_sym}. Please specify --entry manually."
@@ -313,6 +331,33 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
             if not symbol:
                 raise ValueError("Order file missing 'symbol'")
 
+            # 1. TTL Check: Reject expired orders
+            expires_at = data.get("expires_at")
+            if expires_at:
+                try:
+                    exp_dt = datetime.fromisoformat(expires_at)
+                    now_utc = datetime.now(timezone.utc)
+                    if exp_dt.tzinfo is None:
+                        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                    if now_utc > exp_dt:
+                        raise ValueError(
+                            f"Order expired at {expires_at} (current time: {now_utc.isoformat()})"
+                        )
+                except Exception as exp_err:
+                    raise ValueError(f"TTL validation failed: {exp_err}")
+
+            # 2. Chase Limit Check for Buys: Reject if price has gapped up too far
+            if action == "buy":
+                max_chase_pct = float(data.get("max_chase_pct", 0.010))
+                entry_ref = float(data.get("entry_price") or data.get("entry") or 0.0)
+                if entry_ref > 0:
+                    curr_price = _get_latest_price(symbol, market=market)
+                    if curr_price > entry_ref * (1.0 + max_chase_pct):
+                        raise ValueError(
+                            f"Chase limit exceeded: price ฿{curr_price:.2f} is > ฿{entry_ref * (1.0 + max_chase_pct):.2f} "
+                            f"(+{max_chase_pct * 100:.1f}% above trigger ฿{entry_ref:.2f})"
+                        )
+
             if action == "buy":
                 res = execute_buy(
                     symbol=symbol,
@@ -340,6 +385,21 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
         except Exception as e:
             logger.error("Failed to process order file %s: %s", p.name, e)
             results.append({"file": p.name, "status": "error", "error": str(e)})
+            # Dead-Letter Queue (Quarantine) pattern: isolate invalid orders to prevent infinite retry loops
+            QUARANTINE_ORDERS_DIR.mkdir(parents=True, exist_ok=True)
+            quarantine_dest = (
+                QUARANTINE_ORDERS_DIR / f"{p.stem}_{int(datetime.now().timestamp())}{p.suffix}"
+            )
+            try:
+                shutil.move(str(p), str(quarantine_dest))
+                err_file = quarantine_dest.with_suffix(".error.json")
+                err_file.write_text(
+                    json.dumps(
+                        {"error": str(e), "file": p.name, "timestamp": datetime.now().isoformat()}
+                    )
+                )
+            except Exception as move_err:
+                logger.error("Failed to quarantine order %s: %s", p.name, move_err)
 
     return results
 

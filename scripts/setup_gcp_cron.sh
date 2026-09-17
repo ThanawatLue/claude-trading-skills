@@ -36,8 +36,10 @@ CRON_US_MARKS="30 14 * * 1-5 $MARKS_CMD"
 # Jules AI Autonomous Fund schedules (UTC times for ICT Bangkok hours):
 # 08:30 ICT -> 01:30 UTC: Morning Scout & Daily Mission Publisher
 CRON_JULES_SCOUT="30 1 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_morning_scout.sh"
-# 09:00-16:45 ICT -> 02:00-09:45 UTC: Check and execute pending orders every 15 mins
-CRON_JULES_ORDERS="*/15 2-9 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh"
+# 09:40 ICT -> 02:40 UTC: Autonomous Decision Maker & Order Staging
+CRON_JULES_DECIDE="40 2 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_auto_decision.sh"
+# 10:15-16:45 ICT -> 03:15-09:45 UTC: Check and execute pending orders (skip 10:00 ATO auction)
+CRON_JULES_ORDERS="15,30,45 3-9 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh"
 # 17:05 ICT -> 10:05 UTC: Post-Market Evolutionary Review & Trader DNA sync
 CRON_JULES_EVOLVE="5 10 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_post_market.sh"
 
@@ -87,6 +89,7 @@ awk '
     /api\/paper\/update_marks/ { next }
     /Jules AI Autonomous Fund/ { next }
     /run_gcp_morning_scout\.sh/ { next }
+    /run_gcp_auto_decision\.sh/ { next }
     /run_gcp_order_processor\.sh/ { next }
     /run_gcp_post_market\.sh/ { next }
     { print }
@@ -108,7 +111,9 @@ awk '
     echo "$CRON_US_MARKS"
     echo "# Jules AI Autonomous Fund: Morning Scout (08:30 ICT)"
     echo "$CRON_JULES_SCOUT"
-    echo "# Jules AI Autonomous Fund: Order Processor (Every 15m 09:00-16:45 ICT)"
+    echo "# Jules AI Autonomous Fund: Decision Maker (09:40 ICT)"
+    echo "$CRON_JULES_DECIDE"
+    echo "# Jules AI Autonomous Fund: Order Processor (10:15-16:45 ICT)"
     echo "$CRON_JULES_ORDERS"
     echo "# Jules AI Autonomous Fund: Post-Market Evolution (17:05 ICT)"
     echo "$CRON_JULES_EVOLVE"

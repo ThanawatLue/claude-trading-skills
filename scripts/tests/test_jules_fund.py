@@ -20,6 +20,7 @@ import scripts.jules_fund as jf
 class TestJulesFund(unittest.TestCase):
     def setUp(self):
         import uuid
+
         self.unique_id = uuid.uuid4().hex[:8]
         self.test_dir = PROJECT_ROOT / "state" / f"test_jules_env_{self.unique_id}"
         self.test_dir.mkdir(parents=True, exist_ok=True)
@@ -32,7 +33,9 @@ class TestJulesFund(unittest.TestCase):
         self.patch_pt_db = patch.object(paper_trade, "DB_PATH", self.test_db)
         self.patch_jf_pt_db = patch.object(jf.paper_trade, "DB_PATH", self.test_db)
         self.patch_orders = patch.object(jf, "ORDERS_DIR", self.test_orders)
-        self.patch_processed = patch.object(jf, "PROCESSED_ORDERS_DIR", self.test_orders / "processed")
+        self.patch_processed = patch.object(
+            jf, "PROCESSED_ORDERS_DIR", self.test_orders / "processed"
+        )
 
         self.patch_db.start()
         self.patch_pt_db.start()
@@ -42,8 +45,12 @@ class TestJulesFund(unittest.TestCase):
 
         # Init DB schema
         with paper_trade._db() as conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS price_bar (symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL)")
-            conn.execute("INSERT INTO price_bar VALUES ('BDMS.BK', '2026-09-14', 28.0, 29.0, 27.5, 28.5, 5000000)")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS price_bar (symbol TEXT, date TEXT, open REAL, high REAL, low REAL, close REAL, volume REAL)"
+            )
+            conn.execute(
+                "INSERT INTO price_bar VALUES ('BDMS.BK', '2026-09-14', 28.0, 29.0, 27.5, 28.5, 5000000)"
+            )
 
     def tearDown(self):
         self.patch_db.stop()
@@ -103,17 +110,21 @@ class TestJulesFund(unittest.TestCase):
 
     def test_process_orders_queue(self):
         import yaml
+
         order_file = self.test_orders / "buy_bdms.yaml"
         with open(order_file, "w", encoding="utf-8") as f:
-            yaml.dump({
-                "action": "buy",
-                "symbol": "BDMS.BK",
-                "shares": 200,
-                "entry_price": 28.0,
-                "stop_price": 26.0,
-                "target_price": 32.0,
-                "thesis": "Queue execution test",
-            }, f)
+            yaml.dump(
+                {
+                    "action": "buy",
+                    "symbol": "BDMS.BK",
+                    "shares": 200,
+                    "entry_price": 28.5,
+                    "stop_price": 26.0,
+                    "target_price": 32.0,
+                    "thesis": "Queue execution test",
+                },
+                f,
+            )
 
         results = jf.process_orders_queue()
         self.assertEqual(len(results), 1)

@@ -145,18 +145,18 @@ class TestJulesRatchetAndResistance(unittest.TestCase):
 
     def test_resistance_aware_target_calculation(self):
         """Verify that find_nearest_resistance detects swing high and caps target at resistance pivot."""
-        # Insert historical price bars for MOMO.BK
+        # Insert historical price bars for MOMO.BK (using valid SET tick 10.80)
         with sqlite3.connect(self.test_db) as conn:
             conn.execute(
-                "INSERT INTO price_bar VALUES ('MOMO.BK', '2026-09-10', 9.5, 10.75, 9.4, 10.2, 1000000)"
+                "INSERT INTO price_bar VALUES ('MOMO.BK', '2026-09-10', 9.5, 10.80, 9.4, 10.2, 1000000)"
             )
 
         nearest = js.find_nearest_resistance("MOMO.BK", current_price=10.0)
-        self.assertAlmostEqual(nearest, 10.75)
+        self.assertAlmostEqual(nearest, 10.80)
 
         levels = js.calculate_sizing_and_levels(price=10.0, symbol="MOMO.BK", suggested_stop=9.50)
-        # 10.0 + 0.5 * 1.1 = 10.55 <= 10.75 <= 11.0 (default 2.0R)
-        self.assertAlmostEqual(levels["target"], 10.75)
+        # 10.0 + 0.5 * 1.1 = 10.55 <= 10.80 <= 11.0 (default 2.0R)
+        self.assertAlmostEqual(levels["target"], 10.80)
         self.assertIn("Resistance Pivot", levels["target_note"])
 
 

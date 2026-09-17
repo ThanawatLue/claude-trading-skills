@@ -22,10 +22,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. BBGI.BK** | ฿6.50 | **1,000** หุ้น | ฿6,500.00 | ฿6.17 (-5.1%) | ฿7.15 (Swing Target) | RSI: 66.3 | Vol: 2.2x | Swing Score: 74.2 |
-| **2. STECON.BK** | ฿18.80 | **300** หุ้น | ฿5,640.00 | ฿17.86 (-5.0%) | ฿20.69 (Swing Target) | RSI: 57.8 | Vol: 2.4x | Swing Score: 61.5 |
-| **3. SPRC.BK** | ฿13.40 | **500** หุ้น | ฿6,700.00 | ฿12.97 (-3.2%) | ฿14.26 (Swing Target) | RSI: 60.6 | Vol: 1.5x | Swing Score: 58.9 |
-| **4. III.BK** | ฿4.86 | **1,400** หุ้น | ฿6,804.00 | ฿4.75 (-2.3%) | ฿5.08 (Swing Target) | RSI: 47.1 | Vol: 1.9x | Swing Score: 84.5 |
+| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
+| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
+| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
+| **4. GULF.BK** | ฿63.00 | **100** หุ้น | ฿6,300.00 | ฿59.75 (-5.2%) | ฿69.50 (2.0R) | CANSLIM Score: 67.5 | 52w Dist: -8.0% |
 
 ---
 
@@ -42,49 +42,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: BBGI.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BBGI.yaml
+# Order Template 1: GROREIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
 action: buy
-symbol: "BBGI.BK"
-shares: 1000
-entry_price: 6.50
-stop_price: 6.17
-target_price: 7.15
+symbol: "GROREIT.BK"
+shares: 700
+entry_price: 9.60
+stop_price: 9.35
+target_price: 10.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 2: STECON.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_STECON.yaml
+# Order Template 2: VIH.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
 action: buy
-symbol: "STECON.BK"
+symbol: "VIH.BK"
+shares: 700
+entry_price: 9.15
+stop_price: 8.85
+target_price: 9.70
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+```
+
+```yaml
+# Order Template 3: TIDLOR.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
+action: buy
+symbol: "TIDLOR.BK"
 shares: 300
-entry_price: 18.80
-stop_price: 17.86
-target_price: 20.69
+entry_price: 19.20
+stop_price: 18.20
+target_price: 21.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 3: SPRC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SPRC.yaml
+# Order Template 4: GULF.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GULF.yaml
 action: buy
-symbol: "SPRC.BK"
-shares: 500
-entry_price: 13.40
-stop_price: 12.97
-target_price: 14.26
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
-```
-
-```yaml
-# Order Template 4: III.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_III.yaml
-action: buy
-symbol: "III.BK"
-shares: 1400
-entry_price: 4.86
-stop_price: 4.75
-target_price: 5.08
+symbol: "GULF.BK"
+shares: 100
+entry_price: 63.00
+stop_price: 59.75
+target_price: 69.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```

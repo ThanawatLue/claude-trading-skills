@@ -39,6 +39,7 @@ if hasattr(sys.stdout, "reconfigure"):
 import paper_trade
 
 import scripts.jules_evolver as je
+from scripts.jules_trader import round_to_set_tick
 from trading_core.clock import isoformat_seconds
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -211,20 +212,20 @@ def calculate_sizing_and_levels(
 
     # Stop Loss: use suggested_stop if valid and below price, else 5% default
     if suggested_stop and 0 < suggested_stop < price:
-        stop = round(suggested_stop, 2)
+        stop = round_to_set_tick(suggested_stop, "down")
     else:
-        stop = round(price * 0.95, 2)
+        stop = round_to_set_tick(price * 0.95, "down")
 
     risk_per_share = price - stop
-    default_target = round(price + (risk_per_share * 2.0), 2)
+    default_target = round_to_set_tick(price + (risk_per_share * 2.0), "down")
 
     # Resistance-Aware Check: take profit before the smart-money dump
     resistance = find_nearest_resistance(symbol, price) if symbol else None
     if resistance and (price + risk_per_share * 1.1) <= resistance <= default_target:
-        target = round(resistance, 2)
+        target = round_to_set_tick(resistance, "down")
         target_note = f"฿{target:.2f} (Resistance Pivot)"
     elif suggested_target and suggested_target > price:
-        target = round(suggested_target, 2)
+        target = round_to_set_tick(suggested_target, "down")
         target_note = f"฿{target:.2f} (Swing Target)"
     else:
         target = default_target

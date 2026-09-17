@@ -1,5 +1,5 @@
 #!/bin/bash
-# Check GitHub for pending Jules orders, pull, and execute them on GCP VM.
+# Run the autonomous Jules Decision Maker, select candidate, stage order, and push to GitHub.
 
 set -euo pipefail
 
@@ -13,17 +13,17 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PAT
 mkdir -p "$LOG_DIR" "$LOCK_DIR"
 cd "$PROJECT_ROOT"
 
-exec 200>"$LOCK_DIR/jules_order_processor.lock"
-flock -n 200 || { echo "Order processor already running. Exiting."; exit 0; }
+exec 200>"$LOCK_DIR/jules_auto_decision.lock"
+flock -n 200 || { echo "Auto decision already running. Exiting."; exit 0; }
 
 {
-  echo "=== Order Processor Start: $(date -Is) ==="
+  echo "=== Autonomous Decision Start: $(date -Is) ==="
   git pull origin main || true
-  uv run python scripts/jules_fund.py process-orders
+  uv run python scripts/jules_trader.py decide
   if git status --porcelain state/jules_orders/ | grep -q .; then
     git add state/jules_orders/
-    git commit -m "chore(jules): record processed orders $(date -Is)" --no-verify || true
+    git commit -m "feat(jules): stage autonomous order for $(date +%Y-%m-%d)" --no-verify || true
     git push origin main --no-verify || true
   fi
-  echo "=== Order Processor Done: $(date -Is) ==="
-} >> "$LOG_DIR/order_processor.log" 2>&1
+  echo "=== Autonomous Decision Done: $(date -Is) ==="
+} >> "$LOG_DIR/auto_decision.log" 2>&1
