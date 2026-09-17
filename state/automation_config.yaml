@@ -107,6 +107,26 @@ auto_paper:
       time_stop_min_r: -0.5
       velocity_stall_days: 4
       velocity_min_mfe_r: 0.3
+    jules_ai:
+      min_score: 70
+      max_new_per_run: 2
+      max_open: 4
+      target_r: 2.0
+      stop_pct_min: 3.0
+      stop_pct_cap: 6.0
+      take_profit_r: 2.0
+      max_hold_days: 10
+      time_stop_min_r: -0.5
+      ratchet_tiers:
+      - - 0.5
+        - 0.0
+      - - 1.0
+        - 0.5
+      - - 1.5
+        - 1.0
+      early_fakeout_enabled: true
+      early_fakeout_vol_ratio: 0.4
+      early_fakeout_max_mfe_r: 0.2
   real_money_enabled: false
   max_age_days: 2
   high_score_override_min: 90
@@ -150,6 +170,20 @@ paper_exit_rules:
     time_stop_min_r: -0.5
     velocity_stall_days: 4
     velocity_min_mfe_r: 0.3
+    early_fakeout_enabled: true
+    early_fakeout_vol_ratio: 0.4
+    early_fakeout_max_mfe_r: 0.2
+  jules_ai:
+    take_profit_r: 2.0
+    max_hold_days: 10
+    time_stop_min_r: -0.5
+    ratchet_tiers:
+    - - 0.5
+      - 0.0
+    - - 1.0
+      - 0.5
+    - - 1.5
+      - 1.0
     early_fakeout_enabled: true
     early_fakeout_vol_ratio: 0.4
     early_fakeout_max_mfe_r: 0.2

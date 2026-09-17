@@ -86,6 +86,19 @@ DEFAULT_SOURCE_RULES = {
         "early_fakeout_vol_ratio": 0.40,
         "early_fakeout_max_mfe_r": 0.20,
     },
+    "jules_ai": {
+        "take_profit_r": 2.0,
+        "max_hold_days": 10,
+        "time_stop_min_r": -0.5,
+        "ratchet_tiers": [
+            [0.5, 0.0],
+            [1.0, 0.5],
+            [1.5, 1.0],
+        ],
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
+    },
 }
 
 
@@ -243,14 +256,18 @@ def update_one(
     take_profit_r = rule.get("take_profit_r")
     max_hold_days = rule.get("max_hold_days")
     time_stop_min_r = float(rule.get("time_stop_min_r", 0.0))
-    ratchet_tiers = rule.get("ratchet_tiers")
+    trade_dict = _row_to_dict(row)
+    trace = trade_dict.get("decision_trace") or {}
+    ratchet_tiers = (
+        trace.get("ratchet_tiers")
+        if isinstance(trace, dict) and trace.get("ratchet_tiers")
+        else rule.get("ratchet_tiers")
+    )
     trail_after_r = rule.get("trail_after_r")
     trail_stop_r = rule.get("trail_stop_r")
 
     # Native Scale-out check (if enabled and not yet completed)
     use_scale_out = bool(rule.get("use_scale_out", False))
-    trade_dict = _row_to_dict(row)
-    trace = trade_dict.get("decision_trace") or {}
     scale_info = trace.get("scale_out") or {}
     scaled_out = bool(scale_info.get("completed"))
     scale_out_result = None
@@ -439,7 +456,7 @@ def update_one(
             status=STATUS_CLOSED_FAKEOUT,
             notes=(
                 f"Auto-closed: early fakeout volume collapse on day {days}; "
-                f"vol ratio {curr_vol/entry_vol:.2f} < {fakeout_vol_ratio:.2f}, current R {r_mult:.2f}R"
+                f"vol ratio {curr_vol / entry_vol:.2f} < {fakeout_vol_ratio:.2f}, current R {r_mult:.2f}R"
             ),
         )
         return {

@@ -196,6 +196,11 @@ def execute_buy(
         "timestamp": isoformat_seconds(),
         "fee_bps": fee_bps,
         "entry_rule": "jules_discretionary_entry",
+        "ratchet_tiers": [
+            [0.5, 0.0],
+            [1.0, 0.5],
+            [1.5, 1.0],
+        ],
     }
 
     trade = paper_trade.open_position(
