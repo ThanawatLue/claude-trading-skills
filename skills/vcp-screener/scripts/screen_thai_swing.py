@@ -509,10 +509,21 @@ def main():
     before_dip = len(top_dip)
     before_mom = len(top_mom)
     top_dip = [s for s in top_dip if s["_plan"]["reward_pct"] >= DIP_MIN_REWARD_PCT]
+    
+    def _mom_risk_allowed(s: dict) -> bool:
+        price = float(s.get("price") or 0.0)
+        atr = float((s.get("_atr") or {}).get("atr") or 0.0)
+        # Dynamic risk cap: scales with stock ATR (min 3.5%, max 8.5%, default 6.0%)
+        if price > 0 and atr > 0:
+            allowed_cap = min(8.5, max(3.5, round((atr / price) * 180.0, 2)))
+        else:
+            allowed_cap = MOM_MAX_RISK_PCT
+        return float(s["_plan"]["risk_pct"]) <= allowed_cap
+
     top_mom = [
         s
         for s in top_mom
-        if s["_plan"]["risk_pct"] <= MOM_MAX_RISK_PCT
+        if _mom_risk_allowed(s)
         and s["_plan"]["reward_pct"] >= MOM_MIN_REWARD_PCT
     ]
     print("\nPhase 4: Quality filters")

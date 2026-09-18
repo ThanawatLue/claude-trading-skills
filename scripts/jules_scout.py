@@ -36,8 +36,11 @@ if str(PAPER_SCRIPT_DIR) not in sys.path:
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+import pandas as pd
+
 import paper_trade
 
+import scripts.adaptive_indicators as ai
 import scripts.jules_evolver as je
 from scripts.jules_trader import round_to_set_tick
 from trading_core.clock import isoformat_seconds
@@ -242,6 +245,36 @@ def calculate_sizing_and_levels(
     }
 
 
+def _get_stock_history_bars(symbol: str, lookback: int = 35) -> pd.DataFrame:
+    """Fetch historical daily bars from market_cache.db for U/D and RS calculation."""
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            query = """SELECT date, open, high, low, close, volume
+                       FROM price_bar
+                       WHERE symbol = ?
+                       ORDER BY date ASC"""
+            df = pd.read_sql_query(query, conn, params=(symbol,))
+            if not df.empty:
+                df.rename(
+                    columns={
+                        "date": "Date",
+                        "open": "Open",
+                        "high": "High",
+                        "low": "Low",
+                        "close": "Close",
+                        "volume": "Volume",
+                    },
+                    inplace=True,
+                )
+                df.set_index("Date", inplace=True)
+                return df.tail(lookback)
+    except Exception as e:
+        logger.debug("Failed to fetch price bars for %s: %s", symbol, e)
+    return pd.DataFrame()
+
+
 def generate_today_mission(market: str = "TH") -> dict[str, Any]:
     """Compile market scout candidates with Trader DNA into today's mission."""
     _ensure_dirs()
@@ -255,17 +288,38 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
     canslim = get_latest_canslim_candidates()
     vol_leaders = get_volume_anomaly_candidates()
 
+    raw_pool = thai_swing + canslim + vol_leaders
+
+    # 2. Detect active Thematic Clusters across candidate pool
+    cluster_detection = ai.detect_thematic_clusters(raw_pool, min_cluster_gainers=2, min_gain_pct=1.5)
+    active_clusters = cluster_detection.get("active_clusters", {})
+
     seen_symbols = set()
     combined_candidates = []
 
-    # Prioritize: Thai Swing setups -> CANSLIM leaders -> Volume surge
-    for c in thai_swing + canslim + vol_leaders:
+    for c in raw_pool:
         sym = c["symbol"].upper()
         if sym in seen_symbols:
             continue
         # Skip unaffordable stocks where 1 board lot (100 shares) exceeds ฿10,000
         if c["price"] * 100 > 10000.0:
             continue
+
+        cluster_name = ai.get_cluster_for_symbol(sym)
+        in_active_cluster = False
+        if cluster_name and cluster_name in active_clusters:
+            in_active_cluster = True
+            c["score"] = float(c.get("score") or 60.0) + 15.0
+            c["highlights"] = f"🚀 {cluster_name} Cluster | " + c.get("highlights", "")
+
+        # 3. Check for Distribution Trap via Recency-Weighted U/D Ratio
+        bars_df = _get_stock_history_bars(sym)
+        if not bars_df.empty:
+            ud_res = ai.calculate_recency_weighted_ud_ratio(bars_df)
+            if ud_res["ud_ratio"] < 0.85:
+                logger.info("Scout: Rejecting %s - Distribution trap (U/D %.2f < 0.85)", sym, ud_res["ud_ratio"])
+                continue
+            c["ud_ratio"] = ud_res["ud_ratio"]
 
         seen_symbols.add(sym)
 
@@ -277,10 +331,37 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
             suggested_target=c.get("suggested_target"),
         )
         c.update(levels)
+        c["cluster"] = cluster_name
         combined_candidates.append(c)
 
-    # Select top 3-4 candidates
-    top_candidates = combined_candidates[:4]
+    # Sort candidates by composite score descending
+    combined_candidates.sort(key=lambda x: float(x.get("score") or 0.0), reverse=True)
+
+    # 4. Anti-Correlation Selection: max 1 stock per sector / thematic cluster
+    top_candidates = []
+    selected_clusters: set[str] = set()
+    selected_sectors: set[str] = set()
+
+    for cand in combined_candidates:
+        cluster = cand.get("cluster")
+        sector = cand.get("sector")
+
+        if cluster and cluster in selected_clusters:
+            logger.info("Scout Anti-Correlation: Skipping %s (cluster %s already represented)", cand["symbol"], cluster)
+            continue
+        if sector and sector in selected_sectors and sector not in ("N/A", "Volume Surge"):
+            logger.info("Scout Anti-Correlation: Skipping %s (sector %s already represented)", cand["symbol"], sector)
+            continue
+
+        top_candidates.append(cand)
+        if cluster:
+            selected_clusters.add(cluster)
+        if sector and sector not in ("N/A", "Volume Surge"):
+            selected_sectors.add(sector)
+
+        if len(top_candidates) >= 4:
+            break
+
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     # Format Markdown Mission

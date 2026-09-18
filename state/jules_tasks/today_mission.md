@@ -22,10 +22,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. WHAIR.BK** | ฿8.65 | **800** หุ้น | ฿6,920.00 | ฿8.30 (-4.0%) | ฿9.25 (Swing Target) | RSI: 66.5 | Vol: 3.9x | Swing Score: 83.1 |
-| **2. PIS.BK** | ฿6.10 | **1,100** หุ้น | ฿6,710.00 | ฿5.90 (-3.3%) | ฿6.45 (Swing Target) | RSI: 68.1 | Vol: 2.9x | Swing Score: 82.2 |
-| **3. ITC.BK** | ฿17.70 | **300** หุ้น | ฿5,310.00 | ฿17.10 (-3.4%) | ฿18.80 (Swing Target) | RSI: 60.8 | Vol: 4.0x | Swing Score: 75.5 |
-| **4. COM7.BK** | ฿30.50 | **200** หุ้น | ฿6,100.00 | ฿29.00 (-4.9%) | ฿33.25 (Swing Target) | RSI: 58.7 | Vol: 2.7x | Swing Score: 70.1 |
+| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
+| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
+| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
+| **4. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿25.00 (-5.7%) | ฿29.50 (2.0R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
 
 ---
 
@@ -42,49 +42,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: WHAIR.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_WHAIR.yaml
+# Order Template 1: GROREIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
 action: buy
-symbol: "WHAIR.BK"
-shares: 800
-entry_price: 8.65
-stop_price: 8.30
-target_price: 9.25
+symbol: "GROREIT.BK"
+shares: 700
+entry_price: 9.60
+stop_price: 9.35
+target_price: 10.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 2: PIS.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PIS.yaml
+# Order Template 2: VIH.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
 action: buy
-symbol: "PIS.BK"
-shares: 1100
-entry_price: 6.10
-stop_price: 5.90
-target_price: 6.45
+symbol: "VIH.BK"
+shares: 700
+entry_price: 9.15
+stop_price: 8.85
+target_price: 9.70
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 3: ITC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_ITC.yaml
+# Order Template 3: TIDLOR.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
 action: buy
-symbol: "ITC.BK"
+symbol: "TIDLOR.BK"
 shares: 300
-entry_price: 17.70
-stop_price: 17.10
-target_price: 18.80
+entry_price: 19.20
+stop_price: 18.20
+target_price: 21.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 4: COM7.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_COM7.yaml
+# Order Template 4: AMATA.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
 action: buy
-symbol: "COM7.BK"
+symbol: "AMATA.BK"
 shares: 200
-entry_price: 30.50
-stop_price: 29.00
-target_price: 33.25
+entry_price: 26.50
+stop_price: 25.00
+target_price: 29.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
