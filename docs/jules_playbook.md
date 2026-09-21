@@ -1,10 +1,32 @@
-# คู่มือปฏิบัติการ Jules AI Agent (Dual-Agent Strategy: 200 Tasks/เดือน)
+# คู่มือปฏิบัติการ Jules AI Fund & Agent Playbook
 
-คู่มือนี้ออกแบบมาเพื่อแปลงโควตา **200 Jules Tasks ต่อเดือน** (จาก 2 บัญชี Google Developer Program Premium) ให้เป็น **"ระบบวิเคราะห์และพัฒนาการเทรดหุ้นไทยอัตโนมัติ"** ที่ทำงานร่วมกับ Python Engine บน GCP VM ได้อย่างสมบูรณ์แบบ
+เอกสารนี้รวบรวม **สถาปัตยกรรมการทำงานอัตโนมัติ 100% (Autonomous Fund)** และ **คู่มือการสั่งงาน Jules AI Agent** เพื่อบริหารพอร์ตหุ้นไทย (SET) ร่วมกับ Python Engine บน GCP VM (`35.212.209.201`)
 
 ---
 
-## 1. ผังการแบ่งบทบาท 2 บัญชี (Dual-Agent Roles)
+## 0. สถาปัตยกรรม Jules AI Autonomous Fund (100% Fully Automated)
+
+ระบบทำงานอัตโนมัติตามกำหนดการบน GCP VM โดยไม่ต้องรอคำสั่งจากผู้ใช้:
+
+1. **08:30 น. (Morning Scout - `run_gcp_morning_scout.sh`):**
+   - สแกนหุ้น SET ด้วย **Adaptive Matrix** (U/D Volume Ratio, Mansfield RS, Thematic Clusters)
+   - คัดกรองหุ้นกับดักที่มีแรงขายสะสมออก (`U/D < 0.85`)
+   - สร้างรายงานและคำสั่งซื้อจำลองใน `state/jules_tasks/today_mission.md`
+2. **09:40 น. (Decision Maker - `run_gcp_auto_decision.sh`):**
+   - ตรวจสอบ Market Exposure Posture (`REDUCE_ONLY` / `CASH_PRIORITY` บังคับ `HOLD_CASH` เพื่อคุ้มครองเงินต้น)
+   - ตรวจสอบ Circuit Breaker (แพ้ 2 ไม้ติดลด Size 50%, แพ้ 3 ไม้หยุดเทรด 3 วัน)
+   - คำนวณ SET Tick Ladder และออก Order Staging (อายุคำสั่ง TTL 45 นาที)
+3. **10:15–16:45 น. (Order Processor - `run_gcp_order_processor.sh` ทุก 15 นาที):**
+   - รอจังหวะราคาหลังเปิดตลาด 15 นาที (ORB-15 ข้าม ATO 10:00 น.)
+   - บังคับใช้ **Max Chase Envelope ($\le +1.0\%$)** ห้ามไล่ราคาเด็ดขาด
+   - แยกออเดอร์ที่มีปัญหาเข้า Dead-Letter Queue (`quarantine/`)
+4. **17:05 น. (Post-Market Review - `run_gcp_post_market.sh`):**
+   - ตรวจสอบ **MFE Ratchet Breakeven Stop** (+0.5R ขยับ Stop บังทุนทันที)
+   - สรุปผลและส่งต่อให้ Evolver อัปเดต Trader DNA ใน `state/jules_memory/trader_dna.json`
+
+---
+
+## 1. ผังการแบ่งบทบาท 2 บัญชี (Dual-Agent Research Support)
 
 | บัญชี / Agent | โควตา | บทบาทหลัก | ผลลัพธ์ที่ส่งมอบ |
 | :--- | :---: | :--- | :--- |

@@ -1,59 +1,35 @@
 # GCP Online Automation Update
 
-Last updated: 2026-07-13
+Last updated: 2026-09-21
 
 ## What Changed
 
-The project already had a GCP VM deployment path through GitHub Actions. This update extends it so the VM can keep the trading workflow running even when the local computer is off.
+The project features a fully automated trading intelligence pipeline and autonomous fund manager on GCP Compute Engine (`35.212.209.201`). It executes the full decision and risk cycle autonomously without human intervention.
 
-Changed files:
-
-- `.github/workflows/deploy.yml`
-- `scripts/setup_gcp_cron.sh`
-- `scripts/run_gcp_daily_pipeline.sh`
-- `scripts/fee_model.py`
-- `dashboard/app.py`
-- `state/automation_config.yaml`
-
-## Deployment Flow
-
-When code is pushed to `main`, GitHub Actions now:
-
-1. SSHs into the GCP VM.
-2. Finds the project checkout from `GCP_PROJECT_DIR`, `~/tong_trading`, `~/claude-trading-skills-1`, or `~/claude-trading-skills`.
-3. Clones the repo into `~/claude-trading-skills-1` if no checkout exists yet.
-4. Pulls the latest `main` branch.
-5. Installs `uv` if it is missing from the VM PATH, then runs `uv sync`.
-6. Creates runtime folders:
-   - `logs/`
-   - `reports/daily-signal-pipeline/`
-   - `state/`
-7. Makes automation scripts executable.
-8. Runs `bash scripts/setup_gcp_cron.sh`.
-9. Creates `dashboard.service` if missing, then restarts it.
-
-This means the VM should receive both dashboard updates and cron automation updates after a successful push.
+Key Active Modules:
+- `scripts/jules_scout.py` (Daily Morning Scout & Adaptive Matrix Screener)
+- `scripts/jules_trader.py` (Pre-market Autonomous Decision Engine & Circuit Breakers)
+- `scripts/jules_fund.py` (Order Processing, Dead-Letter Queue, and Portfolio Accounting)
+- `scripts/jules_evolver.py` (Post-Market Review, MFE Ratchet Breakeven Stop, Trader DNA Evolution)
+- `scripts/adaptive_indicators.py` (Thematic Clusters, Recency-Weighted U/D Ratio, Dynamic ATR Caps, Mansfield RS)
 
 ## Cron Jobs Installed On GCP
 
-The cron setup script now keeps the original dashboard scans and adds follow-up daily signal pipeline jobs.
-The managed cron block is installed with `CRON_TZ=Asia/Bangkok`, so the times below are Bangkok time regardless of the VM's system timezone.
-Each deploy replaces the managed block to prevent stale or duplicate automation jobs.
-
-TH market:
+The managed cron block is installed in UTC (`CRON_TZ=UTC`), corresponding to Bangkok market hours (UTC+7):
 
 ```text
-10:15 Mon-Fri  scan dashboard: /api/run?market=TH
-10:45 Mon-Fri  run signal pipeline: scripts/run_gcp_daily_pipeline.sh TH
-16:15 Mon-Fri  scan dashboard: /api/run?market=TH
-16:45 Mon-Fri  run signal pipeline: scripts/run_gcp_daily_pipeline.sh TH
-```
+# General Intelligence Scans & Paper Trade Updates
+0 3-10 * * 1-5       (10:00-17:00 ICT)  TH Hourly Scan via Dashboard API
+30 3-10 * * 1-5      (10:30-17:30 ICT)  TH Hourly Paper Marks Update
+30 13 * * 1-5        (20:30 ICT)        US Market Scan
+0 14 * * 1-5         (21:00 ICT)        US Signal Ledger Pipeline
+30 14 * * 1-5        (21:30 ICT)        US Paper Marks Update
 
-US market:
-
-```text
-20:30 Mon-Fri  scan dashboard: /api/run?market=US
-21:00 Mon-Fri  run signal pipeline: scripts/run_gcp_daily_pipeline.sh US
+# Jules AI Autonomous Fund Loop
+30 1 * * 1-5         (08:30 ICT)        Morning Scout & Adaptive Mission (run_gcp_morning_scout.sh)
+40 2 * * 1-5         (09:40 ICT)        Autonomous Decision Maker (run_gcp_auto_decision.sh)
+15,30,45 3-9 * * 1-5 (10:15-16:45 ICT)  Order Processor every 15m (run_gcp_order_processor.sh)
+5 10 * * 1-5         (17:05 ICT)        Post-Market Evolutionary Review (run_gcp_post_market.sh)
 ```
 
 ## What The Pipeline Does
