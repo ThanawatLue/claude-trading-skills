@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund: Daily Mission & Research Briefing
-**วันที่:** 2026-09-18 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-09-21 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -22,10 +22,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
-| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
-| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
-| **4. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿25.00 (-5.7%) | ฿29.50 (2.0R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
+| **1. TU.BK** | ฿12.70 | **500** หุ้น | ฿6,350.00 | ฿12.10 (-4.7%) | ฿13.70 (Swing Target) | RSI: 48.4 | Vol: 1.4x | Swing Score: 72.7 |
+| **2. CENTEL.BK** | ฿43.25 | **100** หุ้น | ฿4,325.00 | ฿41.00 (-5.2%) | ฿47.75 (2.0R) | CANSLIM Score: 71.6 | 52w Dist: -3.4% |
+| **3. AJ.BK** | ฿3.50 | **2,000** หุ้น | ฿7,000.00 | ฿3.30 (-5.7%) | ฿3.86 (Swing Target) | RSI: 49.6 | Vol: 1.3x | Swing Score: 71.5 |
+| **4. FTREIT.BK** | ฿13.50 | **500** หุ้น | ฿6,750.00 | ฿12.90 (-4.4%) | ฿14.60 (Swing Target) | RSI: 64.9 | Vol: 1.9x | Swing Score: 70.0 |
 
 ---
 
@@ -42,49 +42,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: GROREIT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
+# Order Template 1: TU.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TU.yaml
 action: buy
-symbol: "GROREIT.BK"
-shares: 700
-entry_price: 9.60
-stop_price: 9.35
-target_price: 10.00
+symbol: "TU.BK"
+shares: 500
+entry_price: 12.70
+stop_price: 12.10
+target_price: 13.70
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 2: VIH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
+# Order Template 2: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "VIH.BK"
-shares: 700
-entry_price: 9.15
-stop_price: 8.85
-target_price: 9.70
+symbol: "CENTEL.BK"
+shares: 100
+entry_price: 43.25
+stop_price: 41.00
+target_price: 47.75
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 3: TIDLOR.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
+# Order Template 3: AJ.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AJ.yaml
 action: buy
-symbol: "TIDLOR.BK"
-shares: 300
-entry_price: 19.20
-stop_price: 18.20
-target_price: 21.20
+symbol: "AJ.BK"
+shares: 2000
+entry_price: 3.50
+stop_price: 3.30
+target_price: 3.86
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 4: AMATA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
+# Order Template 4: FTREIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_FTREIT.yaml
 action: buy
-symbol: "AMATA.BK"
-shares: 200
-entry_price: 26.50
-stop_price: 25.00
-target_price: 29.50
+symbol: "FTREIT.BK"
+shares: 500
+entry_price: 13.50
+stop_price: 12.90
+target_price: 14.60
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
