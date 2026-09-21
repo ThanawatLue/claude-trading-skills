@@ -37,7 +37,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import pandas as pd
-
 import paper_trade
 
 import scripts.adaptive_indicators as ai
@@ -306,11 +305,12 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
             continue
 
         cluster_name = ai.get_cluster_for_symbol(sym)
-        in_active_cluster = False
         if cluster_name and cluster_name in active_clusters:
-            in_active_cluster = True
+            c["in_active_cluster"] = True
             c["score"] = float(c.get("score") or 60.0) + 15.0
             c["highlights"] = f"🚀 {cluster_name} Cluster | " + c.get("highlights", "")
+        else:
+            c["in_active_cluster"] = False
 
         # 3. Check for Distribution Trap via Recency-Weighted U/D Ratio
         bars_df = _get_stock_history_bars(sym)

@@ -7,7 +7,6 @@ import sys
 import unittest
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -21,7 +20,7 @@ class TestAdaptiveIndicators(unittest.TestCase):
     def setUp(self):
         # Generate synthetic 60-day price bars
         dates = pd.date_range(end="2026-09-18", periods=60, freq="B")
-        
+
         # 1. Benchmark (Steady sideways / mild decline)
         bench_close = [1600.0 - (i * 0.2) for i in range(60)]
         self.bench_df = pd.DataFrame({"Close": bench_close}, index=dates)
