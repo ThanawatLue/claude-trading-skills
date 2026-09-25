@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund: Daily Mission & Research Briefing
-**วันที่:** 2026-09-24 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-09-25 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -22,10 +22,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. HTECH.BK** | ฿5.05 | **1,300** หุ้น | ฿6,565.00 | ฿4.78 (-5.3%) | ฿5.55 (Swing Target) | RSI: 65.0 | Vol: 3.5x | Swing Score: 84.9 |
-| **2. SMT.BK** | ฿6.35 | **1,100** หุ้น | ฿6,985.00 | ฿5.85 (-7.9%) | ฿7.30 (Swing Target) | RSI: 65.7 | Vol: 2.8x | Swing Score: 83.0 |
-| **3. PYLON.BK** | ฿3.96 | **1,700** หุ้น | ฿6,732.00 | ฿3.88 (-2.0%) | ฿4.12 (Swing Target) | RSI: 67.6 | Vol: 2.7x | Swing Score: 76.9 |
-| **4. SPCG.BK** | ฿11.60 | **600** หุ้น | ฿6,960.00 | ฿10.70 (-7.8%) | ฿13.20 (Swing Target) | RSI: 62.5 | Vol: 2.7x | Swing Score: 74.1 |
+| **1. CENTEL.BK** | ฿43.75 | **100** หุ้น | ฿4,375.00 | ฿41.50 (-5.1%) | ฿48.25 (2.0R) | CANSLIM Score: 71.6 | 52w Dist: -3.8% |
+| **2. TASCO.BK** | ฿16.90 | **400** หุ้น | ฿6,760.00 | ฿16.50 (-2.4%) | ฿17.60 (Swing Target) | RSI: 51.2 | Vol: 0.9x | Swing Score: 70.2 |
+| **3. TEGH.BK** | ฿3.30 | **2,100** หุ้น | ฿6,930.00 | ฿3.16 (-4.2%) | ฿3.56 (Swing Target) | RSI: 58.0 | Vol: 3.3x | Swing Score: 67.7 |
+| **4. PTT.BK** | ฿43.00 | **100** หุ้น | ฿4,300.00 | ฿42.00 (-2.3%) | ฿44.75 (Swing Target) | RSI: 70.3 | Vol: 2.1x | Swing Score: 66.9 |
 
 ---
 
@@ -42,49 +42,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: HTECH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_HTECH.yaml
+# Order Template 1: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "HTECH.BK"
-shares: 1300
-entry_price: 5.05
-stop_price: 4.78
-target_price: 5.55
+symbol: "CENTEL.BK"
+shares: 100
+entry_price: 43.75
+stop_price: 41.50
+target_price: 48.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 2: SMT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SMT.yaml
+# Order Template 2: TASCO.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TASCO.yaml
 action: buy
-symbol: "SMT.BK"
-shares: 1100
-entry_price: 6.35
-stop_price: 5.85
-target_price: 7.30
+symbol: "TASCO.BK"
+shares: 400
+entry_price: 16.90
+stop_price: 16.50
+target_price: 17.60
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 3: PYLON.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PYLON.yaml
+# Order Template 3: TEGH.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TEGH.yaml
 action: buy
-symbol: "PYLON.BK"
-shares: 1700
-entry_price: 3.96
-stop_price: 3.88
-target_price: 4.12
+symbol: "TEGH.BK"
+shares: 2100
+entry_price: 3.30
+stop_price: 3.16
+target_price: 3.56
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 4: SPCG.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SPCG.yaml
+# Order Template 4: PTT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTT.yaml
 action: buy
-symbol: "SPCG.BK"
-shares: 600
-entry_price: 11.60
-stop_price: 10.70
-target_price: 13.20
+symbol: "PTT.BK"
+shares: 100
+entry_price: 43.00
+stop_price: 42.00
+target_price: 44.75
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
