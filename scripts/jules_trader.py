@@ -38,21 +38,52 @@ logging.basicConfig(
 logger = logging.getLogger("jules_trader")
 
 DB_PATH = PROJECT_ROOT / "state" / "market_cache.db"
-ORDERS_DIR = PROJECT_ROOT / "state" / "jules_orders"
+ORDERS_DIR_TH = PROJECT_ROOT / "state" / "jules_orders"
+ORDERS_DIR_US = PROJECT_ROOT / "state" / "jules_us_orders"
+MISSION_JSON_TH = PROJECT_ROOT / "state" / "jules_tasks" / "today_mission.json"
+MISSION_JSON_US = PROJECT_ROOT / "state" / "jules_us_tasks" / "today_mission.json"
+
+# Backwards compatibility defaults
+ORDERS_DIR = ORDERS_DIR_TH
 STAGED_ORDERS_DIR = ORDERS_DIR / "staged"
 PROCESSED_ORDERS_DIR = ORDERS_DIR / "processed"
 QUARANTINE_ORDERS_DIR = ORDERS_DIR / "quarantine"
-MISSION_JSON = PROJECT_ROOT / "state" / "jules_tasks" / "today_mission.json"
+MISSION_JSON = MISSION_JSON_TH
 LEARNINGS_YAML = PROJECT_ROOT / "state" / "jules_memory" / "learnings.yaml"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
 # Quantitative Limits & Guardrails
 MAX_POSITIONS = 4
-MIN_CASH_REQUIRED = 5000.0
-MAX_SLOT_BUDGET = 7500.0
 BASE_RISK_PER_TRADE_PCT = 0.010  # 1.0% portfolio risk
+
+# TH Limits
+MIN_CASH_REQUIRED_TH = 5000.0
+MAX_SLOT_BUDGET_TH = 7500.0
+
+# US Limits ($1,000 Starting Fund)
+MIN_CASH_REQUIRED_US = 50.0  # $50.0 USD minimum cash
+MAX_SLOT_BUDGET_US = 250.0  # $250.0 USD max slot (1000 / 4)
+
+# Backward-compat aliases
+MIN_CASH_REQUIRED = MIN_CASH_REQUIRED_TH
+MAX_SLOT_BUDGET = MAX_SLOT_BUDGET_TH
+
 MIN_ADTV_THB = 15_000_000.0  # 15M THB minimum daily turnover
 MAX_CHASE_PCT = 0.010  # 1.0% max chase limit above trigger
+
+
+def get_trader_paths(market: str = "TH") -> tuple[Path, Path, Path, Path, Path]:
+    market_clean = market.upper()
+    if market_clean == "US":
+        orders_dir = ORDERS_DIR_US
+        mission_json = MISSION_JSON_US
+    else:
+        orders_dir = ORDERS_DIR_TH
+        mission_json = MISSION_JSON_TH
+    staged = orders_dir / "staged"
+    processed = orders_dir / "processed"
+    quarantine = orders_dir / "quarantine"
+    return orders_dir, staged, processed, quarantine, mission_json
 
 
 def set_tick_size(price: float) -> Decimal:
@@ -94,21 +125,27 @@ def init_decision_ledger(db_path: Path | None = None) -> None:
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS jules_decision_ledger (
-                decision_date TEXT PRIMARY KEY,
+                decision_date TEXT,
+                market TEXT DEFAULT 'TH',
                 status TEXT NOT NULL,
                 symbol TEXT,
                 order_id TEXT,
                 decided_at TEXT NOT NULL,
                 posture TEXT,
                 reason TEXT NOT NULL,
-                payload_json TEXT
+                payload_json TEXT,
+                PRIMARY KEY (decision_date, market)
             )"""
         )
+        cursor = conn.execute("PRAGMA table_info(jules_decision_ledger)")
+        cols = [r[1] for r in cursor.fetchall()]
+        if "market" not in cols:
+            conn.execute("ALTER TABLE jules_decision_ledger ADD COLUMN market TEXT DEFAULT 'TH'")
         conn.commit()
 
 
 def check_existing_decision(
-    decision_date: str, db_path: Path | None = None
+    decision_date: str, market: str = "TH", db_path: Path | None = None
 ) -> dict[str, Any] | None:
     """Check if an autonomous decision was already made today."""
     if db_path is None:
@@ -118,10 +155,18 @@ def check_existing_decision(
     try:
         with sqlite3.connect(db_path) as conn:
             conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT * FROM jules_decision_ledger WHERE decision_date = ?",
-                (decision_date,),
-            ).fetchone()
+            cursor = conn.execute("PRAGMA table_info(jules_decision_ledger)")
+            cols = [r[1] for r in cursor.fetchall()]
+            if "market" in cols:
+                row = conn.execute(
+                    "SELECT * FROM jules_decision_ledger WHERE decision_date = ? AND (market = ? OR (market IS NULL AND ? = 'TH'))",
+                    (decision_date, market.upper(), market.upper()),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM jules_decision_ledger WHERE decision_date = ?",
+                    (decision_date,),
+                ).fetchone()
             if row:
                 return dict(row)
     except Exception as e:
@@ -137,6 +182,7 @@ def record_decision(
     posture: str,
     reason: str,
     payload: dict[str, Any] | None = None,
+    market: str = "TH",
     db_path: Path | None = None,
 ) -> None:
     """Record an autonomous decision to the persistent ledger."""
@@ -145,12 +191,23 @@ def record_decision(
     init_decision_ledger(db_path)
     now_iso = datetime.now(timezone.utc).isoformat()
     payload_str = json.dumps(payload or {})
+    market_clean = market.upper()
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """INSERT OR REPLACE INTO jules_decision_ledger
-               (decision_date, status, symbol, order_id, decided_at, posture, reason, payload_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (decision_date, status, symbol, order_id, now_iso, posture, reason, payload_str),
+               (decision_date, market, status, symbol, order_id, decided_at, posture, reason, payload_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                decision_date,
+                market_clean,
+                status,
+                symbol,
+                order_id,
+                now_iso,
+                posture,
+                reason,
+                payload_str,
+            ),
         )
         conn.commit()
 
@@ -158,8 +215,11 @@ def record_decision(
 def check_circuit_breakers(market: str = "TH") -> tuple[bool, float, str]:
     """Check portfolio drawdown and consecutive losses.
     Returns: (is_allowed, risk_multiplier, reason)"""
-    closed = paper_trade.list_positions(status_filter="closed", market=market, portfolio="jules")
-    stats = paper_trade.compute_stats(market=market, portfolio="jules")
+    market_clean = market.upper()
+    closed = paper_trade.list_positions(
+        status_filter="closed", market=market_clean, portfolio="jules"
+    )
+    stats = paper_trade.compute_stats(market=market_clean, portfolio="jules")
 
     # 1. Consecutive Closed Loss Check
     consecutive_losses = 0
@@ -181,7 +241,7 @@ def check_circuit_breakers(market: str = "TH") -> tuple[bool, float, str]:
     risk_mult = 0.5 if consecutive_losses == 2 else 1.0
 
     # 2. High-Water Mark Drawdown Check
-    initial_cap = jf.INITIAL_CAPITAL
+    initial_cap = jf.INITIAL_CAPITAL_US if market_clean == "US" else jf.INITIAL_CAPITAL
     equity = float(stats.get("total_realized_pnl") or 0.0) + initial_cap
     dd_pct = (initial_cap - equity) / initial_cap if initial_cap > 0 else 0.0
 
@@ -198,8 +258,37 @@ def check_circuit_breakers(market: str = "TH") -> tuple[bool, float, str]:
     return True, risk_mult, reason
 
 
-def get_latest_exposure_posture() -> dict[str, Any]:
-    """Read the latest exposure posture report."""
+def get_latest_exposure_posture(market: str = "TH") -> dict[str, Any]:
+    """Read the latest exposure posture report or calculate US breadth posture."""
+    market_clean = market.upper()
+    if market_clean == "US":
+        try:
+            import src.trading_view_client as tv_client
+
+            breadth = tv_client.get_us_breadth(limit=1000)
+            pct_50 = breadth.get("pct_above_sma50", 50.0)
+            if pct_50 >= 45.0:
+                return {
+                    "recommendation": "NORMAL",
+                    "exposure_ceiling_pct": 100.0,
+                    "details": f"{pct_50:.1f}% > 50d SMA",
+                }
+            elif pct_50 >= 25.0:
+                return {
+                    "recommendation": "DEFENSIVE",
+                    "exposure_ceiling_pct": 50.0,
+                    "details": f"{pct_50:.1f}% > 50d SMA",
+                }
+            else:
+                return {
+                    "recommendation": "REDUCE_ONLY",
+                    "exposure_ceiling_pct": 0.0,
+                    "details": f"{pct_50:.1f}% > 50d SMA",
+                }
+        except Exception as e:
+            logger.debug("Failed to fetch US breadth for posture: %s", e)
+            return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0}
+
     posture_files = sorted(REPORTS_DIR.glob("exposure_posture_*.json"))
     if not posture_files:
         return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75}
@@ -242,8 +331,28 @@ def calculate_volatility_sizing(
     equity: float,
     cash: float,
     risk_mult: float = 1.0,
+    market: str = "TH",
 ) -> tuple[int, float]:
-    """Calculate volatility/risk-adjusted position size in SET 100-share board lots."""
+    """Calculate volatility/risk-adjusted position size."""
+    market_clean = market.upper()
+    if market_clean == "US":
+        price = round(price, 2)
+        stop = round(stop, 2)
+        risk_per_share = max(0.01, round(price - stop, 2))
+        target_dollar_risk = equity * BASE_RISK_PER_TRADE_PCT * risk_mult
+        raw_risk_shares = int(target_dollar_risk / risk_per_share) if risk_per_share > 0 else 1
+
+        max_capital_for_trade = min(MAX_SLOT_BUDGET_US, cash * 0.95)
+        max_cap_shares = int(max_capital_for_trade / price) if price > 0 else 0
+
+        allowed_shares = min(raw_risk_shares, max_cap_shares)
+        shares = max(1, allowed_shares)
+        est_cost = round(price * shares, 2)
+        if est_cost > cash and price > 0:
+            shares = max(1, int(cash / price))
+            est_cost = round(price * shares, 2)
+        return shares, est_cost
+
     price = round_to_set_tick(price, "up")
     stop = round_to_set_tick(stop, "down")
     risk_per_share = max(set_tick_size(price) * Decimal("2"), Decimal(str(price - stop)))
@@ -256,15 +365,16 @@ def calculate_volatility_sizing(
     )
 
     # Capital constraint (max slot budget ฿7,500 or remaining cash)
-    max_capital_for_trade = min(MAX_SLOT_BUDGET, cash * 0.95)
+    max_capital_for_trade = min(MAX_SLOT_BUDGET_TH, cash * 0.95)
     max_cap_shares = int(max_capital_for_trade / price) if price > 0 else 0
 
     allowed_shares = min(raw_risk_shares, max_cap_shares)
     board_lot_shares = max(100, (allowed_shares // 100) * 100)
 
     est_cost = round(price * board_lot_shares, 2)
-    if est_cost > cash:
+    if est_cost > cash and price > 0:
         board_lot_shares = (int(cash / price) // 100) * 100
+        est_cost = round(price * board_lot_shares, 2)
 
     return board_lot_shares, est_cost
 
@@ -276,14 +386,19 @@ def evaluate_and_select_trade(
     equity: float,
     cash: float,
     risk_mult: float = 1.0,
+    market: str = "TH",
 ) -> tuple[dict[str, Any] | None, str]:
     """Filter and rank candidates according to liquidity, sector, and risk-reward gates."""
     if not candidates:
         return None, "No candidates provided in mission"
 
+    market_clean = market.upper()
+    curr_sym = "$" if market_clean == "US" else "฿"
+
     open_sectors = {
         p.get("sector") for p in open_positions if p.get("sector") and p.get("sector") != "N/A"
     }
+    open_clusters = {p.get("cluster") for p in open_positions if p.get("cluster")}
 
     scored_candidates = []
     for cand in candidates:
@@ -292,17 +407,28 @@ def evaluate_and_select_trade(
         stop = float(cand.get("stop") or 0.0)
         target = float(cand.get("target") or 0.0)
         sector = cand.get("sector", "N/A")
+        cluster = cand.get("cluster")
 
         if price <= 0 or stop <= 0 or target <= 0 or stop >= price or target <= price:
             continue
 
-        # Discretize levels to valid SET ticks
-        entry_tick = round_to_set_tick(price, "up")
-        stop_tick = round_to_set_tick(stop, "down")
-        target_tick = round_to_set_tick(target, "down")
+        if market_clean == "US":
+            entry_tick = round(price, 2)
+            stop_tick = round(stop, 2)
+            target_tick = round(target, 2)
+        else:
+            # Discretize levels to valid SET ticks
+            entry_tick = round_to_set_tick(price, "up")
+            stop_tick = round_to_set_tick(stop, "down")
+            target_tick = round_to_set_tick(target, "down")
 
-        # Anti-Correlation Sector Gate: Max 1 position per sector
-        if sector in open_sectors:
+        # Anti-Correlation Sector & Cluster Gate: Max 1 position per sector/cluster
+        if cluster and cluster in open_clusters:
+            logger.info(
+                "Candidate %s rejected: cluster %s already active in portfolio", sym, cluster
+            )
+            continue
+        if sector in open_sectors and sector not in ("N/A", "Unknown", "Volume Surge"):
             logger.info("Candidate %s rejected: sector %s already active in portfolio", sym, sector)
             continue
 
@@ -322,7 +448,7 @@ def evaluate_and_select_trade(
             )
             continue
 
-        # Sector Momentum Modifier
+        # Sector Momentum Modifier (for TH)
         sector_bonus = sector_mods.get(sector, 0.0)
         if sector_bonus < -20.0:
             logger.info("Candidate %s rejected: lagging sector %s (-25 pts penalty)", sym, sector)
@@ -332,10 +458,19 @@ def evaluate_and_select_trade(
         final_score = base_score + sector_bonus
 
         shares, est_cost = calculate_volatility_sizing(
-            entry_tick, stop_tick, equity, cash, risk_mult
+            entry_tick, stop_tick, equity, cash, risk_mult, market=market_clean
         )
-        if shares < 100 or est_cost > cash:
-            logger.info("Candidate %s rejected: insufficient cash for minimum board lot", sym)
+        min_shares = 1 if market_clean == "US" else 100
+        if shares < min_shares or est_cost > cash:
+            logger.info(
+                "Candidate %s rejected: insufficient cash for sizing (%d shares, cost %s%.2f > %s%.2f)",
+                sym,
+                shares,
+                curr_sym,
+                est_cost,
+                curr_sym,
+                cash,
+            )
             continue
 
         scored_candidates.append(
@@ -350,7 +485,8 @@ def evaluate_and_select_trade(
                 "final_score": final_score,
                 "est_cost": est_cost,
                 "sector": sector,
-                "target_note": cand.get("target_note", f"฿{target_tick:.2f}"),
+                "cluster": cluster,
+                "target_note": cand.get("target_note", f"{curr_sym}{target_tick:.2f}"),
             }
         )
 
@@ -373,25 +509,37 @@ def run_autonomous_decision(
     market: str = "TH",
 ) -> dict[str, Any]:
     """Execute the full autonomous decision cycle for today."""
+    market_clean = market.upper()
+    curr_sym = "$" if market_clean == "US" else "฿"
+    min_cash_required = MIN_CASH_REQUIRED_US if market_clean == "US" else MIN_CASH_REQUIRED_TH
+
+    orders_dir, staged_orders_dir, _, _, mission_json = get_trader_paths(market_clean)
+    if market_clean == "TH":
+        # Respect unittests patching jt.ORDERS_DIR, jt.STAGED_ORDERS_DIR, jt.MISSION_JSON
+        orders_dir = ORDERS_DIR
+        staged_orders_dir = STAGED_ORDERS_DIR
+        mission_json = MISSION_JSON
+
     today_str = datetime.now().strftime("%Y-%m-%d")
-    logger.info("=== JULES AUTONOMOUS DECISION ENGINE START: %s ===", today_str)
+    logger.info("=== JULES AUTONOMOUS DECISION ENGINE (%s) START: %s ===", market_clean, today_str)
 
     init_decision_ledger()
 
     # 1. Idempotency Check
     if not force:
-        existing = check_existing_decision(today_str)
+        existing = check_existing_decision(today_str, market=market_clean)
         if existing:
             logger.info(
-                "Decision for %s already recorded: %s (%s). Skipping run.",
+                "Decision for %s (%s) already recorded: %s (%s). Skipping run.",
                 today_str,
+                market_clean,
                 existing["status"],
                 existing.get("symbol") or "None",
             )
             return existing
 
     # 2. Portfolio Health & Capacity
-    status = jf.get_jules_status(market=market)
+    status = jf.get_jules_status(market=market_clean)
     open_pos = status["open_positions"]
     cash = float(status["cash_balance"])
     equity = float(status["equity"])
@@ -401,48 +549,58 @@ def run_autonomous_decision(
         msg = f"All {MAX_POSITIONS}/{MAX_POSITIONS} portfolio slots full. Holding cash."
         logger.info(msg)
         if not dry_run:
-            record_decision(today_str, "HOLD_CASH", None, None, "PORTFOLIO_FULL", msg)
+            record_decision(
+                today_str, "HOLD_CASH", None, None, "PORTFOLIO_FULL", msg, market=market_clean
+            )
         return {"status": "HOLD_CASH", "reason": msg}
 
-    if cash < MIN_CASH_REQUIRED:
-        msg = f"Cash balance ฿{cash:,.2f} < ฿{MIN_CASH_REQUIRED:,.2f} minimum. Holding cash."
+    if cash < min_cash_required:
+        msg = f"Cash balance {curr_sym}{cash:,.2f} < {curr_sym}{min_cash_required:,.2f} minimum. Holding cash."
         logger.info(msg)
         if not dry_run:
-            record_decision(today_str, "HOLD_CASH", None, None, "INSUFFICIENT_CASH", msg)
+            record_decision(
+                today_str, "HOLD_CASH", None, None, "INSUFFICIENT_CASH", msg, market=market_clean
+            )
         return {"status": "HOLD_CASH", "reason": msg}
 
     # 3. Circuit Breaker Evaluation
-    breaker_allowed, risk_mult, breaker_reason = check_circuit_breakers(market=market)
+    breaker_allowed, risk_mult, breaker_reason = check_circuit_breakers(market=market_clean)
     if not breaker_allowed:
         logger.warning("Circuit breaker triggered: %s", breaker_reason)
         if not dry_run:
             record_decision(
-                today_str, "BLOCKED_CIRCUIT", None, None, "CIRCUIT_BREAKER", breaker_reason
+                today_str,
+                "BLOCKED_CIRCUIT",
+                None,
+                None,
+                "CIRCUIT_BREAKER",
+                breaker_reason,
+                market=market_clean,
             )
         return {"status": "BLOCKED_CIRCUIT", "reason": breaker_reason}
 
     # 4. Market Posture Check
-    posture_data = get_latest_exposure_posture()
+    posture_data = get_latest_exposure_posture(market=market_clean)
     recom = str(posture_data.get("recommendation", "NORMAL")).upper()
     ceiling = float(posture_data.get("exposure_ceiling_pct", 75))
     if recom == "REDUCE_ONLY" or ceiling <= 20.0:
         msg = f"Market posture is {recom} (Ceiling: {ceiling}%). Prudence gate: holding 100% cash."
         logger.info(msg)
         if not dry_run:
-            record_decision(today_str, "HOLD_CASH", None, None, recom, msg)
+            record_decision(today_str, "HOLD_CASH", None, None, recom, msg, market=market_clean)
         return {"status": "HOLD_CASH", "reason": msg}
 
     # 5. Load Mission Candidates
-    if not MISSION_JSON.exists():
-        msg = f"Mission file {MISSION_JSON} missing. Run jules_scout.py first."
+    if not mission_json.exists():
+        msg = f"Mission file {mission_json} missing. Run jules_scout.py first."
         logger.warning(msg)
         return {"status": "ERROR", "reason": msg}
 
-    with open(MISSION_JSON, encoding="utf-8") as f:
+    with open(mission_json, encoding="utf-8") as f:
         mission = json.load(f)
 
     candidates = mission.get("candidates", [])
-    sector_mods = get_sector_momentum_mapping()
+    sector_mods = get_sector_momentum_mapping() if market_clean == "TH" else {}
 
     # 6. Evaluate and Pick Best Setup
     winner, select_reason = evaluate_and_select_trade(
@@ -452,17 +610,20 @@ def run_autonomous_decision(
         equity=equity,
         cash=cash,
         risk_mult=risk_mult,
+        market=market_clean,
     )
 
     if not winner:
         logger.info("No candidates passed selection: %s", select_reason)
         if not dry_run:
-            record_decision(today_str, "HOLD_CASH", None, None, recom, select_reason)
+            record_decision(
+                today_str, "HOLD_CASH", None, None, recom, select_reason, market=market_clean
+            )
         return {"status": "HOLD_CASH", "reason": select_reason}
 
     # 7. Stage Valid Order
     sym = winner["symbol"]
-    order_id = f"JULES-TH-{datetime.now().strftime('%Y%m%d')}-{sym.replace('.BK', '')}"
+    order_id = f"JULES-{market_clean}-{datetime.now().strftime('%Y%m%d')}-{sym.replace('.BK', '')}"
     now_dt = datetime.now(timezone.utc)
     # Order valid for opening window (TTL 45 mins)
     expires_dt = datetime.fromtimestamp(now_dt.timestamp() + 2700, tz=timezone.utc)
@@ -471,6 +632,7 @@ def run_autonomous_decision(
         "order_id": order_id,
         "action": "buy",
         "symbol": sym,
+        "market": market_clean,
         "shares": winner["shares"],
         "entry_price": winner["entry_price"],
         "stop_price": winner["stop_price"],
@@ -479,10 +641,11 @@ def run_autonomous_decision(
         "created_at": now_dt.isoformat(),
         "expires_at": expires_dt.isoformat(),
         "sector": winner["sector"],
+        "cluster": winner.get("cluster"),
         "target_note": winner["target_note"],
         "thesis": (
             f"Autonomous conviction buy: {winner['candidate'].get('highlights', '')} | "
-            f"R/R: {winner['rr_ratio']:.2f}R | Sector Momentum: {winner['sector']} | "
+            f"R/R: {winner['rr_ratio']:.2f}R | Sector/Cluster: {winner.get('cluster') or winner['sector']} | "
             f"Plan: MFE +0.5R ratchet to BE immediately"
         ),
     }
@@ -491,12 +654,12 @@ def run_autonomous_decision(
         logger.info("[DRY-RUN] Would stage order: %s", order_payload)
         return {"status": "DRY_RUN", "order": order_payload}
 
-    ORDERS_DIR.mkdir(parents=True, exist_ok=True)
-    STAGED_ORDERS_DIR.mkdir(parents=True, exist_ok=True)
+    orders_dir.mkdir(parents=True, exist_ok=True)
+    staged_orders_dir.mkdir(parents=True, exist_ok=True)
 
     order_file_name = f"buy_{sym.replace('.BK', '')}.yaml"
-    active_order_path = ORDERS_DIR / order_file_name
-    staged_order_path = STAGED_ORDERS_DIR / f"{order_id}.yaml"
+    active_order_path = orders_dir / order_file_name
+    staged_order_path = staged_orders_dir / f"{order_id}.yaml"
 
     import yaml
 
@@ -513,6 +676,7 @@ def run_autonomous_decision(
         posture=recom,
         reason=select_reason,
         payload=order_payload,
+        market=market_clean,
     )
 
     logger.info("Successfully staged order for %s -> %s", sym, active_order_path)
@@ -530,24 +694,31 @@ def main():
     decide_parser.add_argument(
         "--dry-run", action="store_true", help="Simulate decision without writing files"
     )
+    decide_parser.add_argument(
+        "--market", choices=["TH", "US"], default="TH", help="Target equity market (TH or US)"
+    )
 
-    subparsers.add_parser("status", help="Show decision ledger status")
+    status_parser = subparsers.add_parser("status", help="Show decision ledger status")
+    status_parser.add_argument(
+        "--market", choices=["TH", "US"], default="TH", help="Target equity market (TH or US)"
+    )
 
     args = parser.parse_args()
 
     if args.command == "decide":
-        res = run_autonomous_decision(force=args.force, dry_run=args.dry_run)
+        res = run_autonomous_decision(force=args.force, dry_run=args.dry_run, market=args.market)
         print(json.dumps(res, indent=2))
     elif args.command == "status":
         init_decision_ledger()
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT * FROM jules_decision_ledger ORDER BY decision_date DESC LIMIT 5"
+                "SELECT * FROM jules_decision_ledger WHERE market = ? ORDER BY decision_date DESC LIMIT 5",
+                (args.market,),
             ).fetchall()
             for r in rows:
                 print(
-                    f"[{r['decision_date']}] Status: {r['status']} | Symbol: {r['symbol']} | Reason: {r['reason']}"
+                    f"[{r['decision_date']} | {r['market']}] Status: {r['status']} | Symbol: {r['symbol']} | Reason: {r['reason']}"
                 )
     else:
         parser.print_help()

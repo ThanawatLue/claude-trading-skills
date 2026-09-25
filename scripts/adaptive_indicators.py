@@ -26,8 +26,22 @@ THEMATIC_CLUSTERS: dict[str, set[str]] = {
     "Marine Shipping": {"PSL.BK", "RCL.BK", "TTA.BK"},
     "Healthcare & Hospitals": {"BDMS.BK", "BH.BK", "BCH.BK", "CHG.BK", "VIH.BK", "PR9.BK"},
     "Power & Renewables": {"GULF.BK", "GPSC.BK", "BGRIM.BK", "SSP.BK", "BCPG.BK", "EA.BK"},
-    "Consumer Finance & Leasing": {"MTC.BK", "SAWAD.BK", "TIDLOR.BK", "SCAP.BK", "THANI.BK", "SGC.BK"},
-    "Data Center & ICT Infra": {"INSET.BK", "SKY.BK", "DELTA.BK", "CCET.BK", "TRUE.BK", "ADVANC.BK"},
+    "Consumer Finance & Leasing": {
+        "MTC.BK",
+        "SAWAD.BK",
+        "TIDLOR.BK",
+        "SCAP.BK",
+        "THANI.BK",
+        "SGC.BK",
+    },
+    "Data Center & ICT Infra": {
+        "INSET.BK",
+        "SKY.BK",
+        "DELTA.BK",
+        "CCET.BK",
+        "TRUE.BK",
+        "ADVANC.BK",
+    },
     "Commerce & Retail": {"CPALL.BK", "CRC.BK", "CPAXT.BK", "BJC.BK", "COM7.BK"},
     "Industrial Estates & Logistics": {"WHA.BK", "AMATA.BK", "ROJNA.BK", "WHAIR.BK"},
     "Food & Pet Food Export": {"ITC.BK", "AAI.BK", "CPF.BK", "TU.BK", "GFPT.BK"},
@@ -36,10 +50,51 @@ THEMATIC_CLUSTERS: dict[str, set[str]] = {
     "Building Materials & Construction": {"SCC.BK", "SCCC.BK", "DCC.BK", "TASCO.BK"},
 }
 
+# ---------------------------------------------------------------------------
+# Thematic Sub-Clusters for US Equities (NYSE / NASDAQ)
+# ---------------------------------------------------------------------------
+US_THEMATIC_CLUSTERS: dict[str, set[str]] = {
+    "AI Infrastructure & Semiconductors": {
+        "NVDA",
+        "AMD",
+        "AVGO",
+        "TSM",
+        "MRVL",
+        "ARM",
+        "SMCI",
+        "QCOM",
+        "MU",
+    },
+    "Cloud Software & Cybersecurity": {
+        "MSFT",
+        "NOW",
+        "PANW",
+        "CRWD",
+        "DDOG",
+        "NET",
+        "SNOW",
+        "PLTR",
+    },
+    "Mega-Cap Tech Platforms": {"AAPL", "GOOGL", "GOOG", "AMZN", "META", "TSLA"},
+    "Biotech & GLP-1 / Genomics": {"LLY", "NVO", "VRTX", "REGN", "CRSP", "AMGN", "GILD"},
+    "Nuclear Energy & Uranium / Clean Power": {"CCJ", "CEG", "VST", "OKLO", "SMR", "NEE", "FSLR"},
+    "Aerospace & Defense": {"LMT", "RTX", "NOC", "GD", "KTOS", "BA"},
+    "FinTech & Crypto Infrastructure": {"V", "MA", "COIN", "HOOD", "SQ", "PYPL", "MSTR"},
+    "Consumer Discretionary & Retail": {"COST", "WMT", "TGT", "HD", "NKE", "LULU"},
+    "Energy & Oil Services": {"XOM", "CVX", "SLB", "OXY", "COP"},
+}
 
-def get_cluster_for_symbol(symbol: str) -> str | None:
+
+def get_cluster_for_symbol(symbol: str, market: str = "TH") -> str | None:
     """Find the thematic cluster for a given symbol."""
-    sym_clean = symbol.upper()
+    sym_clean = symbol.upper().strip()
+    if market.upper() == "US":
+        sym_clean = sym_clean.replace(".BK", "")
+        for cluster_name, tickers in US_THEMATIC_CLUSTERS.items():
+            if sym_clean in tickers:
+                return cluster_name
+        return None
+
     if not sym_clean.endswith(".BK"):
         sym_clean += ".BK"
     for cluster_name, tickers in THEMATIC_CLUSTERS.items():
@@ -52,6 +107,7 @@ def detect_thematic_clusters(
     stocks: list[dict[str, Any]],
     min_cluster_gainers: int = 2,
     min_gain_pct: float = 1.5,
+    market: str = "TH",
 ) -> dict[str, Any]:
     """Detect clusters that have concurrent price and volume expansion.
 
@@ -60,10 +116,8 @@ def detect_thematic_clusters(
     """
     cluster_stats: dict[str, list[dict[str, Any]]] = {}
     for s in stocks:
-        sym = s.get("symbol", "").upper()
-        if not sym.endswith(".BK"):
-            sym += ".BK"
-        cluster = get_cluster_for_symbol(sym)
+        sym = s.get("symbol", "").upper().strip()
+        cluster = get_cluster_for_symbol(sym, market=market)
         if not cluster:
             continue
         cluster_stats.setdefault(cluster, []).append(s)
@@ -73,12 +127,14 @@ def detect_thematic_clusters(
 
     for cluster_name, members in cluster_stats.items():
         gainers = [
-            m for m in members if float(m.get("change") or m.get("chg_today") or 0.0) >= min_gain_pct
+            m
+            for m in members
+            if float(m.get("change") or m.get("chg_today") or 0.0) >= min_gain_pct
         ]
         if len(gainers) >= min_cluster_gainers:
-            avg_gain = sum(float(m.get("change") or m.get("chg_today") or 0.0) for m in gainers) / len(
-                gainers
-            )
+            avg_gain = sum(
+                float(m.get("change") or m.get("chg_today") or 0.0) for m in gainers
+            ) / len(gainers)
             active_clusters[cluster_name] = {
                 "active": True,
                 "gainer_count": len(gainers),
@@ -270,7 +326,7 @@ def evaluate_adaptive_candidate(
 
     # 1. Liquidity Trap Gate (ADTV >= 15M THB)
     if traded_value_thb < 15_000_000:
-        rejections.append(f"Low Liquidity: ฿{traded_value_thb/1e6:.1f}M < ฿15.0M threshold")
+        rejections.append(f"Low Liquidity: ฿{traded_value_thb / 1e6:.1f}M < ฿15.0M threshold")
 
     # 2. 52-Week High Proximity (Reject deep bottom bounces / dead cats)
     if high_52w > 0:

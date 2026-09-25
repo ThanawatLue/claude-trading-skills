@@ -44,10 +44,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("jules_evolver")
 
 DB_PATH = PROJECT_ROOT / "state" / "market_cache.db"
-MEMORY_DIR = PROJECT_ROOT / "state" / "jules_memory"
-REPORTS_DIR = PROJECT_ROOT / "reports" / "jules_postmortems"
+MEMORY_DIR_TH = PROJECT_ROOT / "state" / "jules_memory"
+REPORTS_DIR_TH = PROJECT_ROOT / "reports" / "jules_postmortems"
+MEMORY_DIR_US = PROJECT_ROOT / "state" / "jules_us_memory"
+REPORTS_DIR_US = PROJECT_ROOT / "reports" / "jules_us_postmortems"
+
+# Backwards compatibility
+MEMORY_DIR = MEMORY_DIR_TH
+REPORTS_DIR = REPORTS_DIR_TH
 DNA_FILE = MEMORY_DIR / "trader_dna.json"
 LEARNINGS_FILE = MEMORY_DIR / "learnings.yaml"
+
+
+def get_evolver_paths(market: str = "TH") -> tuple[Path, Path]:
+    if market.upper() == "US":
+        return MEMORY_DIR_US, REPORTS_DIR_US
+    return MEMORY_DIR_TH, REPORTS_DIR_TH
 
 
 def _ensure_dirs(memory_dir: Path | None = None, reports_dir: Path | None = None):
@@ -57,9 +69,14 @@ def _ensure_dirs(memory_dir: Path | None = None, reports_dir: Path | None = None
     r_dir.mkdir(parents=True, exist_ok=True)
 
 
-def load_dna(memory_dir: Path | None = None) -> dict[str, Any]:
+def load_dna(market: str = "TH", memory_dir: Path | None = None) -> dict[str, Any]:
     """Load or initialize Jules Trader DNA."""
-    m_dir = memory_dir or MEMORY_DIR
+    market_clean = market.upper()
+    if memory_dir:
+        m_dir = memory_dir
+    else:
+        m_dir, _ = get_evolver_paths(market_clean)
+
     _ensure_dirs(memory_dir=m_dir)
     dna_path = m_dir / "trader_dna.json"
     if dna_path.exists():
@@ -69,26 +86,42 @@ def load_dna(memory_dir: Path | None = None) -> dict[str, Any]:
         except Exception as e:
             logger.warning("Failed to load DNA from %s: %s", dna_path, e)
 
+    if market_clean == "US":
+        rules = [
+            "Always verify positive revenue acceleration or sector momentum before entering.",
+            "Avoid entering high-beta earnings plays immediately prior to binary release.",
+            "Cut positions early if volume contracts significantly on breakdown below pivot.",
+            "Hold winning momentum trades until 2.0R target without premature manual closure.",
+        ]
+        strengths = ["Discretionary US catalyst detection", "Strict $1,000 USD cash management"]
+    else:
+        rules = [
+            "Always verify positive Q2/Q3 net profit growth before entering.",
+            "Avoid stocks trading within 5 days of XD dividend record date.",
+            "Cut positions early if volume contracts by more than 60% on day 1 post-entry.",
+            "Hold winning momentum trades until 2.2R target without premature manual closure.",
+        ]
+        strengths = ["Discretionary catalyst detection", "Strict 30,000 THB cash management"]
+
     return {
         "generation": 1,
         "total_analyzed_trades": 0,
         "last_evolved_at": isoformat_seconds(),
         "win_rate": 0.0,
         "profit_factor": 0.0,
-        "rules": [
-            "Always verify positive Q2/Q3 net profit growth before entering.",
-            "Avoid stocks trading within 5 days of XD dividend record date.",
-            "Cut positions early if volume contracts by more than 60% on day 1 post-entry.",
-            "Hold winning momentum trades until 2.2R target without premature manual closure.",
-        ],
+        "rules": rules,
         "sector_experience": {},
-        "strengths": ["Discretionary catalyst detection", "Strict 30,000 THB cash management"],
+        "strengths": strengths,
         "weaknesses_to_correct": [],
     }
 
 
-def save_dna(dna: dict[str, Any], memory_dir: Path | None = None):
-    m_dir = memory_dir or MEMORY_DIR
+def save_dna(dna: dict[str, Any], market: str = "TH", memory_dir: Path | None = None):
+    market_clean = market.upper()
+    if memory_dir:
+        m_dir = memory_dir
+    else:
+        m_dir, _ = get_evolver_paths(market_clean)
     _ensure_dirs(memory_dir=m_dir)
     dna_path = m_dir / "trader_dna.json"
     with open(dna_path, "w", encoding="utf-8") as f:
@@ -101,15 +134,17 @@ def evolve_memory(
     reports_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Inspect all closed trades and generate learnings, postmortems, and updated DNA."""
-    m_dir = memory_dir or MEMORY_DIR
-    r_dir = reports_dir or REPORTS_DIR
+    market_clean = market.upper()
+    default_mem, default_rep = get_evolver_paths(market_clean)
+    m_dir = memory_dir or default_mem
+    r_dir = reports_dir or default_rep
     _ensure_dirs(m_dir, r_dir)
 
-    dna = load_dna(memory_dir=m_dir)
+    dna = load_dna(market=market_clean, memory_dir=m_dir)
     closed_trades = paper_trade.list_positions(
-        status_filter="closed", market=market, portfolio="jules"
+        status_filter="closed", market=market_clean, portfolio="jules"
     )
-    stats = paper_trade.compute_stats(market=market, portfolio="jules")
+    stats = paper_trade.compute_stats(market=market_clean, portfolio="jules")
 
     wins = [r for r in closed_trades if (r.get("realized_r") or 0) > 0]
     losses = [r for r in closed_trades if (r.get("realized_r") or 0) < 0]
@@ -117,11 +152,7 @@ def evolve_memory(
 
     new_learnings = []
     weaknesses = list(dna.get("weaknesses_to_correct", []))
-    strengths = list(
-        dna.get(
-            "strengths", ["Discretionary catalyst detection", "Strict 30,000 THB cash management"]
-        )
-    )
+    strengths = list(dna.get("strengths", []))
     active_rules = list(dna.get("rules", []))
 
     # 1. Analyze holding periods (Holding Discipline)
@@ -149,7 +180,7 @@ def evolve_memory(
         w_msg = "Cutting winning trades too early before reaching full target."
         if w_msg not in weaknesses:
             weaknesses.append(w_msg)
-        r_rule = "Trust the 2.2R target. Do not exit manual winners before 1.5R without structural invalidation."
+        r_rule = "Trust the target. Do not exit manual winners before 1.5R without structural invalidation."
         if r_rule not in active_rules:
             active_rules.append(r_rule)
         new_learnings.append(
@@ -201,6 +232,7 @@ def evolve_memory(
         )
 
     # 5. Generate Individual Trade Postmortems
+    curr_sym = "$" if market_clean == "US" else "฿"
     for t in closed_trades:
         tid = t["id"]
         sym = t["symbol"]
@@ -209,16 +241,16 @@ def evolve_memory(
             realized_r = float(t.get("realized_r") or 0)
             realized_pnl = float(t.get("realized_pnl") or 0)
             outcome_str = (
-                f"WIN (+{realized_r:.2f}R, ฿{realized_pnl:,.2f})"
+                f"WIN (+{realized_r:.2f}R, {curr_sym}{realized_pnl:,.2f})"
                 if realized_r > 0
-                else f"LOSS ({realized_r:.2f}R, ฿{realized_pnl:,.2f})"
+                else f"LOSS ({realized_r:.2f}R, {curr_sym}{realized_pnl:,.2f})"
             )
             entry_notes = t.get("notes_entry") or "N/A"
             exit_notes = t.get("journal_text") or t.get("notes") or "N/A"
             md_content = f"""# Trade Postmortem #{tid}: {sym}
 - **Date Closed:** {t.get("exit_at") or "N/A"}
 - **Outcome:** {outcome_str}
-- **Entry Price:** ฿{t["entry_price"]:.2f} | **Exit Price:** ฿{t.get("exit_price", 0):.2f}
+- **Entry Price:** {curr_sym}{t["entry_price"]:.2f} | **Exit Price:** {curr_sym}{t.get("exit_price", 0):.2f}
 - **Shares:** {t.get("shares", 0):,} | **Days Held:** {t.get("days_held", 0)}
 - **Exit Status:** {t.get("status")}
 - **Initial Thesis at Entry:** {entry_notes}
@@ -247,7 +279,7 @@ def evolve_memory(
     dna["strengths"] = list(dict.fromkeys(strengths))
     dna["weaknesses_to_correct"] = list(dict.fromkeys(weaknesses))
 
-    save_dna(dna, memory_dir=m_dir)
+    save_dna(dna, market=market_clean, memory_dir=m_dir)
 
     # 7. Save Learnings YAML
     learnings_payload = {
@@ -279,10 +311,13 @@ def evolve_memory(
 
 def get_pre_trade_briefing(market: str = "TH", memory_dir: Path | None = None) -> str:
     """Generate an actionable context brief for Jules to read before analyzing stocks."""
-    dna = load_dna(memory_dir=memory_dir)
-    stats = paper_trade.compute_stats(market=market, portfolio="jules")
+    market_clean = market.upper()
+    default_mem, _ = get_evolver_paths(market_clean)
+    m_dir = memory_dir or default_mem
+    dna = load_dna(market=market_clean, memory_dir=m_dir)
+    stats = paper_trade.compute_stats(market=market_clean, portfolio="jules")
     open_positions = paper_trade.list_positions(
-        status_filter="open", market=market, portfolio="jules"
+        status_filter="open", market=market_clean, portfolio="jules"
     )
 
     rules_text = "\n".join(f"- {r}" for r in dna.get("rules", []))
@@ -293,14 +328,18 @@ def get_pre_trade_briefing(market: str = "TH", memory_dir: Path | None = None) -
     )
     strengths_text = "\n".join(f"- ✅ {s}" for s in dna.get("strengths", []))
 
+    curr_sym = "$" if market_clean == "US" else "฿"
+    cap_str = "$1,000.00 USD" if market_clean == "US" else "฿30,000.00 THB"
+    mkt_title = f" ({market_clean})" if market_clean == "US" else ""
+
     brief = f"""=======================================================
-🧠 JULES AI FUND: PRE-TRADE BRAIN BRIEFING (GEN {dna.get("generation", 1)})
+🧠 JULES AI FUND{mkt_title}: PRE-TRADE BRAIN BRIEFING (GEN {dna.get("generation", 1)})
 =======================================================
 [PORTFOLIO STATE]
-- Initial Capital: ฿30,000.00
+- Initial Capital: {cap_str}
 - Active Holdings: {len(open_positions)}/4 slots used
 - Win Rate: {(stats.get("win_rate", 0) * 100):.1f}% | Closed Trades: {stats.get("closed_trades", 0)}
-- Realized PnL: ฿{(stats.get("total_realized_pnl", 0)):,.2f}
+- Realized PnL: {curr_sym}{(stats.get("total_realized_pnl", 0)):,.2f}
 
 [CORE TRADING DNA & EVOLVED RULES]
 {rules_text}
@@ -316,6 +355,9 @@ def get_pre_trade_briefing(market: str = "TH", memory_dir: Path | None = None) -
 
 def main():
     parser = argparse.ArgumentParser(description="Jules Autonomous Self-Improvement Engine")
+    parser.add_argument(
+        "--market", choices=["TH", "US"], default="TH", help="Target equity market (TH or US)"
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("run")
@@ -325,12 +367,12 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "run":
-        out = evolve_memory()
+        out = evolve_memory(market=args.market)
         print(json.dumps(out, ensure_ascii=False, indent=2))
     elif args.cmd == "briefing":
-        print(get_pre_trade_briefing())
+        print(get_pre_trade_briefing(market=args.market))
     elif args.cmd == "dna":
-        print(json.dumps(load_dna(), ensure_ascii=False, indent=2))
+        print(json.dumps(load_dna(market=args.market), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

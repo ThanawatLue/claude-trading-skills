@@ -56,11 +56,93 @@ MISSION_MD = TASKS_DIR / "today_mission.md"
 MISSION_JSON = TASKS_DIR / "today_mission.json"
 
 POSITION_BUDGET_THB = 7000.0  # ~23% of 30,000 THB to allow max 4 positions
+POSITION_BUDGET_USD = 250.0  # 25% of $1,000 USD to allow max 4 positions
 
 
-def _ensure_dirs():
-    TASKS_DIR.mkdir(parents=True, exist_ok=True)
-    ORDERS_DIR.mkdir(parents=True, exist_ok=True)
+def get_mission_paths(market: str = "TH") -> tuple[Path, Path, Path, Path]:
+    """Return (tasks_dir, orders_dir, mission_md, mission_json) for the given market."""
+    if market.upper() == "US":
+        tasks_dir = PROJECT_ROOT / "state" / "jules_us_tasks"
+        orders_dir = PROJECT_ROOT / "state" / "jules_us_orders"
+    else:
+        tasks_dir = PROJECT_ROOT / "state" / "jules_tasks"
+        orders_dir = PROJECT_ROOT / "state" / "jules_orders"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    orders_dir.mkdir(parents=True, exist_ok=True)
+    return tasks_dir, orders_dir, tasks_dir / "today_mission.md", tasks_dir / "today_mission.json"
+
+
+def _ensure_dirs(market: str = "TH"):
+    get_mission_paths(market)
+
+
+def get_us_screened_candidates(limit: int = 15) -> list[dict[str, Any]]:
+    """Screen top US stocks using TradingView Americas screener with VCP/CANSLIM filters."""
+    from scripts.lib.tv_client import get_us_stocks
+
+    try:
+        stocks = get_us_stocks(limit=500, min_avg_volume=500_000, min_market_cap=1_000_000_000)
+    except Exception as e:
+        logger.error("Failed to fetch US stocks from TradingView: %s", e)
+        return []
+
+    candidates = []
+    for s in stocks:
+        price = float(s.get("price") or 0.0)
+        # Sizing filter for $1,000 account ($250 slot): price between $5 and $250
+        if price < 5.0 or price > 250.0:
+            continue
+
+        rsi = float(s.get("rsi") or 0.0)
+        if rsi < 45.0 or rsi > 78.0:
+            continue
+
+        sma50 = float(s.get("sma50") or 0.0)
+        sma200 = float(s.get("sma200") or 0.0)
+        if sma50 > 0 and price < sma50:
+            continue
+
+        vol = float(s.get("volume") or 0.0)
+        avg_vol = float(s.get("avgVolume") or 1.0)
+        vol_ratio = vol / avg_vol if avg_vol > 0 else 1.0
+
+        perf_1m = float(s.get("perf_1m") or 0.0)
+        perf_3m = float(s.get("perf_3m") or 0.0)
+
+        score = 65.0
+        if vol_ratio >= 1.5:
+            score += 10.0
+        elif vol_ratio >= 1.2:
+            score += 5.0
+
+        if perf_1m > 0:
+            score += min(10.0, perf_1m)
+        if perf_3m > 0:
+            score += min(10.0, perf_3m * 0.5)
+
+        if sma200 > 0 and sma50 > sma200:
+            score += 5.0  # Golden Cross / Long-term uptrend
+
+        suggested_stop = round(price * 0.955, 2)
+        suggested_target = round(price + (price - suggested_stop) * 2.2, 2)
+
+        sym = s["symbol"].upper().strip().replace(".BK", "")
+        candidates.append(
+            {
+                "symbol": sym,
+                "company_name": s.get("name", sym),
+                "sector": s.get("sector", "Unknown"),
+                "price": price,
+                "score": round(score, 1),
+                "source": "US Momentum Screener",
+                "highlights": f"RSI: {rsi:.1f} | Vol: {vol_ratio:.1f}x | 1M: {perf_1m:+.1f}% | 3M: {perf_3m:+.1f}%",
+                "suggested_stop": suggested_stop,
+                "suggested_target": suggested_target,
+            }
+        )
+
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+    return candidates[:limit]
 
 
 def get_latest_canslim_candidates() -> list[dict[str, Any]]:
@@ -203,35 +285,55 @@ def calculate_sizing_and_levels(
     symbol: str | None = None,
     suggested_stop: float | None = None,
     suggested_target: float | None = None,
+    market: str = "TH",
 ) -> dict[str, Any]:
-    """Calculate SET Board Lot shares, tight stop, and resistance-aware target."""
+    """Calculate shares, tight stop, and resistance-aware target."""
     if price <= 0:
-        return {"shares": 100, "stop": 0.0, "target": 0.0, "est_cost": 0.0}
+        return {"shares": 1, "stop": 0.0, "target": 0.0, "target_note": "N/A", "est_cost": 0.0}
 
-    # Board lot = 100 shares
-    raw_shares = int(POSITION_BUDGET_THB // price)
-    shares = max(100, (raw_shares // 100) * 100)
+    market_clean = market.upper()
+    curr_sym = "$" if market_clean == "US" else "฿"
 
-    # Stop Loss: use suggested_stop if valid and below price, else 5% default
-    if suggested_stop and 0 < suggested_stop < price:
-        stop = round_to_set_tick(suggested_stop, "down")
+    if market_clean == "US":
+        raw_shares = int(POSITION_BUDGET_USD // price)
+        shares = max(1, raw_shares)
+        if suggested_stop and 0 < suggested_stop < price:
+            stop = round(suggested_stop, 2)
+        else:
+            stop = round(price * 0.95, 2)
+        risk_per_share = price - stop
+        default_target = round(price + (risk_per_share * 2.0), 2)
+        if suggested_target and suggested_target > price:
+            target = round(suggested_target, 2)
+            target_note = f"{curr_sym}{target:.2f} (Swing Target)"
+        else:
+            target = default_target
+            target_note = f"{curr_sym}{target:.2f} (2.0R)"
     else:
-        stop = round_to_set_tick(price * 0.95, "down")
+        # Board lot = 100 shares
+        raw_shares = int(POSITION_BUDGET_THB // price)
+        shares = max(100, (raw_shares // 100) * 100)
 
-    risk_per_share = price - stop
-    default_target = round_to_set_tick(price + (risk_per_share * 2.0), "down")
+        # Stop Loss: use suggested_stop if valid and below price, else 5% default
+        if suggested_stop and 0 < suggested_stop < price:
+            stop = round_to_set_tick(suggested_stop, "down")
+        else:
+            stop = round_to_set_tick(price * 0.95, "down")
 
-    # Resistance-Aware Check: take profit before the smart-money dump
-    resistance = find_nearest_resistance(symbol, price) if symbol else None
-    if resistance and (price + risk_per_share * 1.1) <= resistance <= default_target:
-        target = round_to_set_tick(resistance, "down")
-        target_note = f"฿{target:.2f} (Resistance Pivot)"
-    elif suggested_target and suggested_target > price:
-        target = round_to_set_tick(suggested_target, "down")
-        target_note = f"฿{target:.2f} (Swing Target)"
-    else:
-        target = default_target
-        target_note = f"฿{target:.2f} (2.0R)"
+        risk_per_share = price - stop
+        default_target = round_to_set_tick(price + (risk_per_share * 2.0), "down")
+
+        # Resistance-Aware Check: take profit before the smart-money dump
+        resistance = find_nearest_resistance(symbol, price) if symbol else None
+        if resistance and (price + risk_per_share * 1.1) <= resistance <= default_target:
+            target = round_to_set_tick(resistance, "down")
+            target_note = f"฿{target:.2f} (Resistance Pivot)"
+        elif suggested_target and suggested_target > price:
+            target = round_to_set_tick(suggested_target, "down")
+            target_note = f"฿{target:.2f} (Swing Target)"
+        else:
+            target = default_target
+            target_note = f"฿{target:.2f} (2.0R)"
 
     est_cost = round(price * shares, 2)
 
@@ -244,8 +346,23 @@ def calculate_sizing_and_levels(
     }
 
 
-def _get_stock_history_bars(symbol: str, lookback: int = 35) -> pd.DataFrame:
-    """Fetch historical daily bars from market_cache.db for U/D and RS calculation."""
+def _get_stock_history_bars(symbol: str, lookback: int = 35, market: str = "TH") -> pd.DataFrame:
+    """Fetch historical daily bars from market_cache.db or yfinance for U/D and RS calculation."""
+    if market.upper() == "US":
+        try:
+            import yfinance as yf
+
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period=f"{lookback + 10}d")
+            if not df.empty and "Close" in df.columns:
+                df = df.reset_index()
+                date_col = "Date" if "Date" in df.columns else df.columns[0]
+                df["Date"] = pd.to_datetime(df[date_col]).dt.strftime("%Y-%m-%d")
+                df.set_index("Date", inplace=True)
+                return df.tail(lookback)
+        except Exception as e:
+            logger.debug("yfinance history bars failed for %s: %s", symbol, e)
+
     if not DB_PATH.exists():
         return pd.DataFrame()
     try:
@@ -276,35 +393,48 @@ def _get_stock_history_bars(symbol: str, lookback: int = 35) -> pd.DataFrame:
 
 def generate_today_mission(market: str = "TH") -> dict[str, Any]:
     """Compile market scout candidates with Trader DNA into today's mission."""
-    _ensure_dirs()
-    dna = je.load_dna()
-    open_pos = paper_trade.list_positions(status_filter="open", market=market, portfolio="jules")
+    market_clean = market.upper()
+    tasks_dir, orders_dir, mission_md, mission_json = get_mission_paths(market_clean)
+    dna = je.load_dna(market=market_clean)
+    open_pos = paper_trade.list_positions(
+        status_filter="open", market=market_clean, portfolio="jules"
+    )
 
     available_slots = max(0, 4 - len(open_pos))
 
-    # 1. Gather candidates across all engines: Thai Swing, CANSLIM, Volume Anomaly
-    thai_swing = get_latest_thai_swing_candidates()
-    canslim = get_latest_canslim_candidates()
-    vol_leaders = get_volume_anomaly_candidates()
-
-    raw_pool = thai_swing + canslim + vol_leaders
+    # 1. Gather candidates across all engines
+    if market_clean == "US":
+        raw_pool = get_us_screened_candidates(limit=25)
+    else:
+        thai_swing = get_latest_thai_swing_candidates()
+        canslim = get_latest_canslim_candidates()
+        vol_leaders = get_volume_anomaly_candidates()
+        raw_pool = thai_swing + canslim + vol_leaders
 
     # 2. Detect active Thematic Clusters across candidate pool
-    cluster_detection = ai.detect_thematic_clusters(raw_pool, min_cluster_gainers=2, min_gain_pct=1.5)
+    cluster_detection = ai.detect_thematic_clusters(
+        raw_pool, min_cluster_gainers=2, min_gain_pct=1.5, market=market_clean
+    )
     active_clusters = cluster_detection.get("active_clusters", {})
 
     seen_symbols = set()
     combined_candidates = []
 
     for c in raw_pool:
-        sym = c["symbol"].upper()
+        sym = c["symbol"].upper().strip()
         if sym in seen_symbols:
             continue
-        # Skip unaffordable stocks where 1 board lot (100 shares) exceeds ฿10,000
-        if c["price"] * 100 > 10000.0:
-            continue
 
-        cluster_name = ai.get_cluster_for_symbol(sym)
+        if market_clean == "TH":
+            # Skip unaffordable stocks where 1 board lot (100 shares) exceeds ฿10,000
+            if c["price"] * 100 > 10000.0:
+                continue
+        else:
+            # Skip unaffordable stocks where 1 share exceeds $250.0 slot budget
+            if c["price"] > POSITION_BUDGET_USD:
+                continue
+
+        cluster_name = ai.get_cluster_for_symbol(sym, market=market_clean)
         if cluster_name and cluster_name in active_clusters:
             c["in_active_cluster"] = True
             c["score"] = float(c.get("score") or 60.0) + 15.0
@@ -313,11 +443,15 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
             c["in_active_cluster"] = False
 
         # 3. Check for Distribution Trap via Recency-Weighted U/D Ratio
-        bars_df = _get_stock_history_bars(sym)
+        bars_df = _get_stock_history_bars(sym, market=market_clean)
         if not bars_df.empty:
             ud_res = ai.calculate_recency_weighted_ud_ratio(bars_df)
             if ud_res["ud_ratio"] < 0.85:
-                logger.info("Scout: Rejecting %s - Distribution trap (U/D %.2f < 0.85)", sym, ud_res["ud_ratio"])
+                logger.info(
+                    "Scout: Rejecting %s - Distribution trap (U/D %.2f < 0.85)",
+                    sym,
+                    ud_res["ud_ratio"],
+                )
                 continue
             c["ud_ratio"] = ud_res["ud_ratio"]
 
@@ -329,6 +463,7 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
             symbol=c["symbol"],
             suggested_stop=c.get("suggested_stop"),
             suggested_target=c.get("suggested_target"),
+            market=market_clean,
         )
         c.update(levels)
         c["cluster"] = cluster_name
@@ -347,22 +482,37 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
         sector = cand.get("sector")
 
         if cluster and cluster in selected_clusters:
-            logger.info("Scout Anti-Correlation: Skipping %s (cluster %s already represented)", cand["symbol"], cluster)
+            logger.info(
+                "Scout Anti-Correlation: Skipping %s (cluster %s already represented)",
+                cand["symbol"],
+                cluster,
+            )
             continue
-        if sector and sector in selected_sectors and sector not in ("N/A", "Volume Surge"):
-            logger.info("Scout Anti-Correlation: Skipping %s (sector %s already represented)", cand["symbol"], sector)
+        if (
+            sector
+            and sector in selected_sectors
+            and sector not in ("N/A", "Volume Surge", "Unknown")
+        ):
+            logger.info(
+                "Scout Anti-Correlation: Skipping %s (sector %s already represented)",
+                cand["symbol"],
+                sector,
+            )
             continue
 
         top_candidates.append(cand)
         if cluster:
             selected_clusters.add(cluster)
-        if sector and sector not in ("N/A", "Volume Surge"):
+        if sector and sector not in ("N/A", "Volume Surge", "Unknown"):
             selected_sectors.add(sector)
 
         if len(top_candidates) >= 4:
             break
 
     today_str = datetime.now().strftime("%Y-%m-%d")
+    curr_sym = "$" if market_clean == "US" else "฿"
+    curr_cap_str = "$1,000.00 USD" if market_clean == "US" else "฿30,000.00 THB"
+    orders_folder_name = "state/jules_us_orders" if market_clean == "US" else "state/jules_orders"
 
     # Format Markdown Mission
     cand_rows_md = []
@@ -370,15 +520,16 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
 
     for idx, cand in enumerate(top_candidates, 1):
         stop_pct = ((cand["stop"] - cand["price"]) / cand["price"]) * 100.0
-        target_note = cand.get("target_note", f"฿{cand['target']:.2f} (+2.0R)")
+        target_note = cand.get("target_note", f"{curr_sym}{cand['target']:.2f} (+2.0R)")
         cand_rows_md.append(
-            f"| **{idx}. {cand['symbol']}** | ฿{cand['price']:.2f} | **{cand['shares']:,}** หุ้น | ฿{cand['est_cost']:,.2f} | ฿{cand['stop']:.2f} ({stop_pct:.1f}%) | {target_note} | {cand['highlights']} |"
+            f"| **{idx}. {cand['symbol']}** | {curr_sym}{cand['price']:.2f} | **{cand['shares']:,}** หุ้น | {curr_sym}{cand['est_cost']:,.2f} | {curr_sym}{cand['stop']:.2f} ({stop_pct:.1f}%) | {target_note} | {cand['highlights']} |"
         )
         yaml_templates_md.append(f"""```yaml
 # Order Template {idx}: {cand["symbol"]}
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_{cand["symbol"].replace(".BK", "")}.yaml
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: {orders_folder_name}/buy_{cand["symbol"].replace(".BK", "")}.yaml
 action: buy
 symbol: "{cand["symbol"]}"
+market: "{market_clean}"
 shares: {cand["shares"]}
 entry_price: {cand["price"]:.2f}
 stop_price: {cand["stop"]:.2f}
@@ -399,8 +550,8 @@ thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส�
         or "- ไม่มีข้อผิดพลาดซ้ำเดิมในประวัติ"
     )
 
-    mission_content = f"""# 🎯 Jules AI Fund: Daily Mission & Research Briefing
-**วันที่:** {today_str} | **สถานะพอร์ต:** ว่าง {available_slots}/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+    mission_content = f"""# 🎯 Jules AI Fund ({market_clean}): Daily Mission & Research Briefing
+**วันที่:** {today_str} | **สถานะพอร์ต:** ว่าง {available_slots}/4 ไม้ | **เงินทุนเริ่มต้น:** {curr_cap_str}
 
 ---
 
@@ -427,10 +578,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 ## 📋 ภารกิจสำหรับ Jules (Action Required)
 1. **คัดกรองปัจจัยพื้นฐาน (Fundamental & Business Check):**
    - ตรวจสอบโมเดลธุรกิจ: กำไรโตจริง หรือแค่ภาพลวงตา?
-   - ค้นหาข่าวด่วนล่าสุดจาก Google Search หรือข่าวทันหุ้น: มีข่าวลบ / XD / Dilution หรือไม่?
+   - ค้นหาข่าวด่วนล่าสุดจาก Google Search: มีข่าวลบ / XD / Dilution หรือไม่?
 2. **ตัดสินใจ (Approve or Veto):**
    - หากหุ้นตัวใดผ่านเกณฑ์ และเข้าตา Jules ที่สุด **เลือก 1 ตัว**
-   - บันทึกไฟล์ Order ตาม Template ด้านล่างลงในโฟลเดอร์ `state/jules_orders/`
+   - บันทึกไฟล์ Order ตาม Template ด้านล่างลงในโฟลเดอร์ `{orders_folder_name}/`
    - เมื่อ Push ขึ้น GitHub แล้ว ระบบบน VM จะเข้าซื้อให้อัตโนมัติ!
 
 ---
@@ -439,20 +590,20 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 {templates_body}
 """
 
-    MISSION_MD.write_text(mission_content, encoding="utf-8")
+    mission_md.write_text(mission_content, encoding="utf-8")
 
     payload = {
         "generated_at": isoformat_seconds(),
-        "market": market,
+        "market": market_clean,
         "dna_generation": dna.get("generation", 1),
         "available_slots": available_slots,
         "candidates": top_candidates,
     }
-    with open(MISSION_JSON, "w", encoding="utf-8") as f:
+    with open(mission_json, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
     logger.info(
-        "Generated today's mission at %s with %d candidates", MISSION_MD, len(top_candidates)
+        "Generated today's mission at %s with %d candidates", mission_md, len(top_candidates)
     )
     return payload
 
@@ -461,20 +612,33 @@ def main():
     parser = argparse.ArgumentParser(description="Jules Autonomous Scout Engine")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("run")
-    sub.add_parser("show")
+    run_p = sub.add_parser("run")
+    run_p.add_argument(
+        "--market", choices=["TH", "US"], default="TH", help="Target equity market (TH or US)"
+    )
+
+    show_p = sub.add_parser("show")
+    show_p.add_argument(
+        "--market", choices=["TH", "US"], default="TH", help="Target equity market (TH or US)"
+    )
 
     args = parser.parse_args()
 
     if args.cmd == "run":
-        res = generate_today_mission()
-        print(f"Mission generated successfully with {len(res['candidates'])} candidates.")
-        print(f"File: {MISSION_MD}")
+        res = generate_today_mission(market=args.market)
+        _, _, mission_md, _ = get_mission_paths(args.market)
+        print(
+            f"Mission ({args.market}) generated successfully with {len(res['candidates'])} candidates."
+        )
+        print(f"File: {mission_md}")
     elif args.cmd == "show":
-        if MISSION_MD.exists():
-            print(MISSION_MD.read_text(encoding="utf-8"))
+        _, _, mission_md, _ = get_mission_paths(args.market)
+        if mission_md.exists():
+            print(mission_md.read_text(encoding="utf-8"))
         else:
-            print("No active mission found. Run 'python scripts/jules_scout.py run' first.")
+            print(
+                f"No active mission found for {args.market}. Run 'python scripts/jules_scout.py run --market {args.market}' first."
+            )
 
 
 if __name__ == "__main__":

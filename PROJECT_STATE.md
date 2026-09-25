@@ -1,9 +1,9 @@
 # Project State: Claude Trading Skills & Jules AI Fund
 
-**Authoritative Project State & Operational Ledger**  
-**Last Updated:** 2026-09-21 (BKK / ICT)  
-**Production Host:** GCP Compute Engine `trading-dashboard` (`35.212.209.201`, `us-west1-b`)  
-**Git Branch:** `main` (Latest Commit: `4892c1a`)  
+**Authoritative Project State & Operational Ledger**
+**Last Updated:** 2026-09-21 (BKK / ICT)
+**Production Host:** GCP Compute Engine `trading-dashboard` (`35.212.209.201`, `us-west1-b`)
+**Git Branch:** `main` (Latest Commit: `4892c1a`)
 **CI/CD:** GitHub Actions (`.github/workflows/ci.yml`) - 100% Passing
 
 ---
@@ -103,12 +103,33 @@ Replaces generic single-stock oscillators (RSI, SMA, fixed volume) with institut
 
 ---
 
-## 6. Active Roadmap & Next Milestones
+## 6. US Market Autonomous Fund Expansion ($1,000 USD Starting Capital)
+
+The autonomous engine has been expanded to trade US Equities (NYSE / NASDAQ) under fair, production-grade microstructural and fiscal rules:
+1. **Capital Budget & Risk Sizing:**
+   - Starting Capital: **$1,000.00 USD**
+   - Allocation: Max 4 concurrent positions $\rightarrow$ Max **$250.00 USD** per slot
+   - Risk Cap: 1.0% portfolio risk $\rightarrow$ Max **$10.00 USD** risk per trade
+   - Granularity: Single-share execution (no 100-share board lot requirement)
+2. **Accurate Regulatory Fee Deduction (Sell Exits):**
+   - SEC Section 31 Fee: `$27.80` per `$1,000,000` gross proceeds (min `$0.01`, rounded up to next cent)
+   - FINRA Trading Activity Fee (TAF): `$0.000166` per share (min `$0.01`, max `$8.30`, rounded to nearest cent)
+3. **9 Thematic Clusters:**
+   - AI Infrastructure & Semiconductors, Cloud Software & Cybersecurity, Mega-Cap Tech Platforms, Biotech & GLP-1, Nuclear Energy & Clean Power, Aerospace & Defense, FinTech & Crypto Infra, Consumer Discretionary, Energy & Oil Services.
+4. **State Isolation:**
+   - Thai Fund: `state/jules_tasks/`, `state/jules_orders/`, `state/jules_memory/`
+   - US Fund: `state/jules_us_tasks/`, `state/jules_us_orders/`, `state/jules_us_memory/`
+
+---
+
+## 7. Active Roadmap & Next Milestones
 
 - [x] Autonomous Decision Engine (`scripts/jules_trader.py`)
 - [x] MFE Ratchet Breakeven Stop & Resistance-Aware Targets
 - [x] Adaptive Matrix & Specialized Indicators (`scripts/adaptive_indicators.py`)
 - [x] Continuous Integration & Ruff Quality Gates (100% Green)
+- [x] US Equities Autonomous Fund Expansion ($1,000 USD fund, SEC/FINRA fees, US Thematic Clusters)
+- [ ] US Market VM Cron Pipeline (13:00 UTC / 20:00 ICT scout, 14:15 UTC decision, 14:45 UTC ORB-15 execution)
 - [ ] Intraday Breakout Scanner (10:45–11:00 ICT) for real-time sector surges
 - [ ] NVDR Program Trading & Net Flow Divergence Filter
 - [ ] Expansion of Automated Testing to Webhook Notifications (LINE Notify / Discord)

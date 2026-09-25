@@ -365,10 +365,32 @@ def close_position(
                 rem_gross = (exit_price - entry) * rem_shares
             else:
                 rem_gross = (entry - exit_price) * rem_shares
-            rem_cost = exit_price * rem_shares * (row["transaction_cost_bps"] or 0.0) / 10_000
+            market_val = row["market"] if "market" in row.keys() else "TH"
+            port_val = row["portfolio"] if "portfolio" in row.keys() else "quant"
+            if market_val == "US" and port_val == "jules":
+                import math
+
+                proceeds = exit_price * rem_shares
+                sec_fee = (
+                    max(0.01, math.ceil(proceeds * 0.0000278 * 100) / 100.0)
+                    if proceeds > 0
+                    else 0.0
+                )
+                taf_fee = (
+                    min(8.30, max(0.01, round(rem_shares * 0.000166, 2))) if rem_shares > 0 else 0.0
+                )
+                rem_cost = (
+                    exit_price * rem_shares * (row["transaction_cost_bps"] or 0.0) / 10_000
+                ) + round(sec_fee + taf_fee, 2)
+            else:
+                rem_cost = exit_price * rem_shares * (row["transaction_cost_bps"] or 0.0) / 10_000
             pnl = t1_net_pnl + rem_gross - rem_cost
             t1_price = float(scale_out_info.get("t1_price", entry))
-            gross_pnl = ((t1_price - entry) * closed_shares if side == "long" else (entry - t1_price) * closed_shares) + rem_gross
+            gross_pnl = (
+                (t1_price - entry) * closed_shares
+                if side == "long"
+                else (entry - t1_price) * closed_shares
+            ) + rem_gross
             exit_cost = (row["exit_cost"] or 0.0) + rem_cost
         else:
             if side == "long":
@@ -376,7 +398,23 @@ def close_position(
             else:
                 gross_pnl = (entry - exit_price) * shares
             entry_cost = row["entry_cost"] or 0.0
-            exit_cost = exit_price * shares * (row["transaction_cost_bps"] or 0.0) / 10_000
+            market_val = row["market"] if "market" in row.keys() else "TH"
+            port_val = row["portfolio"] if "portfolio" in row.keys() else "quant"
+            if market_val == "US" and port_val == "jules":
+                import math
+
+                proceeds = exit_price * shares
+                sec_fee = (
+                    max(0.01, math.ceil(proceeds * 0.0000278 * 100) / 100.0)
+                    if proceeds > 0
+                    else 0.0
+                )
+                taf_fee = min(8.30, max(0.01, round(shares * 0.000166, 2))) if shares > 0 else 0.0
+                exit_cost = (
+                    exit_price * shares * (row["transaction_cost_bps"] or 0.0) / 10_000
+                ) + round(sec_fee + taf_fee, 2)
+            else:
+                exit_cost = exit_price * shares * (row["transaction_cost_bps"] or 0.0) / 10_000
             pnl = gross_pnl - entry_cost - exit_cost
 
         realized_r = pnl / initial_risk if initial_risk > 0 else 0

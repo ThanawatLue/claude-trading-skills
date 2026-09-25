@@ -51,19 +51,55 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("jules_fund")
 
 DB_PATH = PROJECT_ROOT / "state" / "market_cache.db"
-ORDERS_DIR = PROJECT_ROOT / "state" / "jules_orders"
+ORDERS_DIR_TH = PROJECT_ROOT / "state" / "jules_orders"
+ORDERS_DIR_US = PROJECT_ROOT / "state" / "jules_us_orders"
+ORDERS_DIR = ORDERS_DIR_TH
 PROCESSED_ORDERS_DIR = ORDERS_DIR / "processed"
 QUARANTINE_ORDERS_DIR = ORDERS_DIR / "quarantine"
 
-INITIAL_CAPITAL = 30000.0  # THB
-DEFAULT_FEE_BPS = 21.692  # InnovestX cash balance fee per side (0.21692%)
+INITIAL_CAPITAL_TH = 30000.0  # THB
+INITIAL_CAPITAL_US = 1000.0  # USD
+INITIAL_CAPITAL = INITIAL_CAPITAL_TH  # Backward compatibility
+DEFAULT_FEE_BPS_TH = 21.692  # InnovestX cash balance fee per side (0.21692%)
+DEFAULT_FEE_BPS_US = 0.0  # Zero-commission retail broker (SEC/FINRA fees applied on sell)
+DEFAULT_FEE_BPS = DEFAULT_FEE_BPS_TH
 MAX_OPEN_POSITIONS = 4
+
+
+def get_initial_capital(market: str = "TH") -> float:
+    """Return initial capital based on market."""
+    return INITIAL_CAPITAL_US if market.upper() == "US" else INITIAL_CAPITAL_TH
+
+
+def get_orders_dirs(market: str = "TH") -> tuple[Path, Path, Path]:
+    """Return (orders_dir, processed_dir, quarantine_dir) for the given market."""
+    if market.upper() == "US":
+        base = ORDERS_DIR_US
+        return base, base / "processed", base / "quarantine"
+    return ORDERS_DIR, PROCESSED_ORDERS_DIR, QUARANTINE_ORDERS_DIR
+
+
+def calculate_us_regulatory_fees(proceeds: float, shares: int) -> float:
+    """Calculate US SEC Section 31 and FINRA TAF regulatory fees on equity sales.
+
+    - SEC Section 31: $27.80 per $1,000,000 of gross proceeds (min $0.01, rounded up to cent)
+    - FINRA TAF: $0.000166 per share (min $0.01, max $8.30)
+    """
+    if proceeds <= 0 or shares <= 0:
+        return 0.0
+    import math
+
+    sec_fee = max(0.01, math.ceil(proceeds * 0.0000278 * 100) / 100.0)
+    taf_fee = min(8.30, max(0.01, round(shares * 0.000166, 2)))
+    return round(sec_fee + taf_fee, 2)
 
 
 def _normalize_symbol(symbol: str, market: str = "TH") -> str:
     sym = symbol.strip().upper()
-    if market == "TH" and not sym.endswith(".BK"):
+    if market.upper() == "TH" and not sym.endswith(".BK"):
         sym = f"{sym}.BK"
+    elif market.upper() == "US":
+        sym = sym.replace(".BK", "")
     return sym
 
 
@@ -115,29 +151,37 @@ def _get_latest_price(symbol: str, market: str = "TH") -> float:
 
 def get_jules_status(market: str = "TH") -> dict[str, Any]:
     """Calculate exact portfolio metrics for Jules AI Fund."""
-    open_pos = paper_trade.list_positions(status_filter="open", market=market, portfolio="jules")
-    closed_pos = paper_trade.list_positions(
-        status_filter="closed", market=market, portfolio="jules"
+    market_clean = market.upper()
+    open_pos = paper_trade.list_positions(
+        status_filter="open", market=market_clean, portfolio="jules"
     )
-    stats = paper_trade.compute_stats(market=market, portfolio="jules")
+    closed_pos = paper_trade.list_positions(
+        status_filter="closed", market=market_clean, portfolio="jules"
+    )
+    stats = paper_trade.compute_stats(market=market_clean, portfolio="jules")
+
+    init_cap = get_initial_capital(market_clean)
+    currency = "USD" if market_clean == "US" else "THB"
 
     realized_pnl = float(stats.get("total_realized_pnl") or 0.0)
     unrealized_pnl = float(stats.get("total_unrealized_pnl") or 0.0)
     total_open_cost = sum(
         float(r["entry_price"] * r["shares"] + (r.get("entry_cost") or 0)) for r in open_pos
     )
-    cash_balance = INITIAL_CAPITAL - total_open_cost + realized_pnl
+    cash_balance = init_cap - total_open_cost + realized_pnl
     equity = cash_balance + sum(
         float((r.get("last_price") or r["entry_price"]) * r["shares"]) for r in open_pos
     )
     net_pnl = realized_pnl + unrealized_pnl
-    net_return_pct = (net_pnl / INITIAL_CAPITAL) * 100.0 if INITIAL_CAPITAL > 0 else 0.0
+    net_return_pct = (net_pnl / init_cap) * 100.0 if init_cap > 0 else 0.0
 
     return {
         "fund_name": "Jules AI Autonomous Fund",
-        "market": market,
-        "initial_capital": INITIAL_CAPITAL,
+        "market": market_clean,
+        "currency": currency,
+        "initial_capital": init_cap,
         "cash_balance": round(cash_balance, 2),
+        "invested_capital": round(total_open_cost, 2),
         "equity": round(equity, 2),
         "net_pnl": round(net_pnl, 2),
         "net_return_pct": round(net_return_pct, 2),
@@ -160,17 +204,21 @@ def execute_buy(
     stop: float | None = None,
     target: float | None = None,
     thesis: str | None = None,
-    fee_bps: float = DEFAULT_FEE_BPS,
+    fee_bps: float | None = None,
 ) -> dict[str, Any]:
     """Execute a buy order for Jules AI Fund under fair competition rules."""
-    sym = _normalize_symbol(symbol, market)
-    if market == "TH" and shares % 100 != 0:
+    market_clean = market.upper()
+    if fee_bps is None:
+        fee_bps = DEFAULT_FEE_BPS_US if market_clean == "US" else DEFAULT_FEE_BPS_TH
+
+    sym = _normalize_symbol(symbol, market_clean)
+    if market_clean == "TH" and shares % 100 != 0:
         raise ValueError(f"SET board lot violation: shares ({shares}) must be a multiple of 100.")
 
     if shares <= 0:
         raise ValueError("shares must be > 0")
 
-    entry_price = float(entry) if entry else _get_latest_price(sym, market)
+    entry_price = float(entry) if entry else _get_latest_price(sym, market_clean)
     if entry_price <= 0:
         raise ValueError(f"Invalid entry price: {entry_price}")
 
@@ -192,7 +240,7 @@ def execute_buy(
             f"Target price ({target_price}) must be greater than entry price ({entry_price})"
         )
 
-    status = get_jules_status(market)
+    status = get_jules_status(market_clean)
     if status["open_count"] >= MAX_OPEN_POSITIONS:
         raise ValueError(
             f"Risk limit reached: Jules fund already has {status['open_count']} open positions (max {MAX_OPEN_POSITIONS})."
@@ -203,13 +251,15 @@ def execute_buy(
             raise ValueError(f"Already holding an active position in {sym}.")
 
     total_cost = (entry_price * shares) * (1.0 + fee_bps / 10000.0)
+    currency = status.get("currency", "THB")
     if total_cost > status["cash_balance"]:
         raise ValueError(
-            f"Insufficient cash: order requires {total_cost:.2f} THB, but available cash is {status['cash_balance']:.2f} THB."
+            f"Insufficient cash: order requires {total_cost:.2f} {currency}, but available cash is {status['cash_balance']:.2f} {currency}."
         )
 
     decision_trace = {
         "fund": "jules_ai",
+        "market": market_clean,
         "thesis": thesis or "Fundamental and catalyst momentum thesis",
         "timestamp": isoformat_seconds(),
         "fee_bps": fee_bps,
@@ -223,7 +273,7 @@ def execute_buy(
 
     trade = paper_trade.open_position(
         symbol=sym,
-        market=market,
+        market=market_clean,
         shares=shares,
         entry=entry_price,
         stop=stop_price,
@@ -255,15 +305,16 @@ def execute_sell(
     reason: str = "Jules take profit / risk exit",
 ) -> dict[str, Any]:
     """Close an active position for Jules AI Fund."""
+    market_clean = market.upper()
     open_positions = paper_trade.list_positions(
-        status_filter="open", market=market, portfolio="jules"
+        status_filter="open", market=market_clean, portfolio="jules"
     )
     target_pos = None
 
     if trade_id:
         target_pos = next((p for p in open_positions if p["id"] == trade_id), None)
     elif symbol:
-        sym = _normalize_symbol(symbol, market)
+        sym = _normalize_symbol(symbol, market_clean)
         target_pos = next((p for p in open_positions if p["symbol"].upper() == sym.upper()), None)
 
     if not target_pos:
@@ -271,7 +322,7 @@ def execute_sell(
             f"No active position found in Jules fund for symbol={symbol} id={trade_id}"
         )
 
-    exit_price = float(price) if price else _get_latest_price(target_pos["symbol"], market)
+    exit_price = float(price) if price else _get_latest_price(target_pos["symbol"], market_clean)
     tid = target_pos["id"]
 
     status = "closed_manual"
@@ -298,7 +349,7 @@ def execute_sell(
     try:
         import scripts.jules_evolver as je
 
-        je.evolve_memory(market=market)
+        je.evolve_memory(market=market_clean)
     except Exception as e:
         logger.warning("Auto-evolution after trade close failed: %s", e)
 
@@ -307,17 +358,21 @@ def execute_sell(
 
 def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
     """Scan and process pending order files submitted by Jules via GitHub."""
-    ORDERS_DIR.mkdir(parents=True, exist_ok=True)
-    PROCESSED_ORDERS_DIR.mkdir(parents=True, exist_ok=True)
+    market_clean = market.upper()
+    orders_dir, processed_dir, quarantine_dir = get_orders_dirs(market_clean)
+    orders_dir.mkdir(parents=True, exist_ok=True)
+    processed_dir.mkdir(parents=True, exist_ok=True)
 
     order_files = sorted(
-        glob.glob(str(ORDERS_DIR / "*.yaml")) + glob.glob(str(ORDERS_DIR / "*.json"))
+        glob.glob(str(orders_dir / "*.yaml")) + glob.glob(str(orders_dir / "*.json"))
     )
     results = []
 
+    curr_symbol = "$" if market_clean == "US" else "฿"
+
     for fpath in order_files:
         p = Path(fpath)
-        if p.parent == PROCESSED_ORDERS_DIR:
+        if p.parent == processed_dir or p.parent == quarantine_dir:
             continue
         try:
             with open(p, encoding="utf-8") as f:
@@ -351,18 +406,19 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
                 max_chase_pct = float(data.get("max_chase_pct", 0.010))
                 entry_ref = float(data.get("entry_price") or data.get("entry") or 0.0)
                 if entry_ref > 0:
-                    curr_price = _get_latest_price(symbol, market=market)
+                    curr_price = _get_latest_price(symbol, market=market_clean)
                     if curr_price > entry_ref * (1.0 + max_chase_pct):
                         raise ValueError(
-                            f"Chase limit exceeded: price ฿{curr_price:.2f} is > ฿{entry_ref * (1.0 + max_chase_pct):.2f} "
-                            f"(+{max_chase_pct * 100:.1f}% above trigger ฿{entry_ref:.2f})"
+                            f"Chase limit exceeded: price {curr_symbol}{curr_price:.2f} is > {curr_symbol}{entry_ref * (1.0 + max_chase_pct):.2f} "
+                            f"(+{max_chase_pct * 100:.1f}% above trigger {curr_symbol}{entry_ref:.2f})"
                         )
 
             if action == "buy":
+                default_shares = 1 if market_clean == "US" else 100
                 res = execute_buy(
                     symbol=symbol,
-                    shares=int(data.get("shares", 100)),
-                    market=data.get("market", market),
+                    shares=int(data.get("shares", default_shares)),
+                    market=data.get("market", market_clean),
                     entry=data.get("entry_price") or data.get("entry"),
                     stop=data.get("stop_price") or data.get("stop"),
                     target=data.get("target_price") or data.get("target"),
@@ -372,7 +428,7 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
                 res = execute_sell(
                     symbol=symbol,
                     trade_id=data.get("trade_id") or data.get("id"),
-                    market=data.get("market", market),
+                    market=data.get("market", market_clean),
                     price=data.get("exit_price") or data.get("price"),
                     reason=data.get("reason") or data.get("notes") or "Order executed from queue",
                 )
@@ -380,15 +436,14 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
                 raise ValueError(f"Unknown order action: {action}")
 
             results.append({"file": p.name, "status": "executed", "result": res})
-            dest = PROCESSED_ORDERS_DIR / f"{p.stem}_{int(datetime.now().timestamp())}{p.suffix}"
+            dest = processed_dir / f"{p.stem}_{int(datetime.now().timestamp())}{p.suffix}"
             shutil.move(str(p), str(dest))
         except Exception as e:
             logger.error("Failed to process order file %s: %s", p.name, e)
             results.append({"file": p.name, "status": "error", "error": str(e)})
-            # Dead-Letter Queue (Quarantine) pattern: isolate invalid orders to prevent infinite retry loops
-            QUARANTINE_ORDERS_DIR.mkdir(parents=True, exist_ok=True)
+            quarantine_dir.mkdir(parents=True, exist_ok=True)
             quarantine_dest = (
-                QUARANTINE_ORDERS_DIR / f"{p.stem}_{int(datetime.now().timestamp())}{p.suffix}"
+                quarantine_dir / f"{p.stem}_{int(datetime.now().timestamp())}{p.suffix}"
             )
             try:
                 shutil.move(str(p), str(quarantine_dest))
@@ -448,44 +503,56 @@ def main():
     parser = argparse.ArgumentParser(description="Jules AI Fund Portfolio Manager")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("status")
+    st = sub.add_parser("status")
+    st.add_argument("--market", default="TH", choices=["TH", "US"])
 
     b = sub.add_parser("buy")
-    b.add_argument("--symbol", required=True, help="Stock ticker (e.g. BDMS.BK)")
+    b.add_argument("--symbol", required=True, help="Stock ticker (e.g. BDMS.BK or AAPL)")
     b.add_argument(
         "--shares",
         type=int,
         required=True,
-        help="Number of shares (SET board lot = multiple of 100)",
+        help="Number of shares (SET board lot = multiple of 100 for TH; any integer >= 1 for US)",
     )
     b.add_argument("--entry", type=float, help="Entry price (auto-fetched if omitted)")
     b.add_argument("--stop", type=float, help="Stop loss price (auto 6 percent if omitted)")
     b.add_argument("--target", type=float, help="Take profit target price (auto 2.2R if omitted)")
     b.add_argument("--thesis", help="Investment thesis and catalyst justification")
-    b.add_argument("--market", default="TH")
+    b.add_argument("--market", default="TH", choices=["TH", "US"])
 
     s = sub.add_parser("sell")
     s.add_argument("--symbol", help="Stock ticker to sell")
     s.add_argument("--id", type=int, help="Trade ID to close")
     s.add_argument("--price", type=float, help="Exit price (auto-fetched if omitted)")
     s.add_argument("--reason", default="Jules take profit / risk exit", help="Reason for selling")
-    s.add_argument("--market", default="TH")
+    s.add_argument("--market", default="TH", choices=["TH", "US"])
 
     sc = sub.add_parser("scan")
     sc.add_argument("--limit", type=int, default=10)
-    sc.add_argument("--market", default="TH")
+    sc.add_argument("--market", default="TH", choices=["TH", "US"])
 
-    sub.add_parser("process-orders")
-    sub.add_parser("arena")
-    sub.add_parser("briefing")
-    sub.add_parser("evolve")
-    sub.add_parser("scout")
-    sub.add_parser("mission")
+    po = sub.add_parser("process-orders")
+    po.add_argument("--market", default="TH", choices=["TH", "US"])
+
+    ar = sub.add_parser("arena")
+    ar.add_argument("--market", default="TH", choices=["TH", "US"])
+
+    br = sub.add_parser("briefing")
+    br.add_argument("--market", default="TH", choices=["TH", "US"])
+
+    ev = sub.add_parser("evolve")
+    ev.add_argument("--market", default="TH", choices=["TH", "US"])
+
+    scout_cmd = sub.add_parser("scout")
+    scout_cmd.add_argument("--market", default="TH", choices=["TH", "US"])
+
+    ms = sub.add_parser("mission")
+    ms.add_argument("--market", default="TH", choices=["TH", "US"])
 
     args = parser.parse_args()
 
     if args.cmd == "status":
-        print(json.dumps(get_jules_status(), ensure_ascii=False, indent=2))
+        print(json.dumps(get_jules_status(market=args.market), ensure_ascii=False, indent=2))
     elif args.cmd == "buy":
         out = execute_buy(
             symbol=args.symbol,
@@ -515,31 +582,30 @@ def main():
             )
         )
     elif args.cmd == "process-orders":
-        out = process_orders_queue()
+        out = process_orders_queue(market=args.market)
         print(json.dumps(out, ensure_ascii=False, indent=2))
     elif args.cmd == "arena":
-        q_stats = paper_trade.compute_stats(portfolio="quant")
-        j_stats = paper_trade.compute_stats(portfolio="jules")
+        q_stats = paper_trade.compute_stats(market=args.market, portfolio="quant")
+        j_stats = paper_trade.compute_stats(market=args.market, portfolio="jules")
         print(json.dumps({"quant": q_stats, "jules": j_stats}, ensure_ascii=False, indent=2))
     elif args.cmd == "briefing":
         import scripts.jules_evolver as je
 
-        print(je.get_pre_trade_briefing())
+        print(je.get_pre_trade_briefing(market=args.market))
     elif args.cmd == "evolve":
         import scripts.jules_evolver as je
 
-        print(json.dumps(je.evolve_memory(), ensure_ascii=False, indent=2))
+        print(json.dumps(je.evolve_memory(market=args.market), ensure_ascii=False, indent=2))
     elif args.cmd == "scout":
         import scripts.jules_scout as js
 
-        js.generate_today_mission()
-        print(f"Mission generated: {js.MISSION_MD}")
+        print(
+            json.dumps(js.generate_today_mission(market=args.market), ensure_ascii=False, indent=2)
+        )
     elif args.cmd == "mission":
         import scripts.jules_scout as js
 
-        if not js.MISSION_MD.exists():
-            js.generate_today_mission()
-        print(js.MISSION_MD.read_text(encoding="utf-8"))
+        print(js.publish_mission_briefing(market=args.market))
 
 
 if __name__ == "__main__":
