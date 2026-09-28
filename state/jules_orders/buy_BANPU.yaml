@@ -1,0 +1,14 @@
+order_id: JULES-TH-20260928-BANPU
+action: buy
+symbol: BANPU.BK
+shares: 300
+entry_price: 14.6
+stop_price: 13.8
+target_price: 16.0
+max_chase_pct: 0.01
+created_at: '2026-09-28T02:40:08.349115+00:00'
+expires_at: '2026-09-28T03:25:08.349115+00:00'
+sector: Energy Minerals
+target_note: "\u0E3F16.00 (Swing Target)"
+thesis: 'Autonomous conviction buy: RSI: 40.6 | Vol: 1.1x | Swing Score: 68.6 | R/R:
+  1.75R | Sector Momentum: Energy Minerals | Plan: MFE +0.5R ratchet to BE immediately'
