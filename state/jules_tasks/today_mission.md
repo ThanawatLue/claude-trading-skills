@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund: Daily Mission & Research Briefing
-**วันที่:** 2026-09-25 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-09-28 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -22,10 +22,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. CENTEL.BK** | ฿43.75 | **100** หุ้น | ฿4,375.00 | ฿41.50 (-5.1%) | ฿48.25 (2.0R) | CANSLIM Score: 71.6 | 52w Dist: -3.8% |
-| **2. TASCO.BK** | ฿16.90 | **400** หุ้น | ฿6,760.00 | ฿16.50 (-2.4%) | ฿17.60 (Swing Target) | RSI: 51.2 | Vol: 0.9x | Swing Score: 70.2 |
-| **3. TEGH.BK** | ฿3.30 | **2,100** หุ้น | ฿6,930.00 | ฿3.16 (-4.2%) | ฿3.56 (Swing Target) | RSI: 58.0 | Vol: 3.3x | Swing Score: 67.7 |
-| **4. PTT.BK** | ฿43.00 | **100** หุ้น | ฿4,300.00 | ฿42.00 (-2.3%) | ฿44.75 (Swing Target) | RSI: 70.3 | Vol: 2.1x | Swing Score: 66.9 |
+| **1. III.BK** | ฿4.98 | **1,400** หุ้น | ฿6,972.00 | ฿4.82 (-3.2%) | ฿5.25 (Swing Target) | RSI: 49.7 | Vol: 1.2x | Swing Score: 74.6 |
+| **2. MDX.BK** | ฿3.72 | **1,800** หุ้น | ฿6,696.00 | ฿3.58 (-3.8%) | ฿4.00 (Swing Target) | RSI: 65.1 | Vol: 8.7x | Swing Score: 70.9 |
+| **3. GUNKUL.BK** | ฿5.30 | **1,300** หุ้น | ฿6,890.00 | ฿5.00 (-5.7%) | ฿5.80 (Swing Target) | RSI: 58.2 | Vol: 2.5x | Swing Score: 69.8 |
+| **4. BANPU.BK** | ฿14.60 | **400** หุ้น | ฿5,840.00 | ฿13.80 (-5.5%) | ฿16.00 (Swing Target) | RSI: 40.6 | Vol: 1.1x | Swing Score: 68.6 |
 
 ---
 
@@ -42,49 +42,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: CENTEL.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
+# Order Template 1: III.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_III.yaml
 action: buy
-symbol: "CENTEL.BK"
-shares: 100
-entry_price: 43.75
-stop_price: 41.50
-target_price: 48.25
+symbol: "III.BK"
+shares: 1400
+entry_price: 4.98
+stop_price: 4.82
+target_price: 5.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 2: TASCO.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TASCO.yaml
+# Order Template 2: MDX.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_MDX.yaml
 action: buy
-symbol: "TASCO.BK"
+symbol: "MDX.BK"
+shares: 1800
+entry_price: 3.72
+stop_price: 3.58
+target_price: 4.00
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+```
+
+```yaml
+# Order Template 3: GUNKUL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GUNKUL.yaml
+action: buy
+symbol: "GUNKUL.BK"
+shares: 1300
+entry_price: 5.30
+stop_price: 5.00
+target_price: 5.80
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+```
+
+```yaml
+# Order Template 4: BANPU.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BANPU.yaml
+action: buy
+symbol: "BANPU.BK"
 shares: 400
-entry_price: 16.90
-stop_price: 16.50
-target_price: 17.60
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
-```
-
-```yaml
-# Order Template 3: TEGH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TEGH.yaml
-action: buy
-symbol: "TEGH.BK"
-shares: 2100
-entry_price: 3.30
-stop_price: 3.16
-target_price: 3.56
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
-```
-
-```yaml
-# Order Template 4: PTT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTT.yaml
-action: buy
-symbol: "PTT.BK"
-shares: 100
-entry_price: 43.00
-stop_price: 42.00
-target_price: 44.75
+entry_price: 14.60
+stop_price: 13.80
+target_price: 16.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
