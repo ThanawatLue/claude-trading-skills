@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund: Daily Mission & Research Briefing
-**วันที่:** 2026-09-29 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-09-30 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -22,10 +22,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. TPRIME.BK** | ฿8.60 | **800** หุ้น | ฿6,880.00 | ฿8.45 (-1.7%) | ฿8.90 (Swing Target) | RSI: 63.0 | Vol: 2.8x | Swing Score: 83.7 |
-| **2. NER.BK** | ฿4.62 | **1,500** หุ้น | ฿6,930.00 | ฿4.50 (-2.6%) | ฿4.84 (Swing Target) | RSI: 46.0 | Vol: 1.9x | Swing Score: 78.0 |
-| **3. ERW.BK** | ฿3.70 | **1,800** หุ้น | ฿6,660.00 | ฿3.62 (-2.2%) | ฿3.84 (Swing Target) | RSI: 50.0 | Vol: 1.0x | Swing Score: 73.1 |
-| **4. III.BK** | ฿4.92 | **1,400** หุ้น | ฿6,888.00 | ฿4.80 (-2.4%) | ฿5.10 (Swing Target) | RSI: 47.0 | Vol: 0.8x | Swing Score: 71.7 |
+| **1. CENTEL.BK** | ฿44.00 | **100** หุ้น | ฿4,400.00 | ฿41.75 (-5.1%) | ฿48.50 (2.0R) | CANSLIM Score: 71.6 | 52w Dist: -3.3% |
+| **2. PTTGC.BK** | ฿48.50 | **100** หุ้น | ฿4,850.00 | ฿46.00 (-5.2%) | ฿53.50 (2.0R) | CANSLIM Score: 63.5 | 52w Dist: -4.9% |
+| **3. KCE.BK** | ฿67.00 | **100** หุ้น | ฿6,700.00 | ฿63.50 (-5.2%) | ฿74.00 (2.0R) | CANSLIM Score: 62.0 | 52w Dist: -3.6% |
+| **4. PTT.BK** | ฿42.75 | **100** หุ้น | ฿4,275.00 | ฿40.50 (-5.3%) | ฿47.25 (2.0R) | CANSLIM Score: 61.9 | 52w Dist: -2.3% |
 
 ---
 
@@ -42,49 +42,49 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: TPRIME.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TPRIME.yaml
+# Order Template 1: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "TPRIME.BK"
-shares: 800
-entry_price: 8.60
-stop_price: 8.45
-target_price: 8.90
+symbol: "CENTEL.BK"
+shares: 100
+entry_price: 44.00
+stop_price: 41.75
+target_price: 48.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 2: NER.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_NER.yaml
+# Order Template 2: PTTGC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTTGC.yaml
 action: buy
-symbol: "NER.BK"
-shares: 1500
-entry_price: 4.62
-stop_price: 4.50
-target_price: 4.84
+symbol: "PTTGC.BK"
+shares: 100
+entry_price: 48.50
+stop_price: 46.00
+target_price: 53.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 3: ERW.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_ERW.yaml
+# Order Template 3: KCE.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_KCE.yaml
 action: buy
-symbol: "ERW.BK"
-shares: 1800
-entry_price: 3.70
-stop_price: 3.62
-target_price: 3.84
+symbol: "KCE.BK"
+shares: 100
+entry_price: 67.00
+stop_price: 63.50
+target_price: 74.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
 
 ```yaml
-# Order Template 4: III.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_III.yaml
+# Order Template 4: PTT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTT.yaml
 action: buy
-symbol: "III.BK"
-shares: 1400
-entry_price: 4.92
-stop_price: 4.80
-target_price: 5.10
+symbol: "PTT.BK"
+shares: 100
+entry_price: 42.75
+stop_price: 40.50
+target_price: 47.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
 ```
