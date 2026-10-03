@@ -1116,7 +1116,7 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
       if (stats.atr) {
         atrStr = `${stats.atr.val.toFixed(2)} (${stats.atr.pct}%)`;
         const settings = getSettings();
-        const acct = parseFloat(settings.account_size) || 50000;
+        const acct = parseFloat(settings.account_size) || (currentMarket === 'TH' ? 30000 : 1000);
         const risk = parseFloat(settings.risk_pct) || 0.5;
         const riskAmt = acct * (risk / 100);
         const stopDistance = 2 * stats.atr.val;
@@ -1551,12 +1551,17 @@ function loadSettings() {
     saved = s ? JSON.parse(s) : null;
   } catch(e) { saved = null; }
 
-  // Restore market preference if previously selected.
-  if (saved?.market === 'TH' || saved?.market === 'US') currentMarket = saved.market;
+  // URL query parameter takes precedence over stored preference
+  const urlParamMarket = new URLSearchParams(window.location.search).get('market')?.toUpperCase();
+  if (urlParamMarket === 'TH' || urlParamMarket === 'US') {
+    currentMarket = urlParamMarket;
+  } else if (saved?.market === 'TH' || saved?.market === 'US') {
+    currentMarket = saved.market;
+  }
 
   const defaults = currentMarket === 'TH'
     ? { account: '30000', risk: '1.0', target: '2.0' }
-    : { account: '50000', risk: '0.5', target: '2.0' };
+    : { account: '1000', risk: '0.5', target: '2.0' };
   const values = saved || defaults;
   if (values.account) document.getElementById('settingAccount').value = values.account;
   if (values.risk) {
@@ -1610,7 +1615,7 @@ function getChartTheme() {
 function getSettings() {
   const defaults = currentMarket === 'TH'
     ? { account: '30000', risk: '1.0', target: '2.0' }
-    : { account: '50000', risk: '0.5', target: '2.0' };
+    : { account: '1000', risk: '0.5', target: '2.0' };
   return {
     account_size: document.getElementById('settingAccount').value || defaults.account,
     risk_pct: document.getElementById('settingRisk').value || defaults.risk,
@@ -1630,20 +1635,32 @@ function closeModal() { document.getElementById('modalOverlay').classList.remove
 
 async function setMarket(m) {
   currentMarket = m;
-  document.querySelectorAll('.mkt-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`mkt-${m}`).classList.add('active');
+  const url = new URL(window.location.href);
+  url.searchParams.set('market', m);
+  window.history.replaceState({}, '', url.toString());
 
-  // Dynamic currency label swap
+  document.querySelectorAll('.mkt-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`mkt-${m}`);
+  if (btn) btn.classList.add('active');
+
+  // Dynamic currency label swap & account size default
   const accountLabel = document.getElementById('labelAccountSize');
   if (accountLabel) {
     accountLabel.textContent = m === 'TH' ? 'Account Size (฿)' : 'Account Size ($)';
   }
+  const accInput = document.getElementById('settingAccount');
+  if (accInput) {
+    accInput.value = m === 'TH' ? '30000' : '1000';
+  }
+  saveSettings();
 
-  // Pre-fetch benchmark data for the market
+  // Pre-fetch benchmark data for the market (SPY for US, ^SET.BK for TH)
   await fetchBenchmarkData(m);
 
   await refreshHistoryList();
   await loadData();
+  await paperRefresh();
+  await loadArenaDashboard();
   if (CURRENT_DASHBOARD_TAB === 'results') await loadSignalResults();
   if (CURRENT_DASHBOARD_TAB === 'decisions') await loadTradeDecisions();
   if (CURRENT_DASHBOARD_TAB === 'edge') await loadEdgeLab();
@@ -1690,12 +1707,12 @@ async function loadData(at) {
     const step1 = RAW_DATA._step1_breadth || RAW_DATA.breadth;
     if (step1) renderBreadth(step1);
     if (RAW_DATA.exposure) renderExposure(RAW_DATA.exposure);
-    if (RAW_DATA.ibd) renderIBD(RAW_DATA.ibd);
-    if (RAW_DATA.earnings_trade) renderEarnings(RAW_DATA.earnings_trade);
-    if (RAW_DATA.breakout_plan) renderBreakoutPlan(RAW_DATA.breakout_plan);
-    if (RAW_DATA.uptrend) renderUptrend(RAW_DATA.uptrend);
-    if (RAW_DATA.downtrend) renderDowntrend(RAW_DATA.downtrend);
-    if (RAW_DATA.canslim) renderCANSLIM(RAW_DATA.canslim);
+    renderIBD(RAW_DATA.ibd);
+    renderEarnings(RAW_DATA.earnings_trade);
+    renderBreakoutPlan(RAW_DATA.breakout_plan);
+    renderUptrend(RAW_DATA.uptrend);
+    renderDowntrend(RAW_DATA.downtrend);
+    renderCANSLIM(RAW_DATA.canslim);
     renderThaiSwing(RAW_DATA.thai_swing);
     renderThaiBreadth(RAW_DATA.thai_breadth);
     renderThaiSectorHeatmap(RAW_DATA.thai_sector_heatmap);
@@ -1838,7 +1855,10 @@ async function loadRankedCandidates() {
     } else {
       const s = data.summary || {};
       const src = s.sources || {};
-      summary.innerHTML = `ผ่าน ${s.passed || 0} / ประเมิน ${s.evaluated || 0} · hold=${data.hold_style} · VCP ${src.vcp || 0} / Swing ${src.thai_swing || 0}` +
+      const srcText = currentMarket === 'TH'
+        ? `VCP ${src.vcp || 0} / Swing ${src.thai_swing || 0}`
+        : `Momentum ${src.us_momentum || 0} / VCP ${src.vcp || 0}`;
+      summary.innerHTML = `ผ่าน ${s.passed || 0} / ประเมิน ${s.evaluated || 0} · hold=${data.hold_style} · ${srcText}` +
         (data.gates_unavailable?.length ? ` · soft-unavailable: ${data.gates_unavailable.join(', ')}` : '');
     }
 
@@ -1856,10 +1876,10 @@ async function loadRankedCandidates() {
           .map(([k, g]) => `${k}:${g.status}`)
           .join(' · ') || 'all hard gates pass';
         const sym = (c.symbol || '').replace('.BK', '');
-        const src = (c.source || 'vcp').replace('thai_swing_', 'swing:');
-        return `<tr style="cursor:pointer" onclick="initChart('${c.symbol}')">
+        const src = (c.source || 'vcp').replace('thai_swing_', 'swing:').replace('us_mission', 'mission').replace('us_watchlist_', 'wl:');
+        return `<tr style="cursor:pointer" onclick="toggleDualCheckRow(${i}, '${c.symbol}')" title="คลิกเพื่อดูกราฟ ${sym}">
           <td>${i + 1}</td>
-          <td><b>${sym}</b></td>
+          <td><b>${sym}</b> 🔍</td>
           <td style="font-size:.7rem;color:var(--muted)">${src}</td>
           <td style="color:var(--cyan);font-weight:700">${(c.composite_score || 0).toFixed(1)}</td>
           <td>${c.execution_state || '—'}</td>
@@ -1869,6 +1889,15 @@ async function loadRankedCandidates() {
           <td>${bias}</td>
           <td>${earnTxt}</td>
           <td style="font-size:.72rem;color:var(--muted)">${gateBits}</td>
+        </tr>
+        <tr id="dcDetail-${i}" style="display:none">
+          <td colspan="11" style="padding:12px;background:var(--bg2);border-bottom:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-weight:bold;color:var(--cyan)">📈 ${sym} Chart & Pattern Analysis (${currentMarket === 'TH' ? 'vs SET' : 'vs S&P 500'})</span>
+              <span style="font-size:0.75rem;color:var(--muted)">คลิกที่แถวอีกครั้งเพื่อย่อกราฟ</span>
+            </div>
+            <div id="dcChart-${i}" class="chart-loading" style="height:360px;width:100%;border-radius:8px"></div>
+          </td>
         </tr>`;
       }).join('');
     }
@@ -1880,7 +1909,7 @@ async function loadRankedCandidates() {
       } else {
         rejectedEl.innerHTML = rejected.map(c => {
           const reasons = (c.reject_reasons || []).join(', ') || '—';
-          const src = (c.source || '').replace('thai_swing_', 'swing:');
+          const src = (c.source || '').replace('thai_swing_', 'swing:').replace('us_mission', 'mission').replace('us_watchlist_', 'wl:');
           return `<div><b>${(c.symbol || '').replace('.BK','')}</b> [${src}] score=${(c.composite_score || 0).toFixed(1)} — ${reasons}</div>`;
         }).join('');
       }
@@ -1889,6 +1918,93 @@ async function loadRankedCandidates() {
     console.error(e);
     if (summary) summary.textContent = 'โหลด Dual-Check ไม่สำเร็จ';
     body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--red);padding:24px">Error: ${e.message || e}</td></tr>`;
+  }
+}
+
+function toggleDualCheckRow(i, symbol) {
+  const row = document.getElementById(`dcDetail-${i}`);
+  if (!row) return;
+  const isHidden = row.style.display === 'none';
+  row.style.display = isHidden ? 'table-row' : 'none';
+  if (isHidden) {
+    initGenericChart(`dcChart-${i}`, symbol);
+  }
+}
+
+async function initGenericChart(containerId, symbol) {
+  const container = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
+  if (!container || container.dataset.loaded === '1') return;
+  container.dataset.loaded = '1';
+  try {
+    const res = await fetch(`/api/history/${encodeURIComponent(symbol)}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (!Array.isArray(data) || data.length === 0) throw new Error('No price bars found');
+    if (container._resizeObserver) {
+      container._resizeObserver.disconnect();
+      delete container._resizeObserver;
+    }
+    container.innerHTML = '';
+    container.classList.remove('chart-loading');
+    container.classList.add('chart-container');
+
+    const theme = getChartTheme();
+    const chart = LightweightCharts.createChart(container, {
+      width: container.clientWidth || 600,
+      height: container.clientHeight || 360,
+      layout: { background: { color: theme.bg }, textColor: theme.text },
+      grid: { vertLines: { color: theme.border }, horzLines: { color: theme.border } },
+      timeScale: { borderColor: theme.border },
+      rightPriceScale: { borderColor: theme.border, scaleMargins: { top: 0.08, bottom: 0.28 } },
+    });
+
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          chart.resize(width, height);
+        }
+      }
+    });
+    resizeObserver.observe(container);
+    container._resizeObserver = resizeObserver;
+
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: theme.green, borderUpColor: theme.green, wickUpColor: theme.green,
+      downColor: theme.red, borderDownColor: theme.red, wickDownColor: theme.red,
+    });
+    candleSeries.setData(data);
+
+    const volSeries = chart.addHistogramSeries({
+      color: '#26a69a', priceFormat: { type: 'volume' }, priceScaleId: 'volume',
+    });
+    chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+    volSeries.setData(data.map(d => ({
+      time: d.time, value: d.value || d.volume || 0,
+      color: d.close >= d.open ? theme.green + '50' : theme.red + '50',
+    })));
+
+    const closes = data.map(d => d.close);
+    const calcSMA = (arr, n) => arr.map((_, i) =>
+      i < n - 1 ? null : arr.slice(i - n + 1, i + 1).reduce((a, b) => a + b, 0) / n
+    );
+    const sma20 = calcSMA(closes, 20);
+    const sma50 = calcSMA(closes, 50);
+    const sma200 = calcSMA(closes, 200);
+
+    const addSMA = (vals, color, title) => {
+      const s = chart.addLineSeries({ color, lineWidth: 1, title,
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+      s.setData(data.map((d, i) => vals[i] != null ? { time: d.time, value: vals[i] } : null).filter(Boolean));
+    };
+    addSMA(sma20, '#58a6ff', 'SMA20');
+    addSMA(sma50, '#d29922', 'SMA50');
+    addSMA(sma200, '#a371f7', 'SMA200');
+
+    setupChartLegend(chart, container, symbol, data, candleSeries);
+    chart.timeScale().fitContent();
+  } catch(e) {
+    container.innerHTML = `<span style="color:var(--red)">⚠️ โหลดกราฟไม่สำเร็จ - ${e.message}</span>`;
   }
 }
 
@@ -1945,7 +2061,11 @@ function renderUptrend(u) {
 }
 
 function renderIBD(ibd) {
-  const state = ibd.market_distribution_state || {};
+  const el = document.getElementById('ibdContent');
+  if (!ibd || !ibd.market_distribution_state) {
+    if (el) el.innerHTML = `<div style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล IBD สำหรับตลาด ${currentMarket} — กรุณากด Run Fresh Analysis</div>`;
+    return;
+  }
   const action = ibd.portfolio_action || {};
   const risk = state.overall_risk_level || 'UNKNOWN';
   const indexResults = state.index_results || [];
@@ -1992,7 +2112,11 @@ function renderBreakoutPlan(plan) {
 }
 
 function recalculateAndRenderBreakout() {
-  if (!CURRENT_BREAKOUT_PLAN) return;
+  const el = document.getElementById('breakoutContent');
+  if (!CURRENT_BREAKOUT_PLAN) {
+    if (el) el.innerHTML = `<div style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีแผนการซื้อขาย — กรุณากด Run Fresh Analysis (ต้องรัน VCP ก่อน)</div>`;
+    return;
+  }
   const plan = CURRENT_BREAKOUT_PLAN;
   const actionable = plan.actionable_orders || [];
   const watchlist = plan.watchlist || [];
@@ -2136,7 +2260,11 @@ function recalculateAndRenderBreakout() {
 }
 
 function renderDowntrend(dt) {
-  if (!dt || !dt.summary) return;
+  const el = document.getElementById('downtrendContent');
+  if (!dt || !dt.summary) {
+    if (el) el.innerHTML = `<div style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล — กรุณากด Run Fresh Analysis</div>`;
+    return;
+  }
   const s = dt.summary;
   const byCap = dt.by_market_cap || {};
   const bySector = dt.by_sector || {};
@@ -2171,7 +2299,11 @@ function renderDowntrend(dt) {
 }
 
 function renderEarnings(data) {
-  const results = data.results || [];
+  const el = document.getElementById('earnContent');
+  if (!data || !data.results || !data.results.length) {
+    if (el) el.innerHTML = `<div style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล Earnings สำหรับตลาด ${currentMarket} — กรุณากด Run Fresh Analysis</div>`;
+    return;
+  }
   const summary = data.summary || {};
   const meta = data.metadata || {};
   const summaryBar = `
@@ -2410,7 +2542,14 @@ async function initSwingChart(symbol, plan) {
 }
 
 function renderCANSLIM(data) {
-  if (!data) return;
+  const container = document.getElementById('canslimContent');
+  if (!data || !data.results || data.results.length === 0) {
+    _canslimResults = [];
+    if (container) {
+      container.innerHTML = `<div style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล CANSLIM สำหรับตลาด ${currentMarket} — กรุณากด Run Fresh Analysis</div>`;
+    }
+    return;
+  }
   _canslimResults = data.results || [];
   const meta = data.metadata || {};
   const mkt = meta.market_condition || {};
@@ -3398,13 +3537,13 @@ function renderUsWatchlists(data) {
   const tabs = Object.entries(data.buckets).map(([name, rows], i) => {
     const crit = criteria[name];
     const items = (rows || []).slice(0, limit).map((r, ri) => `
-      <tr>
+      <tr style="cursor:pointer" onclick="toggleUSWatchlistChart('${name}', ${ri}, '${r.symbol}')" title="คลิกเพื่อดูกราฟ ${r.symbol}">
         <td>${ri+1}</td>
         <td>
           <span class="star-btn" onclick="toggleStar(event, '${r.symbol}')" title="${isStarred(r.symbol) ? 'เลิกติดตาม' : 'ติดตาม'}" style="font-size:0.95rem; margin-right:4px;">
             ${isStarred(r.symbol) ? '★' : '☆'}
           </span>
-          <b>${r.symbol||''}</b><br>
+          <b>${r.symbol||''}</b> 🔍<br>
           <small style="color:var(--muted)">${(r.sector||'').slice(0,18)}</small>
         </td>
         <td style="text-align:right">$${(r.price||0).toFixed(2)}</td>
@@ -3412,6 +3551,15 @@ function renderUsWatchlists(data) {
         <td style="text-align:right;color:${_pctColor(r.perf_1m)}">${(r.perf_1m||0).toFixed(1)}%</td>
         <td style="text-align:right;color:${_pctColor(r.perf_3m)}">${(r.perf_3m||0).toFixed(1)}%</td>
         <td style="text-align:right;font-weight:600;color:var(--cyan)">${r.score.toFixed(1)}</td>
+      </tr>
+      <tr id="usWlDetail-${name}-${ri}" style="display:none">
+        <td colspan="7" style="padding:10px;background:var(--bg2);border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:0.8rem;font-weight:bold;color:var(--cyan)">📈 ${r.symbol} (S&P 500 Benchmark)</span>
+            <span style="font-size:0.75rem;color:var(--muted)">คลิกที่แถวอีกครั้งเพื่อย่อกราฟ</span>
+          </div>
+          <div id="usWlChart-${name}-${ri}" class="chart-loading" style="height:320px;width:100%;border-radius:8px"></div>
+        </td>
       </tr>
     `).join('');
     return `
@@ -3435,6 +3583,16 @@ function renderUsWatchlists(data) {
       ${tabs}
     </div>
   `;
+}
+
+function toggleUSWatchlistChart(bucket, ri, symbol) {
+  const row = document.getElementById(`usWlDetail-${bucket}-${ri}`);
+  if (!row) return;
+  const isHidden = row.style.display === 'none';
+  row.style.display = isHidden ? 'table-row' : 'none';
+  if (isHidden) {
+    initGenericChart(`usWlChart-${bucket}-${ri}`, symbol);
+  }
 }
 
 function renderUsDividends(data) {
@@ -4454,17 +4612,37 @@ async function loadArenaDashboard() {
     const q = data.quant || {};
     const j = data.jules || {};
 
+    const cur = market === 'TH' ? '฿' : '$';
+    const initCap = market === 'TH' ? '฿30,000' : '$1,000';
+    const tourSub = document.getElementById('arenaTournamentSub');
+    if (tourSub) tourSub.textContent = initCap;
+
+    const rulesEl = document.getElementById('arenaRulesText');
+    if (rulesEl) {
+      if (market === 'TH') {
+        rulesEl.innerHTML = `• <strong>ทุนเริ่มต้นเท่ากัน:</strong> กองทุนละ ฿30,000.00 (รวมมูลค่าพอร์ตทดสอบ ฿60,000)<br>
+• <strong>คิดต้นทุนจริง:</strong> หักค่าคอมมิชชั่น InnovestX 0.21692% ทั้งขาซื้อและขาขาย และบังคับซื้อขายเป็น SET Board Lot 100 หุ้น<br>
+• <strong>คุมความเสี่ยงสูงสุด:</strong> จำกัดการถือสถานะพร้อมกันไม่เกิน 4 ตัวต่อกองทุน เพื่อป้องกันการทุ่มเงินซื้อตัวเดียว<br>
+• <strong>ความโปร่งใส 100%:</strong> ไม่มีใครแก้ไขตัวเลขในฐานข้อมูลได้ ทุกคำสั่งมี Timestamp, Decision Trace และบันทึกลง Git แบบเปิดเผย`;
+      } else {
+        rulesEl.innerHTML = `• <strong>ทุนเริ่มต้นเท่ากัน:</strong> กองทุนละ $1,000.00 USD (รวมมูลค่าพอร์ตทดสอบ $2,000)<br>
+• <strong>คิดต้นทุนจริง:</strong> คำนวณค่าธรรมเนียม SEC ($0.0000278/$) + FINRA TAF ($0.000166/share) + ภาษีเงินปันผล US Withholding Tax 15% (Thai W-8BEN)<br>
+• <strong>คุมความเสี่ยงสูงสุด:</strong> จำกัดการถือสถานะพร้อมกันไม่เกิน 4 ตัวต่อกองทุน (ซื้อขายแบบ Single/Fractional Share ตามจริง)<br>
+• <strong>ความโปร่งใส 100%:</strong> ทุกคำสั่งมี Timestamp, Decision Trace และบันทึกลง Git แบบเปิดเผย`;
+      }
+    }
+
     if (leaderBanner) {
+      const diffVal = data.lead_diff_usd != null && market === 'US' ? data.lead_diff_usd : (data.lead_diff_thb || 0);
       if (data.leader === 'Quant Champion') {
-        leaderBanner.innerHTML = `🏆 ผู้นำ: <span style="color:var(--cyan)">Quant Champion</span> (+฿${(data.lead_diff_thb || 0).toFixed(2)})`;
+        leaderBanner.innerHTML = `🏆 ผู้นำ: <span style="color:var(--cyan)">Quant Champion</span> (+${cur}${diffVal.toFixed(2)})`;
       } else if (data.leader === 'Jules AI Fund') {
-        leaderBanner.innerHTML = `🏆 ผู้นำ: <span style="color:var(--purple)">Jules AI Fund</span> (+฿${(data.lead_diff_thb || 0).toFixed(2)})`;
+        leaderBanner.innerHTML = `🏆 ผู้นำ: <span style="color:var(--purple)">Jules AI Fund</span> (+${cur}${diffVal.toFixed(2)})`;
       } else {
         leaderBanner.innerHTML = `🤝 สถานะ: <span style="color:var(--gold)">เสมอกัน (Tied)</span>`;
       }
     }
 
-    const cur = market === 'TH' ? '฿' : '$';
     const fmtMoney = (v) => `${cur}${(v || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     const pnlColor = (v) => (v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--muted)');
     const fmtPnl = (v) => `${v > 0 ? '+' : ''}${fmtMoney(v)}`;
