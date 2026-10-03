@@ -1,14 +1,16 @@
 {
-  "generation": 2,
+  "generation": 3,
   "total_analyzed_trades": 1,
-  "last_evolved_at": "2026-10-01T10:05:20+00:00",
-  "win_rate": 0.0,
-  "profit_factor": -1.14,
+  "last_evolved_at": "2026-10-01T01:22:28+00:00",
+  "win_rate": 1.0,
+  "profit_factor": 1.935,
   "rules": [
     "Always verify positive Q2/Q3 net profit growth before entering.",
     "Avoid stocks trading within 5 days of XD dividend record date.",
-    "Cut positions early if volume contracts by more than 60% on day 1 post-entry.",
-    "Hold winning momentum trades until 2.2R target without premature manual closure."
+    "Enforce minimum stop width floor >= 4.5% to eliminate commission drag and noise whipouts.",
+    "Two-Tier Scale-Out Engine: Take 50% profit at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
+    "Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R (lock 1.0R).",
+    "Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R."
   ],
   "sector_experience": {},
   "strengths": [
@@ -16,5 +18,7 @@
     "Strict 30k capital discipline",
     "High patience on winners (letting profits run to full target)"
   ],
-  "weaknesses_to_correct": []
+  "weaknesses_to_correct": [
+    "Do NOT use premature breakeven ratchet at +0.5R; 40%+ of winning runners retest entry before launching."
+  ]
 }

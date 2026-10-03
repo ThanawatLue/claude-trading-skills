@@ -233,44 +233,60 @@ def load_json(path: str) -> dict | list | None:
 
 
 def _collect_snapshot(market: str) -> dict:
-    """Read all latest JSON files and build a snapshot dict."""
+    """Read all latest JSON files and build a snapshot dict for the active market."""
+    market = normalize_market(market)
     breadth = load_json(
         latest_file(os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), market)
     )
     vcp = load_json(latest_file(os.path.join(REPORTS_DIR, "vcp_screener_*.json"), market))
     exposure = load_json(latest_file(os.path.join(REPORTS_DIR, "exposure_posture_*.json"), market))
-    ibd = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"))
-    )
-    earnings_trade = load_json(latest_file_any(os.path.join(REPORTS_DIR, "earnings_trade_*.json")))
     breakout_plan = load_json(
         latest_file(os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json"), market)
     )
-    uptrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json")))
-    downtrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "downtrend_analysis_*.json")))
     canslim = load_json(latest_file(os.path.join(REPORTS_DIR, "canslim_screener_*.json"), market))
-    thai_swing = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_swing_*.json")))
-    # NEW: TV-powered Thai skills
-    thai_sector_heatmap = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "thai_sector_heatmap_*.json"))
-    )
-    thai_breadth = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"))
-    )
-    thai_watchlists = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "thai_watchlists_*.json"))
-    )
-    thai_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json")))
 
-    # NEW: TV-powered US skills
-    us_sector_heatmap = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "us_sector_heatmap_*.json"))
-    )
-    us_breadth_tv = load_json(
-        latest_file_any(os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.json"))
-    )
-    us_watchlists = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_watchlists_*.json")))
-    us_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_dividends_*.json")))
+    if market == "TH":
+        ibd = None
+        earnings_trade = None
+        uptrend = None
+        downtrend = None
+        thai_swing = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_swing_*.json")))
+        thai_sector_heatmap = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "thai_sector_heatmap_*.json"))
+        )
+        thai_breadth = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"))
+        )
+        thai_watchlists = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "thai_watchlists_*.json"))
+        )
+        thai_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json")))
+        us_sector_heatmap = None
+        us_breadth_tv = None
+        us_watchlists = None
+        us_dividends = None
+        jules_us_mission = None
+    else:
+        ibd = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"))
+        )
+        earnings_trade = load_json(latest_file_any(os.path.join(REPORTS_DIR, "earnings_trade_*.json")))
+        uptrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json")))
+        downtrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "downtrend_analysis_*.json")))
+        thai_swing = None
+        thai_sector_heatmap = None
+        thai_breadth = None
+        thai_watchlists = None
+        thai_dividends = None
+        us_sector_heatmap = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "us_sector_heatmap_*.json"))
+        )
+        us_breadth_tv = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.json"))
+        )
+        us_watchlists = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_watchlists_*.json")))
+        us_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_dividends_*.json")))
+        jules_us_mission = load_json(os.path.join(BASE_DIR, "state", "jules_us_tasks", "today_mission.json"))
 
     return {
         "market": market,
@@ -292,16 +308,24 @@ def _collect_snapshot(market: str) -> dict:
         "us_breadth_tv": us_breadth_tv,
         "us_watchlists": us_watchlists,
         "us_dividends": us_dividends,
+        "jules_us_mission": jules_us_mission,
     }
 
 
 def _merge_live_snapshot(stored: dict, fresh: dict) -> dict:
-    """Overlay fresh report values on the last stored snapshot.
+    """Overlay fresh report values on the last stored snapshot without leaking cross-market keys."""
+    market = normalize_market(fresh.get("market") or stored.get("market") or "US")
+    clean_stored = dict(stored or {})
 
-    The database snapshot remains a fallback for reports that are not present
-    yet, but a report that does exist must win.  Otherwise the dashboard can
-    keep showing an old DB value after a new scanner report has been written.
-    """
+    # Strip cross-market keys from old database snapshot
+    if market == "US":
+        for k in ["thai_swing", "thai_sector_heatmap", "thai_breadth", "thai_watchlists", "thai_dividends"]:
+            clean_stored.pop(k, None)
+        if not fresh.get("exposure"):
+            clean_stored.pop("exposure", None)
+    elif market == "TH":
+        for k in ["us_sector_heatmap", "us_breadth_tv", "us_watchlists", "us_dividends", "jules_us_mission", "ibd", "earnings_trade", "uptrend", "downtrend"]:
+            clean_stored.pop(k, None)
 
     def merge(old, new):
         if isinstance(old, dict) and isinstance(new, dict):
@@ -312,7 +336,7 @@ def _merge_live_snapshot(stored: dict, fresh: dict) -> dict:
             return result
         return new if new is not None else old
 
-    return merge(stored or {}, fresh or {})
+    return merge(clean_stored, fresh or {})
 
 
 def cleanup_old_files(keep_count: int = 2):
@@ -1466,48 +1490,59 @@ def api_history(symbol):
                     return diff <= 1
                 return diff <= 2
 
+        # Normalize US class share ticker for yfinance (e.g. PBR.A -> PBR-A, BRK.B -> BRK-B)
+        yf_symbol = symbol
+        if not symbol.endswith(".BK") and "." in symbol and not symbol.startswith("^"):
+            yf_symbol = symbol.replace(".", "-")
+
         # Try local cache first if it is fresh
-        if is_cache_fresh(symbol):
-            try:
-                bars = cache.get_bars(symbol, 260)
-                if bars and len(bars) >= 50:
-                    history = [
-                        {
-                            "time": b["date"],
-                            "open": float(b["open"]),
-                            "high": float(b["high"]),
-                            "low": float(b["low"]),
-                            "close": float(b["close"]),
-                            "value": float(b["volume"]),
-                        }
-                        for b in reversed(bars)
-                    ]
-                    return jsonify(history)
-            except Exception as ce:
-                print(f"Cache lookup failed for {symbol}: {ce}", file=sys.stderr)
+        for sym_candidate in (symbol, yf_symbol):
+            if is_cache_fresh(sym_candidate):
+                try:
+                    bars = cache.get_bars(sym_candidate, 260)
+                    if bars and len(bars) >= 50:
+                        history = [
+                            {
+                                "time": b["date"],
+                                "open": float(b["open"]),
+                                "high": float(b["high"]),
+                                "low": float(b["low"]),
+                                "close": float(b["close"]),
+                                "value": float(b["volume"]),
+                            }
+                            for b in reversed(bars)
+                        ]
+                        return jsonify(history)
+                except Exception as ce:
+                    print(f"Cache lookup failed for {sym_candidate}: {ce}", file=sys.stderr)
 
         # Fallback to Live download (stale cache or no cache)
-        ticker = yf.Ticker(symbol)
+        ticker = yf.Ticker(yf_symbol)
         df = ticker.history(period="1y")
+        if df.empty and yf_symbol != symbol:
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period="1y")
+
         if df.empty:
             # If live download fails but we have some cached data, return cached data as fallback
-            try:
-                bars = cache.get_bars(symbol, 260)
-                if bars and len(bars) >= 50:
-                    history = [
-                        {
-                            "time": b["date"],
-                            "open": float(b["open"]),
-                            "high": float(b["high"]),
-                            "low": float(b["low"]),
-                            "close": float(b["close"]),
-                            "value": float(b["volume"]),
-                        }
-                        for b in reversed(bars)
-                    ]
-                    return jsonify(history)
-            except Exception:
-                pass
+            for sym_candidate in (symbol, yf_symbol):
+                try:
+                    bars = cache.get_bars(sym_candidate, 260)
+                    if bars and len(bars) >= 50:
+                        history = [
+                            {
+                                "time": b["date"],
+                                "open": float(b["open"]),
+                                "high": float(b["high"]),
+                                "low": float(b["low"]),
+                                "close": float(b["close"]),
+                                "value": float(b["volume"]),
+                            }
+                            for b in reversed(bars)
+                        ]
+                        return jsonify(history)
+                except Exception:
+                    pass
             return jsonify({"error": "No data found"}), 404
 
         df = df.reset_index()
@@ -1523,7 +1558,7 @@ def api_history(symbol):
             for _, row in df.iterrows()
         ]
 
-        # Save back to CacheManager to update the local database cache
+        # Save back to CacheManager to update the local database cache under both symbols
         try:
             db_bars = [
                 {
@@ -1537,6 +1572,8 @@ def api_history(symbol):
                 for h in history
             ]
             cache.upsert_bars(symbol, db_bars)
+            if yf_symbol != symbol:
+                cache.upsert_bars(yf_symbol, db_bars)
         except Exception as err:
             print(f"Failed to upsert updated bars for {symbol} to cache: {err}", file=sys.stderr)
 
@@ -1571,7 +1608,7 @@ def _lookup_bars_for_dual_check(symbol: str) -> list[dict] | None:
         from cache_manager import CacheManager
 
         cache = CacheManager(DB_PATH)
-        for sym in (symbol, symbol.replace(".BK", ""), f"{symbol.replace('.BK', '')}.BK"):
+        for sym in (symbol, symbol.replace(".BK", ""), f"{symbol.replace('.BK', '')}.BK", symbol.replace(".", "-")):
             if not sym:
                 continue
             bars = cache.get_bars(sym, 260)
@@ -2328,7 +2365,7 @@ def api_paper_stats():
 @app.route("/api/arena/overview")
 def api_arena_overview():
     """Head-to-head arena comparison between Systematic Quant and Jules AI Fund."""
-    market = request.args.get("market", "TH")
+    market = normalize_market(request.args.get("market", "TH"))
     quant_stats = paper_stats(market=market, portfolio="quant")
     jules_stats = paper_stats(market=market, portfolio="jules")
     quant_open = paper_list(status="open", market=market, portfolio="quant")
@@ -2336,7 +2373,9 @@ def api_arena_overview():
     quant_closed = paper_list(status="closed", market=market, portfolio="quant")
     jules_closed = paper_list(status="closed", market=market, portfolio="jules")
 
-    initial_capital = 30000.0
+    initial_capital = 1000.0 if market == "US" else 30000.0
+    currency = "USD" if market == "US" else "THB"
+    currency_symbol = "$" if market == "US" else "฿"
 
     def _fund_payload(name, stats, open_rows, closed_rows):
         realized_pnl = float(stats.get("total_realized_pnl") or 0.0)
@@ -2377,6 +2416,8 @@ def api_arena_overview():
         return {
             "name": name,
             "initial_capital": initial_capital,
+            "currency": currency,
+            "currency_symbol": currency_symbol,
             "cash_balance": round(cash_balance, 2),
             "equity": round(equity, 2),
             "net_pnl": round(net_pnl, 2),
@@ -2398,7 +2439,7 @@ def api_arena_overview():
     try:
         from scripts.jules_evolver import load_dna
 
-        j_fund["dna"] = load_dna()
+        j_fund["dna"] = load_dna(market=market)
     except Exception:
         j_fund["dna"] = {"generation": 1, "rules": []}
 
@@ -2417,7 +2458,11 @@ def api_arena_overview():
             {
                 "status": "ok",
                 "market": market,
+                "currency": currency,
+                "currency_symbol": currency_symbol,
+                "initial_capital": initial_capital,
                 "leader": leader,
+                "lead_diff": round(diff, 2),
                 "lead_diff_thb": round(diff, 2),
                 "quant": q_fund,
                 "jules": j_fund,
@@ -2586,6 +2631,33 @@ def api_patterns():
                         overbought.append(item)
 
     return jsonify({"Oversold": oversold, "Overbought": overbought})
+
+
+@app.route("/api/jules/status")
+def api_jules_status():
+    market = normalize_market(request.args.get("market", "TH"))
+    try:
+        from scripts.jules_fund import get_jules_status
+        return jsonify(get_jules_status(market))
+    except Exception as e:
+        return jsonify({"error": str(e), "market": market}), 500
+
+
+@app.route("/api/jules/scout")
+@app.route("/api/jules/mission")
+def api_jules_mission():
+    market = normalize_market(request.args.get("market", "TH"))
+    folder = "jules_us_tasks" if market == "US" else "jules_tasks"
+    mission_path = os.path.join(BASE_DIR, "state", folder, "today_mission.json")
+    mission = load_json(mission_path) or {"status": "NO_MISSION", "candidates": []}
+    return jsonify(mission)
+
+
+@app.route("/api/market-posture")
+def api_market_posture():
+    market = normalize_market(request.args.get("market", "TH"))
+    exp = load_json(latest_file(os.path.join(REPORTS_DIR, "exposure_posture_*.json"), market)) or {}
+    return jsonify({"market": market, "posture": exp.get("recommended_posture", "NEUTRAL"), "exposure": exp})
 
 
 if __name__ == "__main__":

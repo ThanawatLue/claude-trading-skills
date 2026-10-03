@@ -109,6 +109,9 @@ def _trend_template_passed(row: Mapping[str, Any]) -> bool | None:
         if price is not None and sma50 is not None and sma50 > 0:
             return price > sma50
         return None
+    # US momentum / mission candidate proxy: already passed pre-filters
+    if row.get("source", "").startswith("us_") or row.get("_dual_source", "").startswith("us_"):
+        return True
     return None
 
 
@@ -157,6 +160,60 @@ def _normalize_thai_swing_rows(snapshot: Mapping[str, Any]) -> list[dict[str, An
     return rows
 
 
+def _normalize_us_candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    # 1. From Jules US Mission (high-conviction daily mission candidates)
+    mission = snapshot.get("jules_us_mission")
+    if isinstance(mission, Mapping):
+        candidates = mission.get("candidates") or []
+        if isinstance(candidates, list):
+            for c in candidates:
+                if not isinstance(c, Mapping):
+                    continue
+                symbol = str(c.get("symbol") or "").strip()
+                if not symbol:
+                    continue
+                price = _number(c.get("price"))
+                score = _number(c.get("score")) or 90.0
+                stop = _number(c.get("stop") or c.get("suggested_stop"))
+                target = _number(c.get("target") or c.get("suggested_target"))
+                row = dict(c)
+                row["symbol"] = symbol
+                row["composite_score"] = score
+                row["execution_state"] = "Breakout"
+                row["distance_from_pivot_pct"] = 0.0
+                row["_dual_source"] = "us_mission"
+                row["source"] = "us_mission"
+                row["plan"] = {"entry": price, "stop_loss": stop, "take_profit": target}
+                rows.append(row)
+
+    # 2. From US Watchlists
+    watchlists = snapshot.get("us_watchlists")
+    if isinstance(watchlists, Mapping):
+        buckets = watchlists.get("buckets") or {}
+        if isinstance(buckets, Mapping):
+            for bucket, items in buckets.items():
+                if not isinstance(items, list):
+                    continue
+                state = "Breakout" if bucket == "momentum" else "Pre-breakout"
+                for item in items:
+                    if not isinstance(item, Mapping):
+                        continue
+                    symbol = str(item.get("symbol") or "").strip()
+                    if not symbol:
+                        continue
+                    score = _number(item.get("score")) or 85.0
+                    row = dict(item)
+                    row["symbol"] = symbol
+                    row["composite_score"] = score
+                    row["execution_state"] = state
+                    row["distance_from_pivot_pct"] = 0.0
+                    row["_dual_source"] = f"us_watchlist_{bucket}"
+                    row["source"] = f"us_watchlist_{bucket}"
+                    rows.append(row)
+    return rows
+
+
 def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -185,6 +242,13 @@ def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
                 continue
             # Only keep swing names that clear a minimum score before Dual-Check
             if (_number(row.get("composite_score")) or 0.0) < THAI_SWING_MIN_SCORE:
+                continue
+            rows.append(row)
+            seen.add(symbol)
+    elif market in {"US", "USA"}:
+        for row in _normalize_us_candidate_rows(snapshot):
+            symbol = str(row.get("symbol") or "").strip()
+            if not symbol or symbol in seen:
                 continue
             rows.append(row)
             seen.add(symbol)
@@ -250,9 +314,8 @@ def evaluate_candidate(
 
     if rs is not None and rs >= RS_MIN:
         gates["rs"] = _gate("pass", f"RS percentile {rs:.0f}")
-    elif source.startswith("thai_swing") and rs is None:
-        # Thai swing often lacks universe RS — do not hard-fail; require confluence instead
-        gates["rs"] = _gate("unavailable", "RS percentile not provided for Thai swing")
+    elif (source.startswith("thai_swing") or source.startswith("us_")) and rs is None:
+        gates["rs"] = _gate("unavailable", f"RS percentile not provided for {source}")
     else:
         detail = "missing RS percentile" if rs is None else f"RS percentile {rs:.0f} < 80"
         gates["rs"] = _gate("fail", detail, "rs_below_80")
@@ -361,6 +424,9 @@ def rank_candidates(
     exposure = snapshot.get("exposure") if isinstance(snapshot.get("exposure"), Mapping) else {}
     recommendation = str((exposure or {}).get("recommendation") or "")
     regime_allowed = recommendation == "NEW_ENTRY_ALLOWED"
+    if not regime_allowed and market in {"US", "USA"} and not recommendation:
+        regime_allowed = True
+        recommendation = "NEW_ENTRY_ALLOWED"
 
     canslim_by_symbol = _canslim_index(snapshot)
     rows = _candidate_rows(snapshot)
@@ -511,6 +577,9 @@ def rank_candidates(
                 "vcp": sum(1 for c in evaluated if c.get("source") == "vcp"),
                 "thai_swing": sum(
                     1 for c in evaluated if str(c.get("source") or "").startswith("thai_swing")
+                ),
+                "us_momentum": sum(
+                    1 for c in evaluated if str(c.get("source") or "").startswith("us_")
                 ),
             },
         },

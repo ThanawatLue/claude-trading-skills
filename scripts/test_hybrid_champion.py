@@ -12,6 +12,7 @@ from pathlib import Path
 
 DB_PATH = Path(r"d:\ex_work\tong_trading\state\vm_market_cache.db")
 
+
 def load_data():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -44,7 +45,12 @@ def load_data():
 
     bars_by_symbol = {}
     for b in bar_rows:
-        if b["open"] is not None and b["high"] is not None and b["low"] is not None and b["close"] is not None:
+        if (
+            b["open"] is not None
+            and b["high"] is not None
+            and b["low"] is not None
+            and b["close"] is not None
+        ):
             bars_by_symbol.setdefault(b["symbol"], []).append(dict(b))
 
     atr_by_symbol = {}
@@ -75,7 +81,10 @@ def load_data():
 
     return signals, bars_by_symbol, atr_by_symbol, set_ret_by_date
 
-def sim_hybrid(target_r, use_fakeout, use_momo_rs, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date):
+
+def sim_hybrid(
+    target_r, use_fakeout, use_momo_rs, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date
+):
     active_symbols = {}
     trades = []
     risk_budget = 300.0
@@ -110,17 +119,32 @@ def sim_hybrid(target_r, use_fakeout, use_momo_rs, signals, bars_by_symbol, atr_
         # Momentum RS filter (only apply to momentum/vcp, not dip)
         if use_momo_rs and src in ("thai-swing-momentum", "vcp-screener"):
             sym_full_bars = bars_by_symbol.get(sym, [])
-            bar_idx = next((i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1)
+            bar_idx = next(
+                (i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1
+            )
             if bar_idx >= 20:
-                stock_ret = (float(sym_full_bars[bar_idx]["close"]) - float(sym_full_bars[bar_idx - 20]["close"])) / float(sym_full_bars[bar_idx - 20]["close"]) * 100.0
+                stock_ret = (
+                    (
+                        float(sym_full_bars[bar_idx]["close"])
+                        - float(sym_full_bars[bar_idx - 20]["close"])
+                    )
+                    / float(sym_full_bars[bar_idx - 20]["close"])
+                    * 100.0
+                )
                 set_ret = set_ret_by_date.get(entry_bar["date"], 0.0)
                 if (stock_ret - set_ret) < -2.0:
                     continue
 
         # Dynamic ATR Stop Clamp
         sym_full_bars = bars_by_symbol.get(sym, [])
-        bar_idx = next((i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1)
-        atr_pct = atr_by_symbol.get(sym, [])[bar_idx] if (bar_idx >= 0 and bar_idx < len(atr_by_symbol.get(sym, []))) else None
+        bar_idx = next(
+            (i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1
+        )
+        atr_pct = (
+            atr_by_symbol.get(sym, [])[bar_idx]
+            if (bar_idx >= 0 and bar_idx < len(atr_by_symbol.get(sym, [])))
+            else None
+        )
         if atr_pct is not None and atr_pct > 0:
             effective_stop_pct = max(5.0, 1.5 * atr_pct)
             effective_stop_pct = min(6.5, effective_stop_pct)
@@ -150,7 +174,12 @@ def sim_hybrid(target_r, use_fakeout, use_momo_rs, signals, bars_by_symbol, atr_
         entry_vol = float(entry_bar["volume"]) if entry_bar.get("volume") else 1.0
 
         for d_idx, b in enumerate(trade_bars):
-            o, h, low_val, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+            o, h, low_val, c = (
+                float(b["open"]),
+                float(b["high"]),
+                float(b["low"]),
+                float(b["close"]),
+            )
             v = float(b["volume"]) if b.get("volume") else 0.0
             peak_high = max(peak_high, h)
             mfe_r = (peak_high - actual_entry) / risk
@@ -195,11 +224,13 @@ def sim_hybrid(target_r, use_fakeout, use_momo_rs, signals, bars_by_symbol, atr_
         realized_r = net_pnl / initial_risk_thb if initial_risk_thb > 0 else 0.0
         active_symbols[sym] = exit_bar["date"]
 
-        trades.append({
-            "realized_r": realized_r,
-            "net_pnl": net_pnl,
-            "reason": exit_reason,
-        })
+        trades.append(
+            {
+                "realized_r": realized_r,
+                "net_pnl": net_pnl,
+                "reason": exit_reason,
+            }
+        )
 
     wins = [t for t in trades if t["realized_r"] > 0]
     losses = [t for t in trades if t["realized_r"] <= 0]
@@ -222,12 +253,15 @@ def sim_hybrid(target_r, use_fakeout, use_momo_rs, signals, bars_by_symbol, atr_
         "reasons": reasons,
     }
 
+
 def main():
     signals, bars_by_symbol, atr_by_symbol, set_ret_by_date = load_data()
     print("=" * 110)
     print("                    UNIFIED HYBRID SUITE: EMPIRICAL PERFORMANCE")
     print("=" * 110)
-    print(f"{'Configuration':<55} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6} {'Exit Reasons'}")
+    print(
+        f"{'Configuration':<55} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6} {'Exit Reasons'}"
+    )
     print("-" * 110)
 
     configs = [
@@ -240,9 +274,14 @@ def main():
     ]
 
     for t_r, use_fake, use_rs, lbl in configs:
-        r = sim_hybrid(t_r, use_fake, use_rs, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date)
+        r = sim_hybrid(
+            t_r, use_fake, use_rs, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date
+        )
         reasons_str = ", ".join(f"{k}:{v}" for k, v in r["reasons"].items())
-        print(f"{lbl:<55} {r['trades']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}  {reasons_str}")
+        print(
+            f"{lbl:<55} {r['trades']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}  {reasons_str}"
+        )
+
 
 if __name__ == "__main__":
     main()

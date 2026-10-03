@@ -318,6 +318,87 @@ class TestJulesTrader(unittest.TestCase):
         self.assertEqual(res["status"], "HOLD_CASH")
         self.assertIn("Prudence gate: holding 100% cash", res["reason"])
 
+    def test_nvdr_bull_trap_rejection(self):
+        """Verify that evaluate_and_select_trade rejects candidates with NVDR bull trap divergence."""
+        candidates = [
+            {
+                "symbol": "TRAP.BK",
+                "price": 10.0,
+                "stop": 9.50,
+                "target": 12.0,
+                "sector": "Technology",
+                "score": 80.0,
+                "price_change_pct": 3.0,
+            }
+        ]
+        from scripts.nvdr_flow_filter import NVDRAnalysis
+
+        mock_nvdr = NVDRAnalysis(
+            symbol="TRAP",
+            status="DIVERGENCE_BULL_TRAP",
+            is_bull_trap=True,
+            score_modifier=-25.0,
+            net_val_1d=-50_000_000.0,
+            net_val_5d=-100_000_000.0,
+            nvdr_pct_1d=25.0,
+            details="Bull trap warning",
+        )
+
+        with patch("scripts.nvdr_flow_filter.analyze_nvdr_divergence", return_value=mock_nvdr):
+            winner, reason = jt.evaluate_and_select_trade(
+                candidates=candidates,
+                open_positions=[],
+                sector_mods={},
+                equity=30000.0,
+                cash=30000.0,
+                market="TH",
+            )
+
+        self.assertIsNone(winner)
+        self.assertIn("No candidates passed all risk", reason)
+
+    def test_nvdr_accumulation_bonus(self):
+        """Verify that evaluate_and_select_trade applies score bonus for NVDR accumulation."""
+        candidates = [
+            {
+                "symbol": "ACCUM.BK",
+                "price": 10.0,
+                "stop": 9.50,
+                "target": 12.0,
+                "sector": "Technology",
+                "score": 70.0,
+                "price_change_pct": 1.5,
+            }
+        ]
+        from scripts.nvdr_flow_filter import NVDRAnalysis
+
+        mock_nvdr = NVDRAnalysis(
+            symbol="ACCUM",
+            status="ACCUMULATION",
+            is_bull_trap=False,
+            score_modifier=15.0,
+            net_val_1d=60_000_000.0,
+            net_val_5d=150_000_000.0,
+            nvdr_pct_1d=30.0,
+            details="Institutional accumulation confirmed",
+        )
+
+        with patch("scripts.nvdr_flow_filter.analyze_nvdr_divergence", return_value=mock_nvdr):
+            winner, reason = jt.evaluate_and_select_trade(
+                candidates=candidates,
+                open_positions=[],
+                sector_mods={},
+                equity=30000.0,
+                cash=30000.0,
+                market="TH",
+            )
+
+        self.assertIsNotNone(winner)
+        self.assertEqual(winner["symbol"], "ACCUM.BK")
+        self.assertEqual(winner["final_score"], 85.0)  # 70.0 base + 15.0 nvdr bonus
+        self.assertEqual(winner["nvdr_status"], "ACCUMULATION")
+        self.assertEqual(winner["nvdr_bonus"], 15.0)
+
 
 if __name__ == "__main__":
     unittest.main()

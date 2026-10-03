@@ -406,9 +406,7 @@ def _compute_symbol_atr_pct(
         return None
 
     valid_bars = [
-        r
-        for r in rows
-        if r["high"] is not None and r["low"] is not None and r["close"] is not None
+        r for r in rows if r["high"] is not None and r["low"] is not None and r["close"] is not None
     ]
     if len(valid_bars) < 15:
         return None

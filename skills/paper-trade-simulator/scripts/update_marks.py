@@ -87,17 +87,20 @@ DEFAULT_SOURCE_RULES = {
         "early_fakeout_max_mfe_r": 0.20,
     },
     "jules_ai": {
-        "take_profit_r": 2.0,
+        "use_scale_out": True,
+        "scale_out_r": 1.5,
+        "scale_out_fraction": 0.5,
+        "take_profit_r": 2.5,
         "max_hold_days": 10,
         "time_stop_min_r": -0.5,
-        "ratchet_tiers": [
-            [0.5, 0.0],
-            [1.0, 0.5],
-            [1.5, 1.0],
-        ],
+        "velocity_stall_days": 4,
+        "velocity_min_mfe_r": 0.3,
         "early_fakeout_enabled": True,
         "early_fakeout_vol_ratio": 0.40,
         "early_fakeout_max_mfe_r": 0.20,
+        "ratchet_tiers": [
+            [2.0, 1.0],
+        ],
     },
 }
 
@@ -188,8 +191,16 @@ def _fetch_quote(symbol: str) -> dict[str, float] | None:
     try:
         import yfinance as yf
 
-        t = yf.Ticker(symbol)
-        h = t.history(period="2d")
+        yf_sym = symbol
+        # Yahoo Finance requires hyphens for US share classes (e.g. PBR.A -> PBR-A, BRK.B -> BRK-B)
+        if not yf_sym.endswith(".BK") and "." in yf_sym:
+            yf_sym = yf_sym.replace(".", "-")
+
+        t = yf.Ticker(yf_sym)
+        h = t.history(period="5d")
+        if h.empty:
+            return None
+        h = h.dropna(subset=["Close"])
         if h.empty:
             return None
         vol = (
@@ -267,15 +278,27 @@ def update_one(
     trail_stop_r = rule.get("trail_stop_r")
 
     # Native Scale-out check (if enabled and not yet completed)
-    use_scale_out = bool(rule.get("use_scale_out", False))
-    scale_info = trace.get("scale_out") or {}
-    scaled_out = bool(scale_info.get("completed"))
+    use_scale_out = bool(
+        trace.get("use_scale_out")
+        if (isinstance(trace, dict) and "use_scale_out" in trace)
+        else rule.get("use_scale_out", False)
+    )
+    scale_info = trace.get("scale_out") if isinstance(trace, dict) else {}
+    scaled_out = bool(scale_info.get("completed")) if isinstance(scale_info, dict) else False
     scale_out_result = None
 
     stop_price = float(row["stop_price"])
     if use_scale_out and not scaled_out and risk_per_share > 0:
-        scale_out_r = float(rule.get("scale_out_r", 1.2))
-        scale_fraction = float(rule.get("scale_out_fraction", 0.5))
+        scale_out_r = float(
+            trace.get("scale_out_r")
+            if (isinstance(trace, dict) and trace.get("scale_out_r") is not None)
+            else rule.get("scale_out_r", 1.5)
+        )
+        scale_fraction = float(
+            trace.get("scale_out_fraction")
+            if (isinstance(trace, dict) and trace.get("scale_out_fraction") is not None)
+            else rule.get("scale_out_fraction", 0.5)
+        )
         if side == "long":
             t1_price = entry + (risk_per_share * scale_out_r)
             hit_t1 = price >= t1_price or mfe_r >= scale_out_r or r_mult >= scale_out_r
@@ -293,6 +316,21 @@ def update_one(
             )
             stop_price = float(scale_out_result.get("new_stop", stop_price))
             scaled_out = True
+            try:
+                from scripts.notify_service import notify_scale_out
+
+                market_val = row["market"] if "market" in row.keys() else "TH"
+                notify_scale_out(
+                    symbol=row["symbol"],
+                    shares_closed=int(scale_out_result.get("shares_closed", 0)),
+                    total_shares=int(row["shares"]),
+                    scale_price=scale_price,
+                    pnl=float(scale_out_result.get("scale_pnl") or 0.0),
+                    new_stop=stop_price,
+                    market=market_val,
+                )
+            except Exception as notify_err:
+                logger.debug("Scale out notification skipped: %s", notify_err)
 
     # Multi-tier MFE Ratchet or classic trail_after_r
     if ratchet_tiers and risk_per_share > 0:

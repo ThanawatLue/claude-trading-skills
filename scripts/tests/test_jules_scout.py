@@ -45,9 +45,37 @@ class TestJulesScout(unittest.TestCase):
         self.assertTrue(js.MISSION_JSON.exists())
 
         content = js.MISSION_MD.read_text(encoding="utf-8")
-        self.assertIn("Jules AI Fund: Daily Mission", content)
+        self.assertIn("Jules AI Fund (TH): Daily Mission", content)
         self.assertIn("Trader DNA Memory", content)
         self.assertIn("Order Templates", content)
+
+    def test_get_latest_intraday_candidates(self):
+        import json
+
+        tasks_dir, _, _, _ = js.get_mission_paths("TH")
+        intraday_file = tasks_dir / "intraday_candidates.json"
+        mock_data = {
+            "candidates": [
+                {
+                    "symbol": "INTRADAY_TEST",
+                    "price": 25.0,
+                    "score": 88.0,
+                    "highlights": "ORB Breakout",
+                    "suggested_stop": 23.8,
+                    "suggested_target": 27.5,
+                }
+            ]
+        }
+        intraday_file.write_text(json.dumps(mock_data), encoding="utf-8")
+        try:
+            cands = js.get_latest_intraday_candidates("TH")
+            self.assertEqual(len(cands), 1)
+            self.assertEqual(cands[0]["symbol"], "INTRADAY_TEST")
+            self.assertEqual(cands[0]["score"], 88.0)
+            self.assertEqual(cands[0]["source"], "Intraday ORB Scanner")
+        finally:
+            if intraday_file.exists():
+                intraday_file.unlink()
 
 
 if __name__ == "__main__":

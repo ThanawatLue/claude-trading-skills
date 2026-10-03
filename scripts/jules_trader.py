@@ -116,6 +116,27 @@ def round_to_set_tick(price: float, direction: str = "down") -> float:
     return float((val / tick).to_integral_value(rounding=rounding) * tick)
 
 
+def calculate_order_expiry(now_dt: datetime, market: str = "TH") -> datetime:
+    """Calculate order expiration TTL.
+
+    Ensures pre-market staged orders remain valid through the market opening execution
+    window rather than expiring prematurely before the opening bell.
+    - TH: Valid at least through 11:00 ICT (04:00 UTC) or now + 45m.
+    - US: Valid at least through 10:30 ET (15:00 UTC) or now + 45m.
+    """
+    default_expiry = datetime.fromtimestamp(now_dt.timestamp() + 2700, tz=timezone.utc)
+    m = market.upper()
+    if m == "TH":
+        today_open_cutoff = now_dt.replace(hour=4, minute=0, second=0, microsecond=0)
+        if now_dt < today_open_cutoff:
+            return max(default_expiry, today_open_cutoff)
+    elif m == "US":
+        today_open_cutoff = now_dt.replace(hour=15, minute=0, second=0, microsecond=0)
+        if now_dt < today_open_cutoff:
+            return max(default_expiry, today_open_cutoff)
+    return default_expiry
+
+
 def init_decision_ledger(db_path: Path | None = None) -> None:
     """Initialize SQLite decision ledger table for guaranteed idempotency."""
     if db_path is None:
@@ -340,16 +361,18 @@ def calculate_volatility_sizing(
         stop = round(stop, 2)
         risk_per_share = max(0.01, round(price - stop, 2))
         target_dollar_risk = equity * BASE_RISK_PER_TRADE_PCT * risk_mult
-        raw_risk_shares = int(target_dollar_risk / risk_per_share) if risk_per_share > 0 else 1
+        raw_risk_shares = int(target_dollar_risk / risk_per_share) if risk_per_share > 0 else 0
 
         max_capital_for_trade = min(MAX_SLOT_BUDGET_US, cash * 0.95)
         max_cap_shares = int(max_capital_for_trade / price) if price > 0 else 0
 
         allowed_shares = min(raw_risk_shares, max_cap_shares)
-        shares = max(1, allowed_shares)
+        if allowed_shares <= 0:
+            return 0, 0.0
+        shares = allowed_shares
         est_cost = round(price * shares, 2)
         if est_cost > cash and price > 0:
-            shares = max(1, int(cash / price))
+            shares = int(cash / price)
             est_cost = round(price * shares, 2)
         return shares, est_cost
 
@@ -361,7 +384,7 @@ def calculate_volatility_sizing(
     # 1.0% portfolio risk * risk_multiplier
     target_dollar_risk = equity * BASE_RISK_PER_TRADE_PCT * risk_mult
     raw_risk_shares = (
-        int(target_dollar_risk / risk_per_share_float) if risk_per_share_float > 0 else 100
+        int(target_dollar_risk / risk_per_share_float) if risk_per_share_float > 0 else 0
     )
 
     # Capital constraint (max slot budget ฿7,500 or remaining cash)
@@ -369,7 +392,9 @@ def calculate_volatility_sizing(
     max_cap_shares = int(max_capital_for_trade / price) if price > 0 else 0
 
     allowed_shares = min(raw_risk_shares, max_cap_shares)
-    board_lot_shares = max(100, (allowed_shares // 100) * 100)
+    board_lot_shares = (allowed_shares // 100) * 100
+    if board_lot_shares < 100:
+        return 0, 0.0
 
     est_cost = round(price * board_lot_shares, 2)
     if est_cost > cash and price > 0:
@@ -432,20 +457,37 @@ def evaluate_and_select_trade(
             logger.info("Candidate %s rejected: sector %s already active in portfolio", sym, sector)
             continue
 
-        # Risk-to-Reward Gate: Minimum 1.5R required
-        risk_dist = entry_tick - stop_tick
-        reward_dist = target_tick - entry_tick
+        # Stop Width Sanity Gate: Enforce minimum 4.5% stop width floor to eliminate noise whipouts
+        raw_stop_pct = ((entry_tick - stop_tick) / entry_tick) * 100.0
+        if raw_stop_pct < 4.5:
+            # Clamp stop to 4.5% floor to prevent intraday noise whipouts & fee drag
+            if market_clean == "US":
+                stop_tick = round(entry_tick * 0.955, 2)
+            else:
+                stop_tick = round_to_set_tick(entry_tick * 0.955, "down")
+            risk_dist = entry_tick - stop_tick
+            stop_pct = (risk_dist / entry_tick) * 100.0
+        else:
+            risk_dist = entry_tick - stop_tick
+            stop_pct = raw_stop_pct
+
+        if stop_pct > 7.5:
+            logger.info("Candidate %s rejected: stop width %.1f%% exceeds 7.5%% max", sym, stop_pct)
+            continue
+
+        # Two-Tier Target Calculation: T1 = 1.5R (50% scale-out), T2 = 2.5R (runner)
+        if market_clean == "US":
+            t1_price = round(entry_tick + (risk_dist * 1.5), 2)
+            t2_price = round(entry_tick + (risk_dist * 2.5), 2)
+        else:
+            t1_price = round_to_set_tick(entry_tick + (risk_dist * 1.5), "down")
+            t2_price = round_to_set_tick(entry_tick + (risk_dist * 2.5), "down")
+
+        final_target = max(t2_price, target_tick)
+        reward_dist = final_target - entry_tick
         rr_ratio = reward_dist / risk_dist if risk_dist > 0 else 0.0
         if rr_ratio < 1.45:
             logger.info("Candidate %s rejected: R/R ratio %.2f < 1.5R", sym, rr_ratio)
-            continue
-
-        # Stop Width Sanity Gate: Must be between 2.0% and 6.5%
-        stop_pct = (risk_dist / entry_tick) * 100.0
-        if stop_pct < 1.9 or stop_pct > 6.6:
-            logger.info(
-                "Candidate %s rejected: stop width %.1f%% outside 2.0-6.5%% band", sym, stop_pct
-            )
             continue
 
         # Sector Momentum Modifier (for TH)
@@ -454,8 +496,31 @@ def evaluate_and_select_trade(
             logger.info("Candidate %s rejected: lagging sector %s (-25 pts penalty)", sym, sector)
             continue
 
+        # NVDR Institutional Flow Divergence Filter (for TH)
+        nvdr_bonus = 0.0
+        nvdr_status = "N/A"
+        if market_clean == "TH":
+            try:
+                from scripts.nvdr_flow_filter import analyze_nvdr_divergence
+
+                price_chg = float(cand.get("price_change_pct") or 1.0)
+                nvdr_res = analyze_nvdr_divergence(
+                    sym, current_price=entry_tick, price_change_pct=price_chg
+                )
+                nvdr_bonus = nvdr_res.score_modifier
+                nvdr_status = nvdr_res.status
+                if nvdr_res.is_bull_trap:
+                    logger.info(
+                        "Candidate %s rejected: NVDR bull trap divergence (%s)",
+                        sym,
+                        nvdr_res.details,
+                    )
+                    continue
+            except Exception as e:
+                logger.debug("NVDR filter check failed for %s: %s", sym, e)
+
         base_score = float(cand.get("score") or 60.0)
-        final_score = base_score + sector_bonus
+        final_score = base_score + sector_bonus + nvdr_bonus
 
         shares, est_cost = calculate_volatility_sizing(
             entry_tick, stop_tick, equity, cash, risk_mult, market=market_clean
@@ -480,13 +545,17 @@ def evaluate_and_select_trade(
                 "shares": shares,
                 "entry_price": entry_tick,
                 "stop_price": stop_tick,
-                "target_price": target_tick,
+                "target_price": final_target,
+                "t1_price": t1_price,
+                "t2_price": t2_price,
                 "rr_ratio": rr_ratio,
                 "final_score": final_score,
+                "nvdr_status": nvdr_status,
+                "nvdr_bonus": nvdr_bonus,
                 "est_cost": est_cost,
                 "sector": sector,
                 "cluster": cluster,
-                "target_note": cand.get("target_note", f"{curr_sym}{target_tick:.2f}"),
+                "target_note": f"T1: {curr_sym}{t1_price:.2f} (1.5R) | T2: {curr_sym}{t2_price:.2f} (2.5R)",
             }
         )
 
@@ -625,8 +694,8 @@ def run_autonomous_decision(
     sym = winner["symbol"]
     order_id = f"JULES-{market_clean}-{datetime.now().strftime('%Y%m%d')}-{sym.replace('.BK', '')}"
     now_dt = datetime.now(timezone.utc)
-    # Order valid for opening window (TTL 45 mins)
-    expires_dt = datetime.fromtimestamp(now_dt.timestamp() + 2700, tz=timezone.utc)
+    # Order valid for opening window (TTL aware of market open)
+    expires_dt = calculate_order_expiry(now_dt, market=market_clean)
 
     order_payload = {
         "order_id": order_id,
@@ -637,6 +706,8 @@ def run_autonomous_decision(
         "entry_price": winner["entry_price"],
         "stop_price": winner["stop_price"],
         "target_price": winner["target_price"],
+        "t1_price": winner.get("t1_price"),
+        "t2_price": winner.get("t2_price"),
         "max_chase_pct": MAX_CHASE_PCT,
         "created_at": now_dt.isoformat(),
         "expires_at": expires_dt.isoformat(),
@@ -646,7 +717,7 @@ def run_autonomous_decision(
         "thesis": (
             f"Autonomous conviction buy: {winner['candidate'].get('highlights', '')} | "
             f"R/R: {winner['rr_ratio']:.2f}R | Sector/Cluster: {winner.get('cluster') or winner['sector']} | "
-            f"Plan: MFE +0.5R ratchet to BE immediately"
+            f"Plan: Scale-out 50% at T1 ({curr_sym}{winner.get('t1_price', 0):.2f}, 1.5R), shift stop to BE, trail runner to T2 ({curr_sym}{winner.get('t2_price', 0):.2f}, 2.5R)"
         ),
     }
 
@@ -678,6 +749,13 @@ def run_autonomous_decision(
         payload=order_payload,
         market=market_clean,
     )
+
+    try:
+        from scripts.notify_service import notify_order_staged
+
+        notify_order_staged(order_payload)
+    except Exception as notify_err:
+        logger.debug("Notification dispatch skipped or failed: %s", notify_err)
 
     logger.info("Successfully staged order for %s -> %s", sym, active_order_path)
     return {"status": "ORDER_STAGED", "symbol": sym, "order": order_payload}

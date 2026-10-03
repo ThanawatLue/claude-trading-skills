@@ -29,12 +29,10 @@ def _symbol_variants(symbol: str) -> list[str]:
     if not symbol:
         return []
     variants = [symbol]
+    if "." in symbol and not symbol.endswith(".BK"):
+        variants.append(symbol.replace(".", "-"))
     if symbol.endswith(".BK"):
         variants.append(symbol[:-3])
-    else:
-        # Thai tickers often need .BK for yfinance
-        if symbol.isalpha() and symbol.upper() == symbol and len(symbol) <= 10:
-            variants.append(f"{symbol}.BK")
     # de-dupe preserve order
     seen: set[str] = set()
     out: list[str] = []

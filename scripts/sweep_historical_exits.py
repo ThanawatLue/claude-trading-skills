@@ -131,7 +131,12 @@ def run_sweep(db_path: Path, configs: list[ReplayConfig]):
             exit_bar = trade_bars[-1]
 
             for d_idx, b in enumerate(trade_bars):
-                o, h, low_val, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+                o, h, low_val, c = (
+                    float(b["open"]),
+                    float(b["high"]),
+                    float(b["low"]),
+                    float(b["close"]),
+                )
                 peak_high = max(peak_high, h)
                 mfe_r = (peak_high - actual_entry) / risk if risk > 0 else 0.0
 

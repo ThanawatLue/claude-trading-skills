@@ -73,10 +73,8 @@ def get_initial_capital(market: str = "TH") -> float:
 
 def get_orders_dirs(market: str = "TH") -> tuple[Path, Path, Path]:
     """Return (orders_dir, processed_dir, quarantine_dir) for the given market."""
-    if market.upper() == "US":
-        base = ORDERS_DIR_US
-        return base, base / "processed", base / "quarantine"
-    return ORDERS_DIR, PROCESSED_ORDERS_DIR, QUARANTINE_ORDERS_DIR
+    base = ORDERS_DIR_US if market.upper() == "US" else ORDERS_DIR
+    return base, base / "processed", base / "quarantine"
 
 
 def calculate_us_regulatory_fees(proceeds: float, shares: int) -> float:
@@ -263,11 +261,12 @@ def execute_buy(
         "thesis": thesis or "Fundamental and catalyst momentum thesis",
         "timestamp": isoformat_seconds(),
         "fee_bps": fee_bps,
-        "entry_rule": "jules_discretionary_entry",
+        "entry_rule": "jules_two_tier_momentum",
+        "use_scale_out": True,
+        "scale_out_r": 1.5,
+        "scale_out_fraction": 0.5,
         "ratchet_tiers": [
-            [0.5, 0.0],
-            [1.0, 0.5],
-            [1.5, 1.0],
+            [2.0, 1.0],
         ],
     }
 
@@ -438,6 +437,18 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
             results.append({"file": p.name, "status": "executed", "result": res})
             dest = processed_dir / f"{p.stem}_{int(datetime.now().timestamp())}{p.suffix}"
             shutil.move(str(p), str(dest))
+            staged_mirror = orders_dir / "staged" / p.name
+            if staged_mirror.exists():
+                try:
+                    staged_mirror.unlink()
+                except Exception:
+                    pass
+            try:
+                from scripts.notify_service import notify_order_executed
+
+                notify_order_executed(data, res)
+            except Exception as notify_err:
+                logger.debug("Notification dispatch skipped or failed: %s", notify_err)
         except Exception as e:
             logger.error("Failed to process order file %s: %s", p.name, e)
             results.append({"file": p.name, "status": "error", "error": str(e)})
@@ -447,12 +458,24 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
             )
             try:
                 shutil.move(str(p), str(quarantine_dest))
+                staged_mirror = orders_dir / "staged" / p.name
+                if staged_mirror.exists():
+                    try:
+                        staged_mirror.unlink()
+                    except Exception:
+                        pass
                 err_file = quarantine_dest.with_suffix(".error.json")
                 err_file.write_text(
                     json.dumps(
                         {"error": str(e), "file": p.name, "timestamp": datetime.now().isoformat()}
                     )
                 )
+                try:
+                    from scripts.notify_service import notify_order_quarantined
+
+                    notify_order_quarantined(symbol=symbol, reason=str(e), market=market_clean)
+                except Exception as notify_err:
+                    logger.debug("Notification dispatch skipped or failed: %s", notify_err)
             except Exception as move_err:
                 logger.error("Failed to quarantine order %s: %s", p.name, move_err)
 

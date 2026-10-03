@@ -75,34 +75,43 @@ class TestJulesRatchetAndResistance(unittest.TestCase):
             shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_jules_ratchet_breakeven_trigger(self):
-        """Verify that when a jules_ai trade reaches +0.55R, the stop is moved to breakeven (entry price),
-        and subsequent reversal closes it as closed_ratchet without capital loss."""
+        """Verify that when a jules_ai trade reaches T1 (+1.5R), 50% is scaled out,
+        stop is moved to breakeven (+0.05R buffer), and subsequent reversal closes
+        the remaining runner as closed_ratchet while preserving T1 profits."""
         trade = jf.execute_buy(
             symbol="TEST.BK",
             shares=500,
             entry=10.0,
             stop=9.0,  # Risk = 1.0 THB per share
-            target=12.0,
-            thesis="Testing breakeven ratchet",
+            target=12.5,
+            thesis="Testing two-tier scale-out and breakeven ratchet",
         )
         self.assertEqual(trade["symbol"], "TEST.BK")
         self.assertEqual(trade["source"], "jules_ai")
 
-        # Check that ratchet_tiers is registered in decision_trace
         pos = paper_trade.list_positions(status_filter="open")[0]
         self.assertEqual(pos["stop_price"], 9.0)
 
-        # Step 1: Price rises to 10.55 (+0.55R) -> should trigger Tier 1 [0.5, 0.0] -> stop moved to 10.0 (entry)
-        with patch("update_marks._now_iso", return_value="2026-09-15T09:30:00+00:00"):
+        # Step 0: Price rises to 10.55 (+0.55R) -> NO premature ratchet trap! Stop stays at 9.0
+        with patch("update_marks._now_iso", return_value="2026-09-15T09:15:00+00:00"):
             with patch("update_marks._fetch_price", return_value=10.55):
+                res0 = update_marks.update_all()
+        self.assertEqual(res0[0]["action"], "marked")
+        pos_after_half_r = paper_trade.list_positions(status_filter="open")[0]
+        self.assertEqual(pos_after_half_r["stop_price"], 9.0)  # Preserved initial stop!
+
+        # Step 1: Price reaches T1 at 11.55 (+1.55R) -> triggers 50% scale-out and shifts stop to breakeven
+        with patch("update_marks._now_iso", return_value="2026-09-15T09:30:00+00:00"):
+            with patch("update_marks._fetch_price", return_value=11.55):
                 res1 = update_marks.update_all()
 
         self.assertEqual(res1[0]["action"], "marked")
-        pos_after_rise = paper_trade.list_positions(status_filter="open")[0]
-        # Stop should now be ratcheted to entry price (10.0)
-        self.assertAlmostEqual(pos_after_rise["stop_price"], 10.0)
+        self.assertIn("scale_out", res1[0])
+        pos_after_t1 = paper_trade.list_positions(status_filter="open")[0]
+        # Stop should now be ratcheted to breakeven (10.0 + 0.05*1.0 = 10.05)
+        self.assertAlmostEqual(pos_after_t1["stop_price"], 10.05)
 
-        # Step 2: Market maker dumps price back to 9.80 (below ratcheted stop 10.0)
+        # Step 2: Price dumps back to 9.80 (below ratcheted stop 10.05)
         with patch("update_marks._now_iso", return_value="2026-09-15T10:00:00+00:00"):
             with patch("update_marks._fetch_price", return_value=9.80):
                 res2 = update_marks.update_all()
@@ -110,38 +119,38 @@ class TestJulesRatchetAndResistance(unittest.TestCase):
         self.assertEqual(res2[0]["action"], "auto_closed_ratchet")
         closed_pos = paper_trade.list_positions(status_filter="closed")[0]
         self.assertEqual(closed_pos["status"], "closed_ratchet")
-        self.assertAlmostEqual(closed_pos["exit_price"], 10.0)
-        # Gross loss is 0 (exited at entry price 10.0), net loss is only tiny transaction fees
-        self.assertGreaterEqual(closed_pos["realized_pnl"], -25.0)
+        self.assertAlmostEqual(closed_pos["exit_price"], 10.05)
+        # Net PnL is positive because 50% scale-out was banked at 1.5R!
+        self.assertGreater(closed_pos["realized_pnl"], 100.0)
 
     def test_jules_ratchet_tier2_lock_profit(self):
-        """Verify that reaching +1.1R raises stop to +0.5R."""
+        """Verify that runner reaching +2.05R raises stop to +1.0R."""
         jf.execute_buy(
             symbol="TEST2.BK",
             shares=500,
             entry=10.0,
             stop=9.0,  # Risk = 1.0 THB
-            target=12.0,
-            thesis="Testing tier 2 ratchet",
+            target=12.5,
+            thesis="Testing runner ratchet at 2.0R",
         )
 
-        # Price rises to 11.10 (+1.1R) -> triggers Tier 2 [1.0, 0.5] -> stop moves to 10.0 + 0.5*1.0 = 10.5
+        # Price rises to 12.05 (+2.05R) -> triggers scale-out at 1.5R and runner tier [2.0, 1.0] -> stop moves to 10.0 + 1.0*1.0 = 11.0
         with patch("update_marks._now_iso", return_value="2026-09-15T09:30:00+00:00"):
-            with patch("update_marks._fetch_price", return_value=11.10):
+            with patch("update_marks._fetch_price", return_value=12.05):
                 update_marks.update_all()
 
         pos = paper_trade.list_positions(status_filter="open")[0]
-        self.assertAlmostEqual(pos["stop_price"], 10.5)
+        self.assertAlmostEqual(pos["stop_price"], 11.0)
 
-        # Price drops to 10.30 -> auto-closes at 10.5 with locked profit
+        # Price drops to 10.30 -> auto-closes at 11.0 with locked profit
         with patch("update_marks._now_iso", return_value="2026-09-15T10:00:00+00:00"):
             with patch("update_marks._fetch_price", return_value=10.30):
                 res = update_marks.update_all()
 
         self.assertEqual(res[0]["action"], "auto_closed_ratchet")
         closed = paper_trade.list_positions(status_filter="closed")[0]
-        self.assertAlmostEqual(closed["exit_price"], 10.5)
-        self.assertGreater(closed["realized_pnl"], 200.0)
+        self.assertAlmostEqual(closed["exit_price"], 11.0)
+        self.assertGreater(closed["realized_pnl"], 300.0)
 
     def test_resistance_aware_target_calculation(self):
         """Verify that find_nearest_resistance detects swing high and caps target at resistance pivot."""

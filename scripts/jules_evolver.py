@@ -90,16 +90,24 @@ def load_dna(market: str = "TH", memory_dir: Path | None = None) -> dict[str, An
         rules = [
             "Always verify positive revenue acceleration or sector momentum before entering.",
             "Avoid entering high-beta earnings plays immediately prior to binary release.",
-            "Cut positions early if volume contracts significantly on breakdown below pivot.",
-            "Hold winning momentum trades until 2.0R target without premature manual closure.",
+            "Enforce minimum stop width floor >= 4.5% to protect against intraday noise whipouts.",
+            "Two-Tier Scale-Out: Scale-out 50% at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
+            "Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R.",
+            "Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R.",
         ]
-        strengths = ["Discretionary US catalyst detection", "Strict $1,000 USD cash management"]
+        strengths = [
+            "Discretionary US catalyst detection",
+            "Strict $1,000 USD cash management",
+            "Single-share execution with accurate SEC/TAF regulatory fee models",
+        ]
     else:
         rules = [
             "Always verify positive Q2/Q3 net profit growth before entering.",
             "Avoid stocks trading within 5 days of XD dividend record date.",
-            "Cut positions early if volume contracts by more than 60% on day 1 post-entry.",
-            "Hold winning momentum trades until 2.2R target without premature manual closure.",
+            "Enforce minimum stop width floor >= 4.5% to eliminate commission drag and noise whipouts.",
+            "Two-Tier Scale-Out: Take 50% profit at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
+            "Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R.",
+            "Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R.",
         ]
         strengths = ["Discretionary catalyst detection", "Strict 30,000 THB cash management"]
 

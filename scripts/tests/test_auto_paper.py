@@ -729,7 +729,7 @@ def test_dynamic_atr_stop_clamping(tmp_path: Path) -> None:
             )"""
         )
         for d in range(1, 21):
-            dt = f"2026-06-{d:02d}" if d <= 10 else f"2026-07-{(d-10):02d}"
+            dt = f"2026-06-{d:02d}" if d <= 10 else f"2026-07-{(d - 10):02d}"
             conn.execute(
                 "INSERT INTO price_bar VALUES (?, ?, ?, ?, ?, ?, ?)",
                 ("ATRTEST.BK", dt, 100.0, 102.0, 98.0, 100.0, 500000.0),
@@ -779,7 +779,7 @@ def test_sector_rs_alignment_filter(tmp_path: Path) -> None:
             )"""
         )
         for d in range(1, 22):
-            dt = f"2026-06-{d:02d}" if d <= 11 else f"2026-07-{(d-11):02d}"
+            dt = f"2026-06-{d:02d}" if d <= 11 else f"2026-07-{(d - 11):02d}"
             p_set = 1000.0 if d == 1 else 1050.0
             conn.execute(
                 "INSERT INTO price_bar VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -842,4 +842,3 @@ def test_sector_rs_alignment_filter(tmp_path: Path) -> None:
         diag = auto_paper.explain_candidates(conn, config)
         weak_diag = next(s for s in diag["skipped"] if s["symbol"] == "WEAK.BK")
         assert "weak_sector_rs" in weak_diag["reasons"]
-

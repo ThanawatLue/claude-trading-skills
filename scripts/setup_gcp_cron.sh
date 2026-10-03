@@ -33,15 +33,29 @@ MARKS_CMD="cd \"$PROJECT_ROOT\" && mkdir -p logs && curl -fsS -X POST --max-time
 CRON_TH_MARKS="30 3-10 * * 1-5 $MARKS_CMD"
 CRON_US_MARKS="30 14 * * 1-5 $MARKS_CMD"
 
-# Jules AI Autonomous Fund schedules (UTC times for ICT Bangkok hours):
+# Jules AI Autonomous Fund TH schedules (UTC times for ICT Bangkok hours):
 # 08:30 ICT -> 01:30 UTC: Morning Scout & Daily Mission Publisher
-CRON_JULES_SCOUT="30 1 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_morning_scout.sh"
+CRON_JULES_SCOUT="30 1 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_morning_scout.sh TH"
 # 09:40 ICT -> 02:40 UTC: Autonomous Decision Maker & Order Staging
-CRON_JULES_DECIDE="40 2 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_auto_decision.sh"
+CRON_JULES_DECIDE="40 2 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_auto_decision.sh TH"
 # 10:15-16:45 ICT -> 03:15-09:45 UTC: Check and execute pending orders (skip 10:00 ATO auction)
-CRON_JULES_ORDERS="15,30,45 3-9 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh"
+CRON_JULES_ORDERS="15,30,45 3-9 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh TH"
+# 10:45 ICT -> 03:45 UTC: Intraday ORB Breakout & Volume Surge Scanner
+CRON_JULES_TH_INTRADAY="45 3 * * 1-5 cd \"$PROJECT_ROOT\" && uv run python scripts/intraday_breakout_scanner.py scan --market TH >> \"$PROJECT_ROOT/logs/gcp_intraday_scan_TH.log\" 2>&1"
 # 17:05 ICT -> 10:05 UTC: Post-Market Evolutionary Review & Trader DNA sync
-CRON_JULES_EVOLVE="5 10 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_post_market.sh"
+CRON_JULES_EVOLVE="5 10 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_post_market.sh TH"
+
+# Jules AI Autonomous Fund US schedules (UTC times for US Regular Hours):
+# 12:30 UTC (19:30 ICT / 08:30 ET): US Pre-Market Scout
+CRON_JULES_US_SCOUT="30 12 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_morning_scout.sh US"
+# 13:10 UTC (20:10 ICT / 09:10 ET): US Decision Maker & Order Staging
+CRON_JULES_US_DECIDE="10 13 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_auto_decision.sh US"
+# 14:15 UTC (21:15 ICT / 10:15 ET): US Intraday ORB Breakout & Volume Surge Scanner
+CRON_JULES_US_INTRADAY="15 14 * * 1-5 cd \"$PROJECT_ROOT\" && uv run python scripts/intraday_breakout_scanner.py scan --market US >> \"$PROJECT_ROOT/logs/gcp_intraday_scan_US.log\" 2>&1"
+# 14:15-19:45 UTC (21:15-02:45 ICT): US Order execution (skip 09:30 ET opening cross)
+CRON_JULES_US_ORDERS="15,45 14-19 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh US"
+# 20:15 UTC (03:15 ICT / 16:15 ET): US Post-Market Evolution & DNA sync
+CRON_JULES_US_EVOLVE="15 20 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_post_market.sh US"
 
 CURRENT_CRON=$(mktemp)
 CLEAN_CRON=$(mktemp)
@@ -91,6 +105,7 @@ awk '
     /run_gcp_morning_scout\.sh/ { next }
     /run_gcp_auto_decision\.sh/ { next }
     /run_gcp_order_processor\.sh/ { next }
+    /intraday_breakout_scanner\.py/ { next }
     /run_gcp_post_market\.sh/ { next }
     { print }
 ' "$CURRENT_CRON" > "$CLEAN_CRON"
@@ -109,14 +124,26 @@ awk '
     echo "$CRON_US_PIPE"
     echo "# Automated Paper Mark Updates (US Market)"
     echo "$CRON_US_MARKS"
-    echo "# Jules AI Autonomous Fund: Morning Scout (08:30 ICT)"
+    echo "# Jules AI Autonomous Fund TH: Morning Scout (08:30 ICT)"
     echo "$CRON_JULES_SCOUT"
-    echo "# Jules AI Autonomous Fund: Decision Maker (09:40 ICT)"
+    echo "# Jules AI Autonomous Fund TH: Decision Maker (09:40 ICT)"
     echo "$CRON_JULES_DECIDE"
-    echo "# Jules AI Autonomous Fund: Order Processor (10:15-16:45 ICT)"
+    echo "# Jules AI Autonomous Fund TH: Order Processor (10:15-16:45 ICT)"
     echo "$CRON_JULES_ORDERS"
-    echo "# Jules AI Autonomous Fund: Post-Market Evolution (17:05 ICT)"
+    echo "# Jules AI Autonomous Fund TH: Intraday ORB Breakout Scanner (10:45 ICT)"
+    echo "$CRON_JULES_TH_INTRADAY"
+    echo "# Jules AI Autonomous Fund TH: Post-Market Evolution (17:05 ICT)"
     echo "$CRON_JULES_EVOLVE"
+    echo "# Jules AI Autonomous Fund US: Pre-Market Scout (12:30 UTC / 19:30 ICT)"
+    echo "$CRON_JULES_US_SCOUT"
+    echo "# Jules AI Autonomous Fund US: Decision Maker (13:10 UTC / 20:10 ICT)"
+    echo "$CRON_JULES_US_DECIDE"
+    echo "# Jules AI Autonomous Fund US: Intraday ORB Breakout Scanner (14:15 UTC / 10:15 ET)"
+    echo "$CRON_JULES_US_INTRADAY"
+    echo "# Jules AI Autonomous Fund US: Order Processor (14:15-19:45 UTC)"
+    echo "$CRON_JULES_US_ORDERS"
+    echo "# Jules AI Autonomous Fund US: Post-Market Evolution (20:15 UTC)"
+    echo "$CRON_JULES_US_EVOLVE"
     echo "# END TONG_TRADING_AUTOMATION"
 } >> "$CLEAN_CRON"
 

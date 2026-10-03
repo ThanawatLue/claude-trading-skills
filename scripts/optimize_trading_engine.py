@@ -142,7 +142,12 @@ def simulate(strategy: SimStrategy, signals: list[dict], bars_by_symbol: dict) -
         exit_reason = "end_of_data"
 
         for d_idx, b in enumerate(trade_bars):
-            o, h, low_val, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+            o, h, low_val, c = (
+                float(b["open"]),
+                float(b["high"]),
+                float(b["low"]),
+                float(b["close"]),
+            )
             peak_high = max(peak_high, h)
             mfe_r = (peak_high - actual_entry) / risk
 

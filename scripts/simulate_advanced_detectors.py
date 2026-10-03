@@ -20,25 +20,33 @@ DB_PATH = Path(r"d:\ex_work\tong_trading\state\vm_market_cache.db")
 @dataclass
 class AdvancedStrategy:
     name: str
-    allowed_sources: list[str] = field(default_factory=lambda: ["thai-swing-momentum", "thai-swing-dip", "vcp-screener"])
-    min_scores: dict[str, float] = field(default_factory=lambda: {"thai-swing-momentum": 78.0, "thai-swing-dip": 80.0, "vcp-screener": 70.0})
+    allowed_sources: list[str] = field(
+        default_factory=lambda: ["thai-swing-momentum", "thai-swing-dip", "vcp-screener"]
+    )
+    min_scores: dict[str, float] = field(
+        default_factory=lambda: {
+            "thai-swing-momentum": 78.0,
+            "thai-swing-dip": 80.0,
+            "vcp-screener": 70.0,
+        }
+    )
 
     # ATR Stop Sizing
     use_dynamic_atr: bool = False
-    atr_multiplier: float = 1.5     # Stop = max(fee_floor_pct, k * ATR_pct)
-    fee_floor_pct: float = 4.0      # Minimum stop % to avoid fee drag
+    atr_multiplier: float = 1.5  # Stop = max(fee_floor_pct, k * ATR_pct)
+    fee_floor_pct: float = 4.0  # Minimum stop % to avoid fee drag
     static_min_stop_pct: float = 5.0
     max_stop_pct: float = 6.5
 
     # Exit Architecture
-    architecture: str = "single"    # 'single' or 'scale_out'
-    target_1_r: float = 2.0        # Target 1 (or sole target if single)
-    target_2_r: float = 2.5        # Target 2 (only if scale_out)
+    architecture: str = "single"  # 'single' or 'scale_out'
+    target_1_r: float = 2.0  # Target 1 (or sole target if single)
+    target_2_r: float = 2.5  # Target 2 (only if scale_out)
 
     # Early Fakeout / Volume Collapse
     use_early_fakeout: bool = False
-    fakeout_vol_ratio: float = 0.40 # If Day 1/2 volume < 0.40x Day 0
-    fakeout_max_mfe: float = 0.20   # And MFE < 0.20R
+    fakeout_vol_ratio: float = 0.40  # If Day 1/2 volume < 0.40x Day 0
+    fakeout_max_mfe: float = 0.20  # And MFE < 0.20R
 
     # Velocity Stall Exit
     use_velocity_stall: bool = True
@@ -47,14 +55,14 @@ class AdvancedStrategy:
 
     # Sector RS Filter
     use_sector_filter: bool = False
-    min_sector_relative_return: float = 0.0 # Sector 20d return - SET 20d return >= 0
+    min_sector_relative_return: float = 0.0  # Sector 20d return - SET 20d return >= 0
 
     max_hold_days: int = 10
     time_stop_min_r: float = -0.5
     account_size: float = 30000.0
-    risk_pct: float = 1.0          # 1% risk = 300 THB
-    max_pos_pct: float = 20.0      # 20% max pos = 6,000 THB
-    commission_bps: float = 21.692 # InnovestX 21.692 bps per side
+    risk_pct: float = 1.0  # 1% risk = 300 THB
+    max_pos_pct: float = 20.0  # 20% max pos = 6,000 THB
+    commission_bps: float = 21.692  # InnovestX 21.692 bps per side
 
 
 def load_dataset(db_path: Path):
@@ -89,7 +97,12 @@ def load_dataset(db_path: Path):
 
     bars_by_symbol = {}
     for b in bar_rows:
-        if b["open"] is not None and b["high"] is not None and b["low"] is not None and b["close"] is not None:
+        if (
+            b["open"] is not None
+            and b["high"] is not None
+            and b["low"] is not None
+            and b["close"] is not None
+        ):
             bars_by_symbol.setdefault(b["symbol"], []).append(dict(b))
 
     # Precalculate ATR(14) for each bar in each symbol
@@ -124,7 +137,13 @@ def load_dataset(db_path: Path):
     return signals, bars_by_symbol, atr_by_symbol, set_ret_by_date
 
 
-def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict, atr_by_symbol: dict, set_ret_by_date: dict) -> dict[str, Any]:
+def simulate(
+    strat: AdvancedStrategy,
+    signals: list[dict],
+    bars_by_symbol: dict,
+    atr_by_symbol: dict,
+    set_ret_by_date: dict,
+) -> dict[str, Any]:
     active_symbols: dict[str, str] = {}
     trades = []
     risk_budget = strat.account_size * (strat.risk_pct / 100.0)
@@ -163,9 +182,18 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
             # If stock 20d return < SET 20d return, filter out
             # Look up past 20 bars
             sym_full_bars = bars_by_symbol.get(sym, [])
-            bar_idx = next((i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1)
+            bar_idx = next(
+                (i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1
+            )
             if bar_idx >= 20:
-                stock_ret = (float(sym_full_bars[bar_idx]["close"]) - float(sym_full_bars[bar_idx - 20]["close"])) / float(sym_full_bars[bar_idx - 20]["close"]) * 100.0
+                stock_ret = (
+                    (
+                        float(sym_full_bars[bar_idx]["close"])
+                        - float(sym_full_bars[bar_idx - 20]["close"])
+                    )
+                    / float(sym_full_bars[bar_idx - 20]["close"])
+                    * 100.0
+                )
                 set_ret = set_ret_by_date.get(entry_bar["date"], 0.0)
                 if (stock_ret - set_ret) < strat.min_sector_relative_return:
                     continue
@@ -174,8 +202,14 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
         if strat.use_dynamic_atr:
             # Lookup ATR(14)
             sym_full_bars = bars_by_symbol.get(sym, [])
-            bar_idx = next((i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1)
-            atr_pct = atr_by_symbol.get(sym, [])[bar_idx] if (bar_idx >= 0 and bar_idx < len(atr_by_symbol.get(sym, []))) else None
+            bar_idx = next(
+                (i for i, b in enumerate(sym_full_bars) if b["date"] == entry_bar["date"]), -1
+            )
+            atr_pct = (
+                atr_by_symbol.get(sym, [])[bar_idx]
+                if (bar_idx >= 0 and bar_idx < len(atr_by_symbol.get(sym, [])))
+                else None
+            )
             if atr_pct is not None and atr_pct > 0:
                 effective_stop_pct = max(strat.fee_floor_pct, strat.atr_multiplier * atr_pct)
                 effective_stop_pct = min(strat.max_stop_pct, effective_stop_pct)
@@ -190,7 +224,7 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
             elif raw_risk_pct > strat.max_stop_pct:
                 risk_dist = actual_entry * (strat.max_stop_pct / 100.0)
             else:
-                risk_dist = (actual_entry - (actual_entry * (raw_stop / entry)))
+                risk_dist = actual_entry - (actual_entry * (raw_stop / entry))
             actual_stop = actual_entry - risk_dist
 
         risk = actual_entry - actual_stop
@@ -221,7 +255,12 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
         entry_vol = float(entry_bar["volume"]) if entry_bar.get("volume") else 1.0
 
         for d_idx, b in enumerate(trade_bars):
-            o, h, low_val, c = float(b["open"]), float(b["high"]), float(b["low"]), float(b["close"])
+            o, h, low_val, c = (
+                float(b["open"]),
+                float(b["high"]),
+                float(b["low"]),
+                float(b["close"]),
+            )
             v = float(b["volume"]) if b.get("volume") else 0.0
             peak_high = max(peak_high, h)
             mfe_r = (peak_high - actual_entry) / risk
@@ -233,7 +272,11 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
                     scaled_out = True
                     scale_price = max(o, t1_price)
                     half_shares = shares // 2
-                    scale_pnl = (scale_price - actual_entry) * half_shares - (actual_entry * half_shares * fee_rate) - (scale_price * half_shares * fee_rate)
+                    scale_pnl = (
+                        (scale_price - actual_entry) * half_shares
+                        - (actual_entry * half_shares * fee_rate)
+                        - (scale_price * half_shares * fee_rate)
+                    )
                     # Move remaining stop to Breakeven (+0.05R)
                     stop_price = max(stop_price, actual_entry + (risk * 0.05))
 
@@ -267,14 +310,24 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
             # Early Fakeout / Volume Collapse check (Day 1 or 2)
             if strat.use_early_fakeout and d_idx in (0, 1):
                 # If volume collapses to < fakeout_vol_ratio and price is in red and peak mfe is negligible
-                if entry_vol > 0 and (v / entry_vol) < strat.fakeout_vol_ratio and curr_r < 0.0 and mfe_r < strat.fakeout_max_mfe:
+                if (
+                    entry_vol > 0
+                    and (v / entry_vol) < strat.fakeout_vol_ratio
+                    and curr_r < 0.0
+                    and mfe_r < strat.fakeout_max_mfe
+                ):
                     exit_price = c
                     exit_reason = "early_fakeout"
                     exit_bar = b
                     break
 
             # Velocity Stall
-            if strat.use_velocity_stall and d_idx >= strat.stall_days and mfe_r < strat.stall_min_mfe and curr_r <= 0.0:
+            if (
+                strat.use_velocity_stall
+                and d_idx >= strat.stall_days
+                and mfe_r < strat.stall_min_mfe
+                and curr_r <= 0.0
+            ):
                 exit_price = c
                 exit_reason = "stalled"
                 exit_bar = b
@@ -290,7 +343,11 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
         # Calculate Net PnL
         if strat.architecture == "scale_out" and scaled_out:
             rem_shares = shares - (shares // 2)
-            rem_pnl = (exit_price - actual_entry) * rem_shares - (actual_entry * rem_shares * fee_rate) - (exit_price * rem_shares * fee_rate)
+            rem_pnl = (
+                (exit_price - actual_entry) * rem_shares
+                - (actual_entry * rem_shares * fee_rate)
+                - (exit_price * rem_shares * fee_rate)
+            )
             net_pnl = scale_pnl + rem_pnl
         else:
             gross = (exit_price - actual_entry) * shares
@@ -300,16 +357,25 @@ def simulate(strat: AdvancedStrategy, signals: list[dict], bars_by_symbol: dict,
         realized_r = net_pnl / initial_risk_thb if initial_risk_thb > 0 else 0.0
         active_symbols[sym] = exit_bar["date"]
 
-        trades.append({
-            "realized_r": realized_r,
-            "net_pnl": net_pnl,
-            "reason": exit_reason,
-            "fees": (actual_entry * shares * fee_rate) + (exit_price * shares * fee_rate),
-        })
+        trades.append(
+            {
+                "realized_r": realized_r,
+                "net_pnl": net_pnl,
+                "reason": exit_reason,
+                "fees": (actual_entry * shares * fee_rate) + (exit_price * shares * fee_rate),
+            }
+        )
 
     total = len(trades)
     if total == 0:
-        return {"name": strat.name, "total": 0, "net_r": -999, "net_pnl": -999, "win_rate": 0, "pf": 0}
+        return {
+            "name": strat.name,
+            "total": 0,
+            "net_r": -999,
+            "net_pnl": -999,
+            "win_rate": 0,
+            "pf": 0,
+        }
 
     wins = [t for t in trades if t["realized_r"] > 0]
     losses = [t for t in trades if t["realized_r"] <= 0]
@@ -375,13 +441,19 @@ def main():
         use_velocity_stall=True,
         stall_days=4,
     )
-    atr_results.append(simulate(strat_static, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date))
+    atr_results.append(
+        simulate(strat_static, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date)
+    )
 
     atr_results.sort(key=lambda x: (x["net_pnl"], x["net_r"]), reverse=True)
-    print(f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}")
+    print(
+        f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}"
+    )
     print("-" * 115)
     for idx, r in enumerate(atr_results[:10], 1):
-        print(f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}")
+        print(
+            f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}"
+        )
 
     print("\n" + "=" * 115)
     print("                    GRID 2: EARLY FAKEOUT / VOLUME COLLAPSE DETECTOR")
@@ -389,9 +461,13 @@ def main():
     fakeout_results = []
     best_atr = atr_results[0]
     print(f"Using top ATR model from Grid 1: {best_atr['name']}")
-    for vol_ratio in [0.30, 0.40, 0.50, 0.60, 99.0]: # 99 = no fakeout check
+    for vol_ratio in [0.30, 0.40, 0.50, 0.60, 99.0]:  # 99 = no fakeout check
         for max_mfe in [0.15, 0.25, 0.35]:
-            f_label = f"Vol<{int(vol_ratio*100)}% & MFE<{max_mfe}R" if vol_ratio < 90 else "NoEarlyFakeout"
+            f_label = (
+                f"Vol<{int(vol_ratio * 100)}% & MFE<{max_mfe}R"
+                if vol_ratio < 90
+                else "NoEarlyFakeout"
+            )
             name = f"Dynamic ATR | {f_label} | Stall:4d"
             strat = AdvancedStrategy(
                 name=name,
@@ -410,10 +486,14 @@ def main():
                 fakeout_results.append(r)
 
     fakeout_results.sort(key=lambda x: (x["net_pnl"], x["net_r"]), reverse=True)
-    print(f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}")
+    print(
+        f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}"
+    )
     print("-" * 115)
     for idx, r in enumerate(fakeout_results[:8], 1):
-        print(f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}")
+        print(
+            f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}"
+        )
 
     print("\n" + "=" * 115)
     print("                    GRID 3: SECTOR RS ALIGNMENT FILTER")
@@ -438,16 +518,20 @@ def main():
             sec_results.append(r)
 
     sec_results.sort(key=lambda x: (x["net_pnl"], x["net_r"]), reverse=True)
-    print(f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}")
+    print(
+        f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}"
+    )
     print("-" * 115)
     for idx, r in enumerate(sec_results, 1):
-        print(f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}")
+        print(
+            f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}"
+        )
 
     print("\n" + "=" * 115)
     print("                    GRID 4: SCALE-OUT (50% T1, 50% T2) VS SINGLE-EXIT")
     print("=" * 115)
     scale_results = []
-    for (t1, t2) in [(1.2, 2.0), (1.2, 2.5), (1.4, 2.2), (1.5, 2.5), (1.5, 3.0)]:
+    for t1, t2 in [(1.2, 2.0), (1.2, 2.5), (1.4, 2.2), (1.5, 2.5), (1.5, 3.0)]:
         name = f"Scale-Out | 50%@{t1}R + 50%@{t2}R | DynATR k=1.8 Flr=4.5%"
         strat = AdvancedStrategy(
             name=name,
@@ -465,10 +549,14 @@ def main():
             scale_results.append(r)
 
     scale_results.sort(key=lambda x: (x["net_pnl"], x["net_r"]), reverse=True)
-    print(f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}")
+    print(
+        f"{'Rank':<5} {'Configuration':<62} {'Trades':>6} {'WinRate':>8} {'Net R':>8} {'Net PnL (THB)':>14} {'PF':>6}"
+    )
     print("-" * 115)
     for idx, r in enumerate(scale_results, 1):
-        print(f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}")
+        print(
+            f"{idx:<5} {r['name']:<62} {r['total']:>6} {r['win_rate']:>7.1f}% {r['net_r']:>+7.2f}R {r['net_pnl']:>+13,.2f} {r['pf']:>6.2f}"
+        )
 
 
 if __name__ == "__main__":

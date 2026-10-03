@@ -539,14 +539,16 @@ def get_tv_breadth(market: str = "TH", min_price: float = 1.0, limit: int = 1000
     return {
         "total_stocks": n,
         "pct_above_sma50": _pct(
-            lambda s: (s.get("price") or 0) > 0
-            and (s.get("sma50") or 0) > 0
-            and s["price"] > s["sma50"]
+            lambda s: (
+                (s.get("price") or 0) > 0 and (s.get("sma50") or 0) > 0 and s["price"] > s["sma50"]
+            )
         ),
         "pct_above_sma200": _pct(
-            lambda s: (s.get("price") or 0) > 0
-            and (s.get("sma200") or 0) > 0
-            and s["price"] > s["sma200"]
+            lambda s: (
+                (s.get("price") or 0) > 0
+                and (s.get("sma200") or 0) > 0
+                and s["price"] > s["sma200"]
+            )
         ),
         "advancers": _count(lambda s: (s.get("change_pct") or 0) > 0),
         "decliners": _count(lambda s: (s.get("change_pct") or 0) < 0),

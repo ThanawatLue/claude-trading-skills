@@ -2066,6 +2066,7 @@ function renderIBD(ibd) {
     if (el) el.innerHTML = `<div style="color:var(--muted);font-size:.85rem">⚠️ ยังไม่มีข้อมูล IBD สำหรับตลาด ${currentMarket} — กรุณากด Run Fresh Analysis</div>`;
     return;
   }
+  const state = ibd.market_distribution_state || {};
   const action = ibd.portfolio_action || {};
   const risk = state.overall_risk_level || 'UNKNOWN';
   const indexResults = state.index_results || [];

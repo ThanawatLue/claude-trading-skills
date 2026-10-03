@@ -34,7 +34,9 @@ class TestAdaptiveIndicators(unittest.TestCase):
         # 3. Distribution Trap Stock (Rises initially, then heavy volume on down days)
         trap_close = [20.0 + (i * 0.05) if i < 40 else 22.0 - ((i - 40) * 0.15) for i in range(60)]
         # Massive volume on down days (5,000,000) and tiny volume on up days (300,000)
-        trap_vol = [300000 if trap_close[i] >= trap_close[max(0, i - 1)] else 5000000 for i in range(60)]
+        trap_vol = [
+            300000 if trap_close[i] >= trap_close[max(0, i - 1)] else 5000000 for i in range(60)
+        ]
         self.trap_df = pd.DataFrame({"Close": trap_close, "Volume": trap_vol}, index=dates)
 
     def test_thematic_cluster_mapping_and_detection(self):
@@ -86,9 +88,7 @@ class TestAdaptiveIndicators(unittest.TestCase):
 
     def test_evaluate_adaptive_candidate_traps(self):
         active_clusters = {
-            "active_clusters": {
-                "Marine Shipping": {"gainer_count": 2, "avg_gain": 7.16}
-            }
+            "active_clusters": {"Marine Shipping": {"gainer_count": 2, "avg_gain": 7.16}}
         }
 
         # Case A: True Leader (PSL.BK)

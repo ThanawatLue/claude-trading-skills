@@ -219,6 +219,39 @@ def get_latest_thai_swing_candidates() -> list[dict[str, Any]]:
     return candidates
 
 
+def get_latest_intraday_candidates(market: str = "TH") -> list[dict[str, Any]]:
+    """Extract intraday breakout candidates if available."""
+    tasks_dir, _, _, _ = get_mission_paths(market)
+    intraday_file = tasks_dir / "intraday_candidates.json"
+    if not intraday_file.exists():
+        return []
+    try:
+        with open(intraday_file, encoding="utf-8") as f:
+            data = json.load(f)
+            candidates = []
+            for c in data.get("candidates", []):
+                sym = c.get("symbol", "")
+                if not sym:
+                    continue
+                candidates.append(
+                    {
+                        "symbol": sym,
+                        "company_name": sym,
+                        "sector": c.get("sector", "Intraday Breakout"),
+                        "price": float(c.get("price") or 0.0),
+                        "score": float(c.get("score") or 70.0),
+                        "source": "Intraday ORB Scanner",
+                        "highlights": c.get("highlights", ""),
+                        "suggested_stop": c.get("suggested_stop"),
+                        "suggested_target": c.get("suggested_target"),
+                    }
+                )
+            return candidates
+    except Exception as e:
+        logger.debug("Failed to read intraday candidates: %s", e)
+        return []
+
+
 def find_nearest_resistance(symbol: str, current_price: float, lookback: int = 30) -> float | None:
     """Query recent price bars to find prior swing high resistance above current price."""
     if not DB_PATH.exists() or current_price <= 0:
@@ -352,7 +385,8 @@ def _get_stock_history_bars(symbol: str, lookback: int = 35, market: str = "TH")
         try:
             import yfinance as yf
 
-            ticker = yf.Ticker(symbol)
+            yf_sym = symbol.replace(".", "-") if "." in symbol else symbol
+            ticker = yf.Ticker(yf_sym)
             df = ticker.history(period=f"{lookback + 10}d")
             if not df.empty and "Close" in df.columns:
                 df = df.reset_index()
@@ -403,13 +437,14 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
     available_slots = max(0, 4 - len(open_pos))
 
     # 1. Gather candidates across all engines
+    intraday_cands = get_latest_intraday_candidates(market=market_clean)
     if market_clean == "US":
-        raw_pool = get_us_screened_candidates(limit=25)
+        raw_pool = get_us_screened_candidates(limit=25) + intraday_cands
     else:
         thai_swing = get_latest_thai_swing_candidates()
         canslim = get_latest_canslim_candidates()
         vol_leaders = get_volume_anomaly_candidates()
-        raw_pool = thai_swing + canslim + vol_leaders
+        raw_pool = thai_swing + canslim + vol_leaders + intraday_cands
 
     # 2. Detect active Thematic Clusters across candidate pool
     cluster_detection = ai.detect_thematic_clusters(
@@ -454,6 +489,24 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
                 )
                 continue
             c["ud_ratio"] = ud_res["ud_ratio"]
+
+        # 4. Market Intelligence Disqualification Gate (News, Earnings, ADR, Overhead Supply)
+        try:
+            from scripts.market_intelligence_filter import evaluate_stock_intelligence
+
+            intel_res = evaluate_stock_intelligence(
+                symbol=sym,
+                price=c["price"],
+                market=market_clean,
+            )
+            if not intel_res.passed:
+                logger.info("Scout: Disqualifying %s - %s", sym, intel_res.reason)
+                continue
+            c["score"] = float(c.get("score") or 60.0) + intel_res.composite_modifier
+            if intel_res.rs_rating:
+                c["rs_rating"] = intel_res.rs_rating
+        except Exception as e:
+            logger.debug("Market intelligence filter check failed for %s: %s", sym, e)
 
         seen_symbols.add(sym)
 
@@ -534,7 +587,7 @@ shares: {cand["shares"]}
 entry_price: {cand["price"]:.2f}
 stop_price: {cand["stop"]:.2f}
 target_price: {cand["target"]:.2f}
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```""")
 
     table_body = (
@@ -558,8 +611,10 @@ thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส�
 ## 🧬 Trader DNA Memory (Gen {dna.get("generation", 1)})
 Jules ต้องใช้กฎที่เรียนรู้มาในอดีตมาช่วยตัดสินใจเลือกลงทุน:
 {rules_text}
-- 🛡️ **MFE Ratchet Protection:** หากราคาหุ้นบวกแตะ +0.5R ระบบจะเลื่อน Stop Loss ขึ้นมาที่ทุน (Breakeven) อัตโนมัติ เพื่อป้องกันไม่ให้กำไรกลายเป็นขาดทุน!
-- 🎯 **Resistance-Aware Exits:** หากมีแนวต้านยอดเดิมขวางอยู่ก่อน 2.0R ให้ตั้งเป้าขายทำกำไรที่แนวต้านร่วมกับเจ้ามือทันที
+- 🛡️ **Two-Tier Scale-Out Engine:** แบ่งขายทำกำไร 50% ที่เป้า T1 (+1.5R) และเลื่อน Stop Loss ขึ้นมาที่ทุน (Breakeven +0.05R buffer) ทันที เพื่อล็อกกำไรและตัดความเสี่ยง!
+- 🏃 **Runner Trail to T2:** ปล่อย 50% ที่เหลือวิ่งไปเป้า T2 (+2.5R) โดยเริ่ม Ratchet ปกป้องกำไรเมื่อถึง +2.0R (ล็อก +1.0R)
+- ⏱️ **Velocity Stall Exit:** หากถือครบ 4 วันทำการแล้วราคาไม่ไปไหน (MFE < 0.3R) ระบบจะคัดทิ้งทันทีเพื่อรักษาความคุ้มค่าของเงินทุน
+- 🎯 **Resistance-Aware Exits:** หากมีแนวต้านยอดเดิมขวางอยู่ก่อนเป้าหมาย ให้ตั้งเป้าขายทำกำไรที่แนวต้านร่วมกับเจ้ามือทันที
 
 ### ⚠️ ข้อผิดพลาดในอดีตที่ห้ามทำซ้ำ:
 {weaknesses_text}

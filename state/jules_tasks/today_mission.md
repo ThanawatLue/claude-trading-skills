@@ -1,19 +1,23 @@
-# 🎯 Jules AI Fund: Daily Mission & Research Briefing
-**วันที่:** 2026-10-02 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+# 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
+**วันที่:** 2026-10-02 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
-## 🧬 Trader DNA Memory (Gen 2)
+## 🧬 Trader DNA Memory (Gen 3)
 Jules ต้องใช้กฎที่เรียนรู้มาในอดีตมาช่วยตัดสินใจเลือกลงทุน:
 - 📜 Always verify positive Q2/Q3 net profit growth before entering.
 - 📜 Avoid stocks trading within 5 days of XD dividend record date.
-- 📜 Cut positions early if volume contracts by more than 60% on day 1 post-entry.
-- 📜 Hold winning momentum trades until 2.2R target without premature manual closure.
-- 🛡️ **MFE Ratchet Protection:** หากราคาหุ้นบวกแตะ +0.5R ระบบจะเลื่อน Stop Loss ขึ้นมาที่ทุน (Breakeven) อัตโนมัติ เพื่อป้องกันไม่ให้กำไรกลายเป็นขาดทุน!
-- 🎯 **Resistance-Aware Exits:** หากมีแนวต้านยอดเดิมขวางอยู่ก่อน 2.0R ให้ตั้งเป้าขายทำกำไรที่แนวต้านร่วมกับเจ้ามือทันที
+- 📜 Enforce minimum stop width floor >= 4.5% to eliminate commission drag and noise whipouts.
+- 📜 Two-Tier Scale-Out Engine: Take 50% profit at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).
+- 📜 Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R (lock 1.0R).
+- 📜 Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R.
+- 🛡️ **Two-Tier Scale-Out Engine:** แบ่งขายทำกำไร 50% ที่เป้า T1 (+1.5R) และเลื่อน Stop Loss ขึ้นมาที่ทุน (Breakeven +0.05R buffer) ทันที เพื่อล็อกกำไรและตัดความเสี่ยง!
+- 🏃 **Runner Trail to T2:** ปล่อย 50% ที่เหลือวิ่งไปเป้า T2 (+2.5R) โดยเริ่ม Ratchet ปกป้องกำไรเมื่อถึง +2.0R (ล็อก +1.0R)
+- ⏱️ **Velocity Stall Exit:** หากถือครบ 4 วันทำการแล้วราคาไม่ไปไหน (MFE < 0.3R) ระบบจะคัดทิ้งทันทีเพื่อรักษาความคุ้มค่าของเงินทุน
+- 🎯 **Resistance-Aware Exits:** หากมีแนวต้านยอดเดิมขวางอยู่ก่อนเป้าหมาย ให้ตั้งเป้าขายทำกำไรที่แนวต้านร่วมกับเจ้ามือทันที
 
 ### ⚠️ ข้อผิดพลาดในอดีตที่ห้ามทำซ้ำ:
-- ไม่มีข้อผิดพลาดซ้ำเดิมในประวัติ
+- ⚠️ Do NOT use premature breakeven ratchet at +0.5R; 40%+ of winning runners retest entry before launching.
 
 ---
 
@@ -22,17 +26,17 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. CENTEL.BK** | ฿44.00 | **100** หุ้น | ฿4,400.00 | ฿41.75 (-5.1%) | ฿48.50 (2.0R) | CANSLIM Score: 71.6 | 52w Dist: -3.3% |
-| **2. PTTGC.BK** | ฿48.50 | **100** หุ้น | ฿4,850.00 | ฿46.00 (-5.2%) | ฿53.50 (2.0R) | CANSLIM Score: 63.5 | 52w Dist: -4.9% |
-| **3. KCE.BK** | ฿67.00 | **100** หุ้น | ฿6,700.00 | ฿63.50 (-5.2%) | ฿74.00 (2.0R) | CANSLIM Score: 62.0 | 52w Dist: -3.6% |
-| **4. PTT.BK** | ฿42.75 | **100** หุ้น | ฿4,275.00 | ฿40.50 (-5.3%) | ฿47.25 (2.0R) | CANSLIM Score: 61.9 | 52w Dist: -2.3% |
+| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
+| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
+| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
+| **4. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿25.00 (-5.7%) | ฿29.50 (2.0R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
 
 ---
 
 ## 📋 ภารกิจสำหรับ Jules (Action Required)
 1. **คัดกรองปัจจัยพื้นฐาน (Fundamental & Business Check):**
    - ตรวจสอบโมเดลธุรกิจ: กำไรโตจริง หรือแค่ภาพลวงตา?
-   - ค้นหาข่าวด่วนล่าสุดจาก Google Search หรือข่าวทันหุ้น: มีข่าวลบ / XD / Dilution หรือไม่?
+   - ค้นหาข่าวด่วนล่าสุดจาก Google Search: มีข่าวลบ / XD / Dilution หรือไม่?
 2. **ตัดสินใจ (Approve or Veto):**
    - หากหุ้นตัวใดผ่านเกณฑ์ และเข้าตา Jules ที่สุด **เลือก 1 ตัว**
    - บันทึกไฟล์ Order ตาม Template ด้านล่างลงในโฟลเดอร์ `state/jules_orders/`
@@ -42,49 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: CENTEL.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
+# Order Template 1: GROREIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
 action: buy
-symbol: "CENTEL.BK"
-shares: 100
-entry_price: 44.00
-stop_price: 41.75
-target_price: 48.50
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+symbol: "GROREIT.BK"
+market: "TH"
+shares: 700
+entry_price: 9.60
+stop_price: 9.35
+target_price: 10.00
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: PTTGC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTTGC.yaml
+# Order Template 2: VIH.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
 action: buy
-symbol: "PTTGC.BK"
-shares: 100
-entry_price: 48.50
-stop_price: 46.00
-target_price: 53.50
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+symbol: "VIH.BK"
+market: "TH"
+shares: 700
+entry_price: 9.15
+stop_price: 8.85
+target_price: 9.70
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: KCE.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_KCE.yaml
+# Order Template 3: TIDLOR.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
 action: buy
-symbol: "KCE.BK"
-shares: 100
-entry_price: 67.00
-stop_price: 63.50
-target_price: 74.00
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+symbol: "TIDLOR.BK"
+market: "TH"
+shares: 300
+entry_price: 19.20
+stop_price: 18.20
+target_price: 21.20
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 4: PTT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PTT.yaml
+# Order Template 4: AMATA.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
 action: buy
-symbol: "PTT.BK"
-shares: 100
-entry_price: 42.75
-stop_price: 40.50
-target_price: 47.25
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: MFE +0.5R ขยับ Stop บังทุนทันที"
+symbol: "AMATA.BK"
+market: "TH"
+shares: 200
+entry_price: 26.50
+stop_price: 25.00
+target_price: 29.50
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```

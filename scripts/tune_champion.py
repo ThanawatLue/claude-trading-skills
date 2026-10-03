@@ -33,7 +33,10 @@ def main():
                         stall_days=4,
                     )
                     r = simulate(strat, signals, bars_by_symbol, atr_by_symbol, set_ret_by_date)
-                    print(f"{name:<55} | WR: {r['win_rate']:>4.1f}% | Net R: {r['net_r']:>+5.2f}R | PnL: {r['net_pnl']:>+9.2f} | PF: {r['pf']:>4.2f}")
+                    print(
+                        f"{name:<55} | WR: {r['win_rate']:>4.1f}% | Net R: {r['net_r']:>+5.2f}R | PnL: {r['net_pnl']:>+9.2f} | PF: {r['pf']:>4.2f}"
+                    )
+
 
 if __name__ == "__main__":
     main()

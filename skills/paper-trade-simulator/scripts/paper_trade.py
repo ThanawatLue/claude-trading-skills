@@ -384,7 +384,6 @@ def close_position(
                 ) + round(sec_fee + taf_fee, 2)
             else:
                 rem_cost = exit_price * rem_shares * (row["transaction_cost_bps"] or 0.0) / 10_000
-            pnl = t1_net_pnl + rem_gross - rem_cost
             t1_price = float(scale_out_info.get("t1_price", entry))
             gross_pnl = (
                 (t1_price - entry) * closed_shares
@@ -392,6 +391,8 @@ def close_position(
                 else (entry - t1_price) * closed_shares
             ) + rem_gross
             exit_cost = (row["exit_cost"] or 0.0) + rem_cost
+            entry_cost = row["entry_cost"] or 0.0
+            pnl = gross_pnl - entry_cost - exit_cost
         else:
             if side == "long":
                 gross_pnl = (exit_price - entry) * shares
@@ -506,18 +507,46 @@ def scale_out_position(
             else abs(entry - float(row["stop_price"]))
         )
 
-        shares_closed = int(shares * fraction)
-        if shares >= 200:
-            shares_closed = max(100, (shares_closed // 100) * 100)
-        shares_closed = min(shares - 1, max(1, shares_closed))
+        market_val = row["market"] if "market" in row.keys() else "TH"
+        port_val = row["portfolio"] if "portfolio" in row.keys() else "quant"
 
-        cost_bps = float(row["transaction_cost_bps"] or 0.0)
-        entry_cost_part = entry * shares_closed * (cost_bps / 10000.0)
-        exit_cost_part = price * shares_closed * (cost_bps / 10000.0)
-        gross_part = (
-            (price - entry) * shares_closed if side == "long" else (entry - price) * shares_closed
-        )
-        t1_net_pnl = gross_part - entry_cost_part - exit_cost_part
+        if shares <= 1:
+            shares_closed = 0
+            entry_cost_part = 0.0
+            exit_cost_part = 0.0
+            t1_net_pnl = 0.0
+            is_single_share = True
+        else:
+            shares_closed = int(shares * fraction)
+            if market_val == "TH" and shares >= 200:
+                shares_closed = max(100, (shares_closed // 100) * 100)
+            shares_closed = min(shares - 1, max(1, shares_closed))
+            is_single_share = False
+
+            cost_bps = float(row["transaction_cost_bps"] or 0.0)
+            entry_cost_part = entry * shares_closed * (cost_bps / 10000.0)
+            if market_val == "US" and port_val == "jules":
+                import math
+
+                proceeds = price * shares_closed
+                sec_fee = (
+                    max(0.01, math.ceil(proceeds * 0.0000278 * 100) / 100.0) if proceeds > 0 else 0.0
+                )
+                taf_fee = (
+                    min(8.30, max(0.01, round(shares_closed * 0.000166, 2)))
+                    if shares_closed > 0
+                    else 0.0
+                )
+                exit_cost_part = (price * shares_closed * (cost_bps / 10000.0)) + round(
+                    sec_fee + taf_fee, 2
+                )
+            else:
+                exit_cost_part = price * shares_closed * (cost_bps / 10000.0)
+
+            gross_part = (
+                (price - entry) * shares_closed if side == "long" else (entry - price) * shares_closed
+            )
+            t1_net_pnl = gross_part - entry_cost_part - exit_cost_part
 
         # Move stop to breakeven (+0.05R buffer)
         new_stop = (
@@ -537,25 +566,32 @@ def scale_out_position(
             "shares_closed": shares_closed,
             "t1_price": price,
             "t1_net_pnl": round(t1_net_pnl, 4),
+            "exit_cost_part": round(exit_cost_part, 4),
             "t1_at": now,
             "initial_shares": shares,
             "remaining_shares": shares - shares_closed,
+            "single_share_protected": is_single_share,
         }
 
         merged_notes = row["journal_text"] or ""
-        scale_note = (
-            f"[SCALE-OUT {now}] closed {shares_closed}/{shares} @ {price:.2f} "
-            f"(PnL: {t1_net_pnl:+.2f})"
-        )
+        if is_single_share:
+            scale_note = (
+                f"[SCALE-OUT {now}] single share held - stop moved to BE @ {final_stop:.2f} (protected runner)"
+            )
+        else:
+            scale_note = (
+                f"[SCALE-OUT {now}] closed {shares_closed}/{shares} @ {price:.2f} "
+                f"(PnL: {t1_net_pnl:+.2f})"
+            )
         if notes:
             scale_note += f" - {notes}"
         merged_notes = (merged_notes + "\n---\n" if merged_notes else "") + scale_note
 
         conn.execute(
             """UPDATE paper_trade
-               SET stop_price=?, decision_trace_json=?, journal_text=?, last_updated=?
+               SET stop_price=?, exit_cost=COALESCE(exit_cost, 0.0) + ?, decision_trace_json=?, journal_text=?, last_updated=?
                WHERE id=?""",
-            (final_stop, json.dumps(trace, ensure_ascii=False), merged_notes, now, trade_id),
+            (final_stop, exit_cost_part, json.dumps(trace, ensure_ascii=False), merged_notes, now, trade_id),
         )
 
         return {
@@ -564,6 +600,7 @@ def scale_out_position(
             "action": "scaled_out",
             "shares_closed": shares_closed,
             "remaining_shares": shares - shares_closed,
+            "single_share_protected": is_single_share,
             "scale_price": price,
             "scale_pnl": round(t1_net_pnl, 2),
             "new_stop": final_stop,
@@ -597,6 +634,13 @@ def list_positions(
     with _db() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [_row_to_dict(r) for r in rows]
+
+
+def get_position(trade_id: int) -> dict[str, Any] | None:
+    """Retrieve a single paper trade position by ID."""
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM paper_trade WHERE id=?", (trade_id,)).fetchone()
+        return _row_to_dict(row) if row else None
 
 
 def add_journal(trade_id: int, text: str, emotion: str | None = None) -> dict[str, Any]:
