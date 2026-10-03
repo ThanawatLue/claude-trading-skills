@@ -827,6 +827,10 @@ def api_run():
                         ),
                         "--output-dir",
                         REPORTS_DIR,
+                        "--max-api-calls",
+                        "30",
+                        "--top",
+                        "20",
                     ],
                     600,
                     None,
@@ -1132,7 +1136,7 @@ def api_run_stream():
                     "--top",
                     "100",
                 ],
-                300,
+                600,
                 None,
             ),
             # 3. Uptrend Analyzer
@@ -1186,7 +1190,7 @@ def api_run_stream():
                     "--output-dir",
                     REPORTS_DIR,
                 ],
-                300,
+                600,
                 None,
             )
         )
@@ -1224,6 +1228,10 @@ def api_run_stream():
                             ),
                             "--output-dir",
                             REPORTS_DIR,
+                            "--max-api-calls",
+                            "30",
+                            "--top",
+                            "20",
                         ],
                         600,
                         None,
@@ -1325,8 +1333,10 @@ def api_run_stream():
         # Yield start event
         yield f"event: start\ndata: {json.dumps({'total_tasks': total_tasks})}\n\n"
 
-        # Phase 1 Parallel Execution
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(primary_tasks)) as executor:
+        # Phase 1 Parallel Execution (bounded workers to prevent CPU/memory thrashing)
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(4, len(primary_tasks))
+        ) as executor:
             futures = {
                 executor.submit(_run, cmd, timeout, env): cmd for cmd, timeout, env in primary_tasks
             }
