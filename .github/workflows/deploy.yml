@@ -64,8 +64,7 @@ jobs:
             # The legacy minute updater may leave tracked files modified. The
             # deployment source of truth is the fetched main revision; keep
             # runtime state files outside git untouched.
-            git reset --hard
-            DEPLOY_SHA="$(git rev-parse FETCH_HEAD)"
+            DEPLOY_SHA='${{ github.sha }}'
             git checkout -B main "$DEPLOY_SHA"
             git reset --hard "$DEPLOY_SHA"
 
