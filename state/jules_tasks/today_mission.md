@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-10-02 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-10-05 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
-| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
-| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
-| **4. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿25.00 (-5.7%) | ฿29.50 (2.0R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
+| **1. WHAIR.BK** | ฿8.75 | **800** หุ้น | ฿7,000.00 | ฿8.40 (-4.0%) | ฿9.35 (Swing Target) | RSI: 62.7 | Vol: 3.8x | Swing Score: 88.0 |
+| **2. NEO.BK** | ฿25.75 | **200** หุ้น | ฿5,150.00 | ฿24.40 (-5.2%) | ฿28.25 (Swing Target) | RSI: 65.7 | Vol: 4.5x | Swing Score: 82.4 |
+| **3. SPRC.BK** | ฿14.70 | **400** หุ้น | ฿5,880.00 | ฿13.80 (-6.1%) | ฿16.50 (Swing Target) | RSI: 64.7 | Vol: 1.8x | Swing Score: 72.4 |
+| **4. BBGI.BK** | ฿6.75 | **1,000** หุ้น | ฿6,750.00 | ฿6.40 (-5.2%) | ฿7.40 (Swing Target) | RSI: 62.8 | Vol: 1.6x | Swing Score: 70.0 |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: GROREIT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
+# Order Template 1: WHAIR.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_WHAIR.yaml
 action: buy
-symbol: "GROREIT.BK"
+symbol: "WHAIR.BK"
 market: "TH"
-shares: 700
-entry_price: 9.60
-stop_price: 9.35
-target_price: 10.00
+shares: 800
+entry_price: 8.75
+stop_price: 8.40
+target_price: 9.35
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: VIH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
+# Order Template 2: NEO.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_NEO.yaml
 action: buy
-symbol: "VIH.BK"
-market: "TH"
-shares: 700
-entry_price: 9.15
-stop_price: 8.85
-target_price: 9.70
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 3: TIDLOR.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
-action: buy
-symbol: "TIDLOR.BK"
-market: "TH"
-shares: 300
-entry_price: 19.20
-stop_price: 18.20
-target_price: 21.20
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: AMATA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
-action: buy
-symbol: "AMATA.BK"
+symbol: "NEO.BK"
 market: "TH"
 shares: 200
-entry_price: 26.50
-stop_price: 25.00
-target_price: 29.50
+entry_price: 25.75
+stop_price: 24.40
+target_price: 28.25
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 3: SPRC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SPRC.yaml
+action: buy
+symbol: "SPRC.BK"
+market: "TH"
+shares: 400
+entry_price: 14.70
+stop_price: 13.80
+target_price: 16.50
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 4: BBGI.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BBGI.yaml
+action: buy
+symbol: "BBGI.BK"
+market: "TH"
+shares: 1000
+entry_price: 6.75
+stop_price: 6.40
+target_price: 7.40
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
