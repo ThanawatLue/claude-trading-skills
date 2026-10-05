@@ -18,6 +18,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 sys.path.insert(0, str(Path(__file__).parent))
 from paper_trade import (  # noqa: E402
     STATUS_CLOSED_FAKEOUT,
