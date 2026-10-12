@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-10-09 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-10-12 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -28,10 +28,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. APP.BK** | ฿3.36 | **2,000** หุ้น | ฿6,720.00 | ฿3.26 (-3.0%) | ฿3.54 (Swing Target) | RSI: 47.6 | Vol: 2.5x | Swing Score: 86.4 |
-| **2. BANPU.BK** | ฿15.00 | **400** หุ้น | ฿6,000.00 | ฿14.20 (-5.3%) | ฿16.50 (Swing Target) | RSI: 58.2 | Vol: 3.9x | Swing Score: 83.8 |
-| **3. PIS.BK** | ฿6.10 | **1,100** หุ้น | ฿6,710.00 | ฿5.95 (-2.5%) | ฿6.40 (Swing Target) | RSI: 59.2 | Vol: 3.0x | Swing Score: 83.8 |
-| **4. RJH.BK** | ฿15.80 | **400** หุ้น | ฿6,320.00 | ฿15.30 (-3.2%) | ฿16.60 (Swing Target) | RSI: 64.3 | Vol: 2.6x | Swing Score: 71.3 |
+| **1. INSET.BK** | ฿4.94 | **1,400** หุ้น | ฿6,916.00 | ฿4.70 (-4.9%) | ฿5.35 (Swing Target) | RSI: 61.9 | Vol: 2.9x | Swing Score: 75.8 |
+| **2. CENTEL.BK** | ฿43.50 | **100** หุ้น | ฿4,350.00 | ฿41.50 (-4.6%) | ฿47.00 (Swing Target) | RSI: 51.6 | Vol: 1.2x | Swing Score: 73.6 |
+| **3. FTREIT.BK** | ฿12.90 | **500** หุ้น | ฿6,450.00 | ฿12.50 (-3.1%) | ฿13.60 (Swing Target) | RSI: 51.3 | Vol: 1.6x | Swing Score: 72.4 |
+| **4. KLINIQ.BK** | ฿30.25 | **200** หุ้น | ฿6,050.00 | ฿28.75 (-5.0%) | ฿32.75 (Swing Target) | RSI: 64.7 | Vol: 2.9x | Swing Score: 69.0 |
 
 ---
 
@@ -48,53 +48,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: APP.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APP.yaml
+# Order Template 1: INSET.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_INSET.yaml
 action: buy
-symbol: "APP.BK"
+symbol: "INSET.BK"
 market: "TH"
-shares: 2000
-entry_price: 3.36
-stop_price: 3.26
-target_price: 3.54
+shares: 1400
+entry_price: 4.94
+stop_price: 4.70
+target_price: 5.35
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: BANPU.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BANPU.yaml
+# Order Template 2: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "BANPU.BK"
+symbol: "CENTEL.BK"
 market: "TH"
-shares: 400
-entry_price: 15.00
-stop_price: 14.20
-target_price: 16.50
+shares: 100
+entry_price: 43.50
+stop_price: 41.50
+target_price: 47.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: PIS.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PIS.yaml
+# Order Template 3: FTREIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_FTREIT.yaml
 action: buy
-symbol: "PIS.BK"
+symbol: "FTREIT.BK"
 market: "TH"
-shares: 1100
-entry_price: 6.10
-stop_price: 5.95
-target_price: 6.40
+shares: 500
+entry_price: 12.90
+stop_price: 12.50
+target_price: 13.60
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 4: RJH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_RJH.yaml
+# Order Template 4: KLINIQ.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_KLINIQ.yaml
 action: buy
-symbol: "RJH.BK"
+symbol: "KLINIQ.BK"
 market: "TH"
-shares: 400
-entry_price: 15.80
-stop_price: 15.30
-target_price: 16.60
+shares: 200
+entry_price: 30.25
+stop_price: 28.75
+target_price: 32.75
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
