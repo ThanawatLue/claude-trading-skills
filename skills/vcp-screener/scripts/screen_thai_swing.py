@@ -184,23 +184,24 @@ def fetch_atr(symbol: str, lookback: int = 20) -> dict:
 def build_plan(price: float, strategy: str, atr: float, recent_low: float) -> dict:
     entry = price
     if atr > 0:
-        # DIP_BUY: 1.5x ATR (tighter — we're buying near support)
-        # MOMENTUM: 1.5x ATR (same; wide stops kill R/R on short holds)
-        atr_mult = 1.5
+        # DIP_BUY: 1.2x ATR or recent_low * 0.99 (buying near support)
+        # MOMENTUM: 1.2x ATR (avoid excessively wide stops on Thai swing)
+        atr_mult = 1.2
         stop = max(recent_low * 0.99, entry - atr_mult * atr)
     else:
-        stop = entry * (0.95 if strategy == "DIP_BUY" else 0.95)
+        stop = entry * (0.96 if strategy == "DIP_BUY" else 0.96)
     # Ensure stop doesn't compress to < 1% (avoid nonsense plans)
     if (entry - stop) / entry < 0.01:
         stop = entry * 0.97
     risk = entry - stop
-    target = entry + 2.0 * risk  # 2:1 R/R minimum
+    target_mult = 1.5 if strategy == "DIP_BUY" else 1.3
+    target = entry + target_mult * risk
     return {
         "entry": round(entry, 2),
         "stop": round(stop, 2),
         "target": round(target, 2),
         "risk_pct": round(risk / entry * 100, 1),
-        "reward_pct": round(risk * 2 / entry * 100, 1),
+        "reward_pct": round(risk * target_mult / entry * 100, 1),
     }
 
 
@@ -509,7 +510,7 @@ def main():
     before_dip = len(top_dip)
     before_mom = len(top_mom)
     top_dip = [s for s in top_dip if s["_plan"]["reward_pct"] >= DIP_MIN_REWARD_PCT]
-    
+
     def _mom_risk_allowed(s: dict) -> bool:
         price = float(s.get("price") or 0.0)
         atr = float((s.get("_atr") or {}).get("atr") or 0.0)
@@ -523,8 +524,7 @@ def main():
     top_mom = [
         s
         for s in top_mom
-        if _mom_risk_allowed(s)
-        and s["_plan"]["reward_pct"] >= MOM_MIN_REWARD_PCT
+        if _mom_risk_allowed(s) and s["_plan"]["reward_pct"] >= MOM_MIN_REWARD_PCT
     ]
     print("\nPhase 4: Quality filters")
     print(

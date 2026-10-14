@@ -412,6 +412,7 @@ def evaluate_and_select_trade(
     cash: float,
     risk_mult: float = 1.0,
     market: str = "TH",
+    allow_only_dip_buy: bool = False,
 ) -> tuple[dict[str, Any] | None, str]:
     """Filter and rank candidates according to liquidity, sector, and risk-reward gates."""
     if not candidates:
@@ -433,6 +434,16 @@ def evaluate_and_select_trade(
         target = float(cand.get("target") or 0.0)
         sector = cand.get("sector", "N/A")
         cluster = cand.get("cluster")
+        source_name = str(cand.get("source") or "")
+        is_dip = "DIP" in source_name.upper() or "PULLBACK" in source_name.upper()
+
+        if allow_only_dip_buy and not is_dip:
+            logger.info(
+                "Candidate %s rejected: REDUCE_ONLY posture allows only DIP_BUY setups (found %s)",
+                sym,
+                source_name,
+            )
+            continue
 
         if price <= 0 or stop <= 0 or target <= 0 or stop >= price or target <= price:
             continue
@@ -457,14 +468,15 @@ def evaluate_and_select_trade(
             logger.info("Candidate %s rejected: sector %s already active in portfolio", sym, sector)
             continue
 
-        # Stop Width Sanity Gate: Enforce minimum 4.5% stop width floor to eliminate noise whipouts
+        # Stop Width Sanity Gate: For DIP_BUY near support, allow 3.0% floor; for momentum breakouts, enforce 4.5% floor
+        min_stop_floor = 3.0 if (market_clean == "TH" and is_dip) else 4.5
         raw_stop_pct = ((entry_tick - stop_tick) / entry_tick) * 100.0
-        if raw_stop_pct < 4.5:
-            # Clamp stop to 4.5% floor to prevent intraday noise whipouts & fee drag
+        if raw_stop_pct < min_stop_floor:
+            # Clamp stop to floor to prevent intraday noise whipouts & fee drag
             if market_clean == "US":
-                stop_tick = round(entry_tick * 0.955, 2)
+                stop_tick = round(entry_tick * (1.0 - min_stop_floor / 100.0), 2)
             else:
-                stop_tick = round_to_set_tick(entry_tick * 0.955, "down")
+                stop_tick = round_to_set_tick(entry_tick * (1.0 - min_stop_floor / 100.0), "down")
             risk_dist = entry_tick - stop_tick
             stop_pct = (risk_dist / entry_tick) * 100.0
         else:
@@ -475,15 +487,20 @@ def evaluate_and_select_trade(
             logger.info("Candidate %s rejected: stop width %.1f%% exceeds 7.5%% max", sym, stop_pct)
             continue
 
-        # Two-Tier Target Calculation: T1 = 1.5R (50% scale-out), T2 = 2.5R (runner)
-        if market_clean == "US":
+        # Target Calculation: For TH DIP_BUY, tactical 1.5R swing target; for US/momentum, T1=1.5R, T2=2.5R
+        if market_clean == "TH" and is_dip:
+            t1_price = round_to_set_tick(entry_tick + (risk_dist * 1.5), "down")
+            final_target = max(t1_price, target_tick)
+            t2_price = final_target
+        elif market_clean == "US":
             t1_price = round(entry_tick + (risk_dist * 1.5), 2)
             t2_price = round(entry_tick + (risk_dist * 2.5), 2)
+            final_target = max(t2_price, target_tick)
         else:
             t1_price = round_to_set_tick(entry_tick + (risk_dist * 1.5), "down")
             t2_price = round_to_set_tick(entry_tick + (risk_dist * 2.5), "down")
+            final_target = max(t2_price, target_tick)
 
-        final_target = max(t2_price, target_tick)
         reward_dist = final_target - entry_tick
         rr_ratio = reward_dist / risk_dist if risk_dist > 0 else 0.0
         if rr_ratio < 1.45:
@@ -652,12 +669,22 @@ def run_autonomous_decision(
     posture_data = get_latest_exposure_posture(market=market_clean)
     recom = str(posture_data.get("recommendation", "NORMAL")).upper()
     ceiling = float(posture_data.get("exposure_ceiling_pct", 75))
-    if recom == "REDUCE_ONLY" or ceiling <= 20.0:
+
+    # Severe cash priority or severe exposure collapse (<= 20%) -> Total cash lockdown
+    if recom == "CASH_PRIORITY" or ceiling <= 20.0:
         msg = f"Market posture is {recom} (Ceiling: {ceiling}%). Prudence gate: holding 100% cash."
         logger.info(msg)
         if not dry_run:
             record_decision(today_str, "HOLD_CASH", None, None, recom, msg, market=market_clean)
         return {"status": "HOLD_CASH", "reason": msg}
+
+    allow_only_dip_buy = False
+    if recom == "REDUCE_ONLY":
+        allow_only_dip_buy = True
+        risk_mult = min(risk_mult, 0.5)  # Enforce Pilot sizing (half-risk)
+        logger.info(
+            "Market posture is REDUCE_ONLY. Activating Pilot DIP_BUY engine (risk_mult=0.5x)."
+        )
 
     # 5. Load Mission Candidates
     if not mission_json.exists():
@@ -680,6 +707,7 @@ def run_autonomous_decision(
         cash=cash,
         risk_mult=risk_mult,
         market=market_clean,
+        allow_only_dip_buy=allow_only_dip_buy,
     )
 
     if not winner:

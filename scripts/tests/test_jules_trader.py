@@ -399,6 +399,46 @@ class TestJulesTrader(unittest.TestCase):
         self.assertEqual(winner["nvdr_status"], "ACCUMULATION")
         self.assertEqual(winner["nvdr_bonus"], 15.0)
 
+    def test_pilot_dip_buy_allowed_in_reduce_only(self):
+        """Verify that DIP_BUY setups are allowed as Pilot orders during REDUCE_ONLY (ceiling > 20%)."""
+        mission = {
+            "market": "TH",
+            "candidates": [
+                {
+                    "symbol": "MOM.BK",
+                    "price": 10.0,
+                    "stop": 9.40,
+                    "target": 11.50,
+                    "sector": "Industrial Services",
+                    "source": "Thai Swing (MOMENTUM)",
+                    "score": 85.0,
+                },
+                {
+                    "symbol": "DIP.BK",
+                    "price": 5.0,
+                    "stop": 4.84,  # Tight 3.2% stop
+                    "target": 5.30,
+                    "sector": "Consumer Non-Durables",
+                    "source": "Thai Swing (DIP_BUY)",
+                    "score": 80.0,
+                },
+            ],
+        }
+        self.test_mission_file.write_text(json.dumps(mission), encoding="utf-8")
+
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={"recommendation": "REDUCE_ONLY", "exposure_ceiling_pct": 37},
+        ):
+            res = jt.run_autonomous_decision(force=True, market="TH")
+
+        # MOM.BK must be rejected because posture is REDUCE_ONLY; DIP.BK must be selected as pilot!
+        self.assertEqual(res["status"], "ORDER_STAGED")
+        self.assertEqual(res["symbol"], "DIP.BK")
+        staged_files = list(self.test_staged.glob("JULES-TH-*-DIP.yaml"))
+        self.assertTrue(len(staged_files) >= 1)
+
 
 if __name__ == "__main__":
     unittest.main()
