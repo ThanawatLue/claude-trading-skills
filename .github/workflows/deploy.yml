@@ -65,7 +65,8 @@ jobs:
             # deployment source of truth is the fetched main revision; keep
             # runtime state files outside git untouched.
             DEPLOY_SHA='${{ github.sha }}'
-            git checkout -B main "$DEPLOY_SHA"
+            git reset --hard HEAD || true
+            git checkout -f -B main "$DEPLOY_SHA"
             git reset --hard "$DEPLOY_SHA"
 
             if ! command -v uv >/dev/null 2>&1; then
