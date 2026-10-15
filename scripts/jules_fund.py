@@ -105,7 +105,8 @@ def _get_latest_price(symbol: str, market: str = "TH") -> float:
     """Fetch latest available price from local DB or yfinance fallback."""
     clean_sym = _normalize_symbol(symbol, market)
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(DB_PATH, timeout=30.0) as conn:
+            conn.execute("PRAGMA busy_timeout=5000;")
             row = conn.execute(
                 "SELECT close FROM price_bar WHERE symbol=? AND close IS NOT NULL ORDER BY date DESC LIMIT 1",
                 (clean_sym,),
@@ -489,7 +490,8 @@ def get_scan_candidates(limit: int = 10, market: str = "TH") -> list[dict[str, A
         return candidates
 
     try:
-        with sqlite3.connect(DB_PATH) as conn:
+        with sqlite3.connect(DB_PATH, timeout=30.0) as conn:
+            conn.execute("PRAGMA busy_timeout=5000;")
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """SELECT symbol, date, open, high, low, close, volume

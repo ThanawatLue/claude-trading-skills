@@ -260,7 +260,9 @@ def _collect_snapshot(market: str) -> dict:
         thai_watchlists = load_json(
             latest_file_any(os.path.join(REPORTS_DIR, "thai_watchlists_*.json"))
         )
-        thai_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json")))
+        thai_dividends = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json"))
+        )
         us_sector_heatmap = None
         us_breadth_tv = None
         us_watchlists = None
@@ -270,9 +272,13 @@ def _collect_snapshot(market: str) -> dict:
         ibd = load_json(
             latest_file_any(os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"))
         )
-        earnings_trade = load_json(latest_file_any(os.path.join(REPORTS_DIR, "earnings_trade_*.json")))
+        earnings_trade = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "earnings_trade_*.json"))
+        )
         uptrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json")))
-        downtrend = load_json(latest_file_any(os.path.join(REPORTS_DIR, "downtrend_analysis_*.json")))
+        downtrend = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "downtrend_analysis_*.json"))
+        )
         thai_swing = None
         thai_sector_heatmap = None
         thai_breadth = None
@@ -284,9 +290,13 @@ def _collect_snapshot(market: str) -> dict:
         us_breadth_tv = load_json(
             latest_file_any(os.path.join(REPORTS_DIR, "us_market_breadth_tv_*.json"))
         )
-        us_watchlists = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_watchlists_*.json")))
+        us_watchlists = load_json(
+            latest_file_any(os.path.join(REPORTS_DIR, "us_watchlists_*.json"))
+        )
         us_dividends = load_json(latest_file_any(os.path.join(REPORTS_DIR, "us_dividends_*.json")))
-        jules_us_mission = load_json(os.path.join(BASE_DIR, "state", "jules_us_tasks", "today_mission.json"))
+        jules_us_mission = load_json(
+            os.path.join(BASE_DIR, "state", "jules_us_tasks", "today_mission.json")
+        )
 
     return {
         "market": market,
@@ -319,12 +329,28 @@ def _merge_live_snapshot(stored: dict, fresh: dict) -> dict:
 
     # Strip cross-market keys from old database snapshot
     if market == "US":
-        for k in ["thai_swing", "thai_sector_heatmap", "thai_breadth", "thai_watchlists", "thai_dividends"]:
+        for k in [
+            "thai_swing",
+            "thai_sector_heatmap",
+            "thai_breadth",
+            "thai_watchlists",
+            "thai_dividends",
+        ]:
             clean_stored.pop(k, None)
         if not fresh.get("exposure"):
             clean_stored.pop("exposure", None)
     elif market == "TH":
-        for k in ["us_sector_heatmap", "us_breadth_tv", "us_watchlists", "us_dividends", "jules_us_mission", "ibd", "earnings_trade", "uptrend", "downtrend"]:
+        for k in [
+            "us_sector_heatmap",
+            "us_breadth_tv",
+            "us_watchlists",
+            "us_dividends",
+            "jules_us_mission",
+            "ibd",
+            "earnings_trade",
+            "uptrend",
+            "downtrend",
+        ]:
             clean_stored.pop(k, None)
 
     def merge(old, new):
@@ -467,7 +493,8 @@ def clean_unsuccessful_db_runs():
         if not os.path.exists(db_path):
             return
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, timeout=30.0)
+        conn.execute("PRAGMA busy_timeout=5000;")
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -1618,7 +1645,12 @@ def _lookup_bars_for_dual_check(symbol: str) -> list[dict] | None:
         from cache_manager import CacheManager
 
         cache = CacheManager(DB_PATH)
-        for sym in (symbol, symbol.replace(".BK", ""), f"{symbol.replace('.BK', '')}.BK", symbol.replace(".", "-")):
+        for sym in (
+            symbol,
+            symbol.replace(".BK", ""),
+            f"{symbol.replace('.BK', '')}.BK",
+            symbol.replace(".", "-"),
+        ):
             if not sym:
                 continue
             bars = cache.get_bars(sym, 260)
@@ -2538,7 +2570,8 @@ def api_patterns():
     if not os.path.exists(db_path):
         return jsonify({})
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    conn.execute("PRAGMA busy_timeout=5000;")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute(
@@ -2648,6 +2681,7 @@ def api_jules_status():
     market = normalize_market(request.args.get("market", "TH"))
     try:
         from scripts.jules_fund import get_jules_status
+
         return jsonify(get_jules_status(market))
     except Exception as e:
         return jsonify({"error": str(e), "market": market}), 500
@@ -2667,7 +2701,9 @@ def api_jules_mission():
 def api_market_posture():
     market = normalize_market(request.args.get("market", "TH"))
     exp = load_json(latest_file(os.path.join(REPORTS_DIR, "exposure_posture_*.json"), market)) or {}
-    return jsonify({"market": market, "posture": exp.get("recommended_posture", "NEUTRAL"), "exposure": exp})
+    return jsonify(
+        {"market": market, "posture": exp.get("recommended_posture", "NEUTRAL"), "exposure": exp}
+    )
 
 
 if __name__ == "__main__":

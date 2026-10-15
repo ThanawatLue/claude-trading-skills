@@ -143,7 +143,9 @@ def init_decision_ledger(db_path: Path | None = None) -> None:
         db_path = DB_PATH
     if not db_path.parent.exists():
         db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
+    with sqlite3.connect(db_path, timeout=30.0) as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
         conn.execute(
             """CREATE TABLE IF NOT EXISTS jules_decision_ledger (
                 decision_date TEXT,
@@ -174,7 +176,8 @@ def check_existing_decision(
     if not db_path.exists():
         return None
     try:
-        with sqlite3.connect(db_path) as conn:
+        with sqlite3.connect(db_path, timeout=30.0) as conn:
+            conn.execute("PRAGMA busy_timeout=5000;")
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("PRAGMA table_info(jules_decision_ledger)")
             cols = [r[1] for r in cursor.fetchall()]
@@ -213,7 +216,8 @@ def record_decision(
     now_iso = datetime.now(timezone.utc).isoformat()
     payload_str = json.dumps(payload or {})
     market_clean = market.upper()
-    with sqlite3.connect(db_path) as conn:
+    with sqlite3.connect(db_path, timeout=30.0) as conn:
+        conn.execute("PRAGMA busy_timeout=5000;")
         conn.execute(
             """INSERT OR REPLACE INTO jules_decision_ledger
                (decision_date, market, status, symbol, order_id, decided_at, posture, reason, payload_json)
@@ -468,6 +472,18 @@ def evaluate_and_select_trade(
             logger.info("Candidate %s rejected: sector %s already active in portfolio", sym, sector)
             continue
 
+        # SET Spread Friction Gate: Reject extreme penny friction (>1.5% per tick)
+        if market_clean == "TH":
+            tick_val = float(set_tick_size(entry_tick))
+            tick_spread_pct = (tick_val / entry_tick) * 100.0
+            if tick_spread_pct > 1.5:
+                logger.info(
+                    "Candidate %s rejected: single-tick spread %.2f%% exceeds 1.5%% friction limit",
+                    sym,
+                    tick_spread_pct,
+                )
+                continue
+
         # Stop Width Sanity Gate: For DIP_BUY near support, allow 3.0% floor; for momentum breakouts, enforce 4.5% floor
         min_stop_floor = 3.0 if (market_clean == "TH" and is_dip) else 4.5
         raw_stop_pct = ((entry_tick - stop_tick) / entry_tick) * 100.0
@@ -476,7 +492,9 @@ def evaluate_and_select_trade(
             if market_clean == "US":
                 stop_tick = round(entry_tick * (1.0 - min_stop_floor / 100.0), 2)
             else:
-                stop_tick = round_to_set_tick(entry_tick * (1.0 - min_stop_floor / 100.0), "down")
+                tick_val = float(set_tick_size(entry_tick))
+                min_dist = max(entry_tick * (min_stop_floor / 100.0), tick_val * 3.0)
+                stop_tick = round_to_set_tick(entry_tick - min_dist, "down")
             risk_dist = entry_tick - stop_tick
             stop_pct = (risk_dist / entry_tick) * 100.0
         else:

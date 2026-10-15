@@ -49,6 +49,39 @@ except ImportError:
     )
 
 MIN_PRICE = 2.0
+MAX_DIP_TICK_SPREAD_PCT = 0.80  # Reject DIP_BUY candidates where 1 tick > 0.80% (Spread Trap)
+
+
+def get_set_tick_size(price: float) -> float:
+    """Return the official Stock Exchange of Thailand (SET) tick size."""
+    if price < 2.0:
+        return 0.01
+    elif price < 5.0:
+        return 0.02
+    elif price < 10.0:
+        return 0.05
+    elif price < 25.0:
+        return 0.10
+    elif price < 100.0:
+        return 0.25
+    elif price < 200.0:
+        return 0.50
+    elif price < 400.0:
+        return 1.00
+    return 2.00
+
+
+def get_tick_spread_pct(price: float) -> float:
+    """Return single-tick spread as a percentage of price.
+
+    Identifies 'SET Spread Traps' where boundary bracket prices (e.g. 2.02, 5.05)
+    incur ~1.0% friction per tick, severely degrading swing trade expectancy.
+    """
+    if price <= 0:
+        return 999.0
+    tick = get_set_tick_size(price)
+    return (tick / price) * 100.0
+
 
 # Dip Buy thresholds
 DIP_RSI_MIN = 35
@@ -115,7 +148,12 @@ def score_dip_buy(s: dict) -> float:
     else:
         prox_score = 40.0
 
-    return round(rsi_score * 0.35 + weekly_score * 0.25 + vol_score * 0.15 + prox_score * 0.25, 1)
+    # Penalize candidates suffering from excessive SET tick spread friction (>0.60% per tick)
+    spread_pct = get_tick_spread_pct(price)
+    spread_penalty = max(0.0, (spread_pct - 0.60) * 50.0) if spread_pct > 0.60 else 0.0
+
+    raw_score = rsi_score * 0.35 + weekly_score * 0.25 + vol_score * 0.15 + prox_score * 0.25
+    return round(max(0.0, raw_score - spread_penalty), 1)
 
 
 def score_momentum(s: dict) -> float:
@@ -183,6 +221,7 @@ def fetch_atr(symbol: str, lookback: int = 20) -> dict:
 
 def build_plan(price: float, strategy: str, atr: float, recent_low: float) -> dict:
     entry = price
+    tick = get_set_tick_size(entry)
     if atr > 0:
         # DIP_BUY: 1.2x ATR or recent_low * 0.99 (buying near support)
         # MOMENTUM: 1.2x ATR (avoid excessively wide stops on Thai swing)
@@ -190,9 +229,14 @@ def build_plan(price: float, strategy: str, atr: float, recent_low: float) -> di
         stop = max(recent_low * 0.99, entry - atr_mult * atr)
     else:
         stop = entry * (0.96 if strategy == "DIP_BUY" else 0.96)
-    # Ensure stop doesn't compress to < 1% (avoid nonsense plans)
-    if (entry - stop) / entry < 0.01:
-        stop = entry * 0.97
+
+    # Argon Institutional Safeguard:
+    # 1. Stop must be at least 3.0% below entry to prevent intraday noise whipouts.
+    # 2. Stop must be at least 3 full ticks away from entry to avoid single-tick ladder traps.
+    min_stop_distance = max(entry * 0.03, tick * 3.0)
+    if (entry - stop) < min_stop_distance:
+        stop = entry - min_stop_distance
+
     risk = entry - stop
     target_mult = 1.5 if strategy == "DIP_BUY" else 1.3
     target = entry + target_mult * risk
@@ -509,7 +553,12 @@ def main():
     # Post-scoring quality filters (applied after plans are built)
     before_dip = len(top_dip)
     before_mom = len(top_mom)
-    top_dip = [s for s in top_dip if s["_plan"]["reward_pct"] >= DIP_MIN_REWARD_PCT]
+    top_dip = [
+        s
+        for s in top_dip
+        if s["_plan"]["reward_pct"] >= DIP_MIN_REWARD_PCT
+        and get_tick_spread_pct(float(s.get("price") or 0.0)) <= MAX_DIP_TICK_SPREAD_PCT
+    ]
 
     def _mom_risk_allowed(s: dict) -> bool:
         price = float(s.get("price") or 0.0)
