@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-10-15 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-10-16 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -28,10 +28,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. BCH.BK** | ฿11.20 | **600** หุ้น | ฿6,720.00 | ฿10.80 (-3.6%) | ฿11.60 (Swing Target) | RSI: 48.8 | Vol: 1.7x | Swing Score: 75.0 |
-| **2. BIZ.BK** | ฿6.05 | **1,100** หุ้น | ฿6,655.00 | ฿5.85 (-3.3%) | ฿6.30 (Swing Target) | RSI: 46.5 | Vol: 0.9x | Swing Score: 73.8 |
-| **3. SPRC.BK** | ฿16.00 | **400** หุ้น | ฿6,400.00 | ฿15.10 (-5.6%) | ฿17.00 (Swing Target) | RSI: 65.8 | Vol: 1.8x | Swing Score: 70.0 |
-| **4. EPG.BK** | ฿6.65 | **1,000** หุ้น | ฿6,650.00 | ฿6.35 (-4.5%) | ฿6.95 (Swing Target) | RSI: 63.3 | Vol: 1.8x | Swing Score: 69.7 |
+| **1. CNT.BK** | ฿3.06 | **2,200** หุ้น | ฿6,732.00 | ฿2.96 (-3.3%) | ฿3.20 (Swing Target) | RSI: 43.6 | Vol: 2.3x | Swing Score: 92.0 |
+| **2. HANA.BK** | ฿50.25 | **100** หุ้น | ฿5,025.00 | ฿48.50 (-3.5%) | ฿52.50 (Swing Target) | RSI: 50.2 | Vol: 1.0x | Swing Score: 73.3 |
+| **3. TASCO.BK** | ฿17.80 | **300** หุ้น | ฿5,340.00 | ฿17.20 (-3.4%) | ฿18.40 (Swing Target) | RSI: 64.9 | Vol: 1.9x | Swing Score: 70.3 |
+| **4. AMATA.BK** | ฿32.25 | **200** หุ้น | ฿6,450.00 | ฿30.75 (-4.7%) | ฿34.25 (Swing Target) | RSI: 51.9 | Vol: 1.5x | Swing Score: 68.7 |
 
 ---
 
@@ -48,53 +48,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: BCH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BCH.yaml
+# Order Template 1: CNT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CNT.yaml
 action: buy
-symbol: "BCH.BK"
+symbol: "CNT.BK"
 market: "TH"
-shares: 600
-entry_price: 11.20
-stop_price: 10.80
-target_price: 11.60
+shares: 2200
+entry_price: 3.06
+stop_price: 2.96
+target_price: 3.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: BIZ.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BIZ.yaml
+# Order Template 2: HANA.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_HANA.yaml
 action: buy
-symbol: "BIZ.BK"
+symbol: "HANA.BK"
 market: "TH"
-shares: 1100
-entry_price: 6.05
-stop_price: 5.85
-target_price: 6.30
+shares: 100
+entry_price: 50.25
+stop_price: 48.50
+target_price: 52.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: SPRC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SPRC.yaml
+# Order Template 3: TASCO.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TASCO.yaml
 action: buy
-symbol: "SPRC.BK"
+symbol: "TASCO.BK"
 market: "TH"
-shares: 400
-entry_price: 16.00
-stop_price: 15.10
-target_price: 17.00
+shares: 300
+entry_price: 17.80
+stop_price: 17.20
+target_price: 18.40
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 4: EPG.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_EPG.yaml
+# Order Template 4: AMATA.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
 action: buy
-symbol: "EPG.BK"
+symbol: "AMATA.BK"
 market: "TH"
-shares: 1000
-entry_price: 6.65
-stop_price: 6.35
-target_price: 6.95
+shares: 200
+entry_price: 32.25
+stop_price: 30.75
+target_price: 34.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
