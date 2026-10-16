@@ -295,7 +295,7 @@ The table below is **auto-generated** from `skills-index.yaml` by `scripts/gener
 | **Options Strategy Advisor** | 🟡 Optional | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
 | **PEAD Screener** | ✅ Required | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
 | **Pair Trade Screener** | ✅ Required | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
-| **Paper Trade Simulator** | ❌ Not used | ❌ Not used | ❌ Not used | Local SQLite state database; no API key required; Paper trading and discipline metrics; works offline |
+| **Paper Trade Simulator** | ❌ Not used | ❌ Not used | ❌ Not used | SQLite database for tracking paper trades |
 | **Parabolic Short Trade Planner** | ✅ Required | ❌ Not used | 🟡 Optional | Financial Modeling Prep API |
 | **Portfolio Manager** | ❌ Not used | ❌ Not used | ✅ Required | Alpaca brokerage MCP/API |
 | **Position Sizer** | ❌ Not used | ❌ Not used | ❌ Not used | Pure calculation; works offline |
@@ -308,15 +308,19 @@ The table below is **auto-generated** from `skills-index.yaml` by `scripts/gener
 | **Stanley Druckenmiller Investment** | ❌ Not used | ❌ Not used | ❌ Not used | Synthesizes outputs from upstream skills; pure calculation |
 | **Strategy Pivot Designer** | ❌ Not used | ❌ Not used | ❌ Not used | Pivot proposal generator; pure calculation |
 | **Technical Analyst** | ❌ Not used | ❌ Not used | ❌ Not used | Chart screenshot input |
-| **Thai Breadth Analyzer** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
-| **Thai Dividend Screener** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
-| **Thai Sector Heatmap** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
-| **Thai Watchlist Builder** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public scanner; no API key required |
+| **Thai Breadth Analyzer** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
+| **Thai Dividend Screener** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
+| **Thai Sector Heatmap** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
+| **Thai Watchlist Builder** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
 | **Theme Detector** | 🟡 Optional | 🟡 Optional (Recommended) | ❌ Not used | Financial Modeling Prep API |
 | **Trade Hypothesis Ideator** | ❌ Not used | ❌ Not used | ❌ Not used | Hypothesis generation from journal/data inputs; pure calculation |
 | **Trader Memory Core** | 🟡 Optional | ❌ Not used | ❌ Not used | Financial Modeling Prep API |
+| **US Breadth Analyzer (TV)** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
+| **US Dividend Screener** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
 | **US Market Bubble Detector** | ❌ Not used | ❌ Not used | ❌ Not used | User provides indicators |
+| **US Sector Heatmap** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
 | **US Stock Analysis** | ❌ Not used | ❌ Not used | ❌ Not used | User provides data |
+| **US Watchlist Builder** | ❌ Not used | ❌ Not used | ❌ Not used | TradingView public API |
 | **Uptrend Analyzer** | ❌ Not used | ❌ Not used | ❌ Not used | Monty Uptrend Ratio Dashboard CSV; no API key required |
 | **VCP Screener** | ✅ Required | ❌ Not used | ❌ Not used | S&P 500 OHLCV via FMP |
 | **Value Dividend Screener** | ✅ Required | 🟡 Optional (Recommended) | ❌ Not used | Financial Modeling Prep API |

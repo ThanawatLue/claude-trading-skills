@@ -422,6 +422,21 @@ function calculatePatternStats(bars, currentIndex) {
     }
   }
 
+  // ── 10-period EMA ──
+  const ema10 = [];
+  const k10 = 2 / (10 + 1);
+  for (let i = 0; i < bars.length; i++) {
+    if (i < 9) {
+      ema10.push(null);
+    } else if (i === 9) {
+      let sum = 0;
+      for (let j = 0; j < 10; j++) sum += bars[i - j].close;
+      ema10.push(sum / 10);
+    } else {
+      ema10.push(bars[i].close * k10 + ema10[i - 1] * (1 - k10));
+    }
+  }
+
   // ── True Range & ATR 14 ──
   const tr = [];
   for (let i = 0; i < bars.length; i++) {
@@ -858,7 +873,15 @@ function calculatePatternStats(bars, currentIndex) {
     if (slice.length === 0) return null;
     const wins = slice.filter(r => r > 0).length;
     const avg = slice.reduce((a, b) => a + b, 0) / slice.length;
-    return { winRate: (wins / slice.length * 100).toFixed(1), avg: avg.toFixed(2), total: slice.length };
+    const sorted = [...slice].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    return {
+      winRate: (wins / slice.length * 100).toFixed(1),
+      avg: avg.toFixed(2),
+      median: median.toFixed(2),
+      total: slice.length
+    };
   };
 
   const buildStatsObj = (rets, periods) => {
@@ -876,6 +899,13 @@ function calculatePatternStats(bars, currentIndex) {
     }
     return obj;
   };
+
+  let extensionEma10Atr = null;
+  let isExtended = false;
+  if (ema10[currentIndex] !== null && atr14[currentIndex] && atr14[currentIndex] > 0) {
+    extensionEma10Atr = (bars[currentIndex].close - ema10[currentIndex]) / atr14[currentIndex];
+    isExtended = extensionEma10Atr >= 2.5;
+  }
 
   return {
     gap: {
@@ -911,6 +941,11 @@ function calculatePatternStats(bars, currentIndex) {
       val: atr14[currentIndex],
       pct: (atr14[currentIndex] / bars[currentIndex].close * 100).toFixed(2)
     } : null,
+    extension: {
+      ema10: ema10[currentIndex],
+      atrDistance: extensionEma10Atr !== null ? parseFloat(extensionEma10Atr.toFixed(2)) : null,
+      isExtended: isExtended
+    },
     weeklyTrend: {
       isWeeklyBull: isWeeklyBull,
       weeklySMA10: weeklySMA10Val
@@ -949,7 +984,12 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
   const formatStat = (s, n) => {
     if (!s || !s[n]) return `<span style="color:var(--muted)">N/A</span>`;
     const col = s[n].avg > 0 ? 'var(--green)' : 'var(--red)';
-    return `<span style="color:${col}">${s[n].winRate}% (${s[n].avg}%)</span>`;
+    const count = s[n].total || 0;
+    const countBadge = count < 5
+      ? ` <span style="color:#ff9800;font-size:9px" title="Small sample size">(N=${count} Low)</span>`
+      : ` <span style="color:var(--muted);font-size:9px">[N=${count}]</span>`;
+    const medTxt = s[n].median != null ? ` med:${s[n].median}%` : '';
+    return `<span style="color:${col}">${s[n].winRate}% (${s[n].avg}%${medTxt})</span>${countBadge}`;
   };
 
   const SECTOR_ETF_MAP = {
@@ -1104,11 +1144,14 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
     let accuracyHtml = "";
     let patternsHtml = "";
     if (stats) {
-      // 1. Inside Day / NR7 badges
+      // 1. Inside Day / NR7 / Extension badges
       let badges = [];
+      if (stats.extension && stats.extension.isExtended) {
+        badges.push(`<span style="background:rgba(255,152,0,0.2);color:#ff9800;border:1px solid rgba(255,152,0,0.4);padding:2px 6px;border-radius:3px;font-weight:bold;font-size:9px">⚠️ EXTENDED +${stats.extension.atrDistance} ATR (PULLBACK RISK)</span>`);
+      }
       if (stats.insideDay) badges.push(`<span style="background:rgba(88,166,255,0.15);color:#58a6ff;padding:2px 4px;border-radius:3px;font-weight:bold;font-size:9px">INSIDE</span>`);
       if (stats.nr7) badges.push(`<span style="background:rgba(210,168,255,0.15);color:#d2a8ff;padding:2px 4px;border-radius:3px;font-weight:bold;font-size:9px">NR7</span>`);
-      let badgeRow = badges.length > 0 ? `<div style="display:flex;gap:4px;margin-bottom:6px">${badges.join("")}</div>` : "";
+      let badgeRow = badges.length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">${badges.join("")}</div>` : "";
 
       // 2. ATR Position Size
       let atrStr = "N/A";
@@ -1120,11 +1163,24 @@ function setupChartLegend(chart, container, symbol, prices, candleSeries) {
         const risk = parseFloat(settings.risk_pct) || 0.5;
         const riskAmt = acct * (risk / 100);
         const stopDistance = 2 * stats.atr.val;
-        const shares = Math.floor(riskAmt / stopDistance);
+        let shares = Math.floor(riskAmt / stopDistance);
         if (shares > 0 && barClose > 0) {
-          const allocation = (shares * barClose) / acct * 100;
-          const currencySign = currentMarket === 'TH' ? '฿' : '$';
-          posSizeStr = `${shares} shares (${allocation.toFixed(1)}% / ${currencySign}${(shares * barClose).toLocaleString(undefined, {maximumFractionDigits:0})})`;
+          // Cap position size at 25% of account
+          const maxAllocationAmt = acct * 0.25;
+          const maxShares = Math.floor(maxAllocationAmt / barClose);
+          if (shares > maxShares) shares = maxShares;
+
+          // SET Board Lot (100 shares block)
+          if (currentMarket === 'TH') {
+            shares = Math.floor(shares / 100) * 100;
+          }
+          if (shares > 0) {
+            const allocation = (shares * barClose) / acct * 100;
+            const currencySign = currentMarket === 'TH' ? '฿' : '$';
+            posSizeStr = `${shares.toLocaleString()} shares (${allocation.toFixed(1)}% / ${currencySign}${(shares * barClose).toLocaleString(undefined, {maximumFractionDigits:0})})`;
+          } else {
+            posSizeStr = `<span style="color:var(--muted)">100 shs min lot exceeds risk/cap</span>`;
+          }
         }
       }
 
@@ -1863,6 +1919,7 @@ async function loadRankedCandidates() {
     }
 
     const passed = data.passed || [];
+    _lastDualCheckCandidates = passed;
     if (data.regime_allowed && !passed.length) {
       body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">ยังไม่มีหุ้นที่ผ่าน Dual-Check วันนี้ (ดู near-miss ด้านล่าง)</td></tr>`;
     } else if (passed.length) {
@@ -1877,6 +1934,34 @@ async function loadRankedCandidates() {
           .join(' · ') || 'all hard gates pass';
         const sym = (c.symbol || '').replace('.BK', '');
         const src = (c.source || 'vcp').replace('thai_swing_', 'swing:').replace('us_mission', 'mission').replace('us_watchlist_', 'wl:');
+
+        // Decision Card calculations
+        const settings = getSettings();
+        const acct = parseFloat(settings.account_size) || (currentMarket === 'TH' ? 30000 : 1000);
+        const riskPct = parseFloat(settings.risk_pct) || 0.5;
+        const riskAmt = acct * (riskPct / 100);
+        const curSign = currentMarket === 'TH' ? '฿' : '$';
+
+        const entryPx = c.plan?.entry || c.price || 0;
+        const stopPx = c.plan?.stop_loss || (entryPx > 0 ? entryPx * 0.95 : 0);
+        const targetPx = c.plan?.take_profit || (entryPx > 0 ? entryPx + (entryPx - stopPx) * 2 : 0);
+        const riskPerShare = Math.max(0.01, entryPx - stopPx);
+        let recShares = Math.floor(riskAmt / riskPerShare);
+        const maxShares = entryPx > 0 ? Math.floor((acct * 0.25) / entryPx) : 0;
+        if (recShares > maxShares) recShares = maxShares;
+        if (currentMarket === 'TH') {
+          recShares = Math.floor(recShares / 100) * 100;
+        }
+        const totalTradeCost = recShares * entryPx;
+        const allocPct = acct > 0 ? (totalTradeCost / acct * 100) : 0;
+        const totalRiskAmt = recShares * riskPerShare;
+
+        const isExt = c.confluence?.is_extended;
+        const extAtr = c.confluence?.extension_ema10_atr;
+        const extHtml = isExt
+          ? `<span style="background:rgba(255,152,0,0.2);color:#ff9800;border:1px solid rgba(255,152,0,0.4);padding:2px 8px;border-radius:4px;font-weight:bold;font-size:11px">⚠️ Extended +${extAtr} ATR (Pullback Risk)</span>`
+          : `<span style="color:var(--green);font-size:11px">✅ Normal Extension (${extAtr != null ? '+' + extAtr + ' ATR' : '—'})</span>`;
+
         return `<tr style="cursor:pointer" onclick="toggleDualCheckRow(${i}, '${c.symbol}')" title="คลิกเพื่อดูกราฟ ${sym}">
           <td>${i + 1}</td>
           <td><b>${sym}</b> 🔍</td>
@@ -1891,12 +1976,47 @@ async function loadRankedCandidates() {
           <td style="font-size:.72rem;color:var(--muted)">${gateBits}</td>
         </tr>
         <tr id="dcDetail-${i}" style="display:none">
-          <td colspan="11" style="padding:12px;background:var(--bg2);border-bottom:1px solid var(--border)">
+          <td colspan="11" style="padding:14px;background:var(--bg2);border-bottom:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-weight:bold;color:var(--cyan)">📈 ${sym} Chart & Pattern Analysis (${currentMarket === 'TH' ? 'vs SET' : 'vs S&P 500'})</span>
-              <span style="font-size:0.75rem;color:var(--muted)">คลิกที่แถวอีกครั้งเพื่อย่อกราฟ</span>
+              <span style="font-size:0.75rem;color:var(--muted)">คลิกที่แถวอีกครั้งเพื่อย่อ</span>
             </div>
             <div id="dcChart-${i}" class="chart-loading" style="height:360px;width:100%;border-radius:8px"></div>
+            
+            <!-- 360° Stock Decision Card -->
+            <div style="margin-top:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:8px;flex-wrap:wrap;gap:8px">
+                <div style="font-weight:bold;font-size:13px;display:flex;align-items:center;gap:8px">
+                  <span>🎯 360° Decision & Execution Card: <b>${sym}</b></span>
+                  ${extHtml}
+                </div>
+                <button class="pt-btn-primary" style="padding:5px 14px;font-size:11px;font-weight:bold" onclick="event.stopPropagation(); paperAddPick('${c.symbol}', '${currentMarket}', ${entryPx}, ${stopPx}, ${targetPx}, '${c.source || 'dual_check'}', ${c.composite_score || 0}, ${recShares})">
+                  ⚡ Open Paper Trade
+                </button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;font-size:11px">
+                <div style="background:rgba(0,0,0,0.2);padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.05)">
+                  <div style="color:var(--muted);font-weight:600;margin-bottom:4px">TRADE SETUP (2R)</div>
+                  <div style="display:flex;justify-content:space-between"><span>Entry:</span> <b style="color:var(--cyan)">${curSign}${entryPx.toFixed(2)}</b></div>
+                  <div style="display:flex;justify-content:space-between"><span>Stop Loss:</span> <b style="color:var(--red)">${curSign}${stopPx.toFixed(2)}</b></div>
+                  <div style="display:flex;justify-content:space-between"><span>Target:</span> <b style="color:var(--green)">${curSign}${targetPx.toFixed(2)}</b></div>
+                  <div style="display:flex;justify-content:space-between"><span>Risk / Share:</span> <span>${curSign}${riskPerShare.toFixed(2)} (${entryPx > 0 ? (riskPerShare / entryPx * 100).toFixed(1) : 0}%)</span></div>
+                </div>
+                <div style="background:rgba(0,0,0,0.2);padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.05)">
+                  <div style="color:var(--muted);font-weight:600;margin-bottom:4px">POSITION SIZING (25% CAP)</div>
+                  <div style="display:flex;justify-content:space-between"><span>Rec. Shares:</span> <b style="color:var(--gold)">${recShares.toLocaleString()} shs ${currentMarket === 'TH' ? '(Lot 100)' : ''}</b></div>
+                  <div style="display:flex;justify-content:space-between"><span>Position Value:</span> <span>${curSign}${totalTradeCost.toLocaleString(undefined, {maximumFractionDigits:0})} (${allocPct.toFixed(1)}%)</span></div>
+                  <div style="display:flex;justify-content:space-between"><span>Risk on Capital:</span> <span style="color:var(--red)">${curSign}${totalRiskAmt.toLocaleString(undefined, {maximumFractionDigits:0})} (${(totalRiskAmt / acct * 100).toFixed(2)}%)</span></div>
+                </div>
+                <div style="background:rgba(0,0,0,0.2);padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.05)">
+                  <div style="color:var(--muted);font-weight:600;margin-bottom:4px">STATISTICAL EDGES</div>
+                  <div style="display:flex;justify-content:space-between"><span>Confluence:</span> <b style="color:${(c.confluence?.net_score || 0) >= 1 ? 'var(--green)' : 'var(--text)'}">${c.confluence?.label || 'Neutral'} (${conf})</b></div>
+                  <div style="display:flex;justify-content:space-between"><span>Day Bias:</span> <span>${c.day_bias?.day || '—'} WR ${bias} (Med: ${c.day_bias?.median_return != null ? c.day_bias.median_return + '%' : '—'}) [N=${c.day_bias?.count || 0}]</span></div>
+                  <div style="display:flex;justify-content:space-between"><span>Relative Strength:</span> <b style="color:${(c.rs_percentile || 0) >= 80 ? 'var(--green)' : 'var(--red)'}">Percentile ${c.rs_percentile != null ? Math.round(c.rs_percentile) : '—'}</b></div>
+                  <div style="display:flex;justify-content:space-between"><span>Earnings Gate:</span> <span>${earnTxt}</span></div>
+                </div>
+              </div>
+            </div>
           </td>
         </tr>`;
       }).join('');
@@ -1921,17 +2041,19 @@ async function loadRankedCandidates() {
   }
 }
 
+let _lastDualCheckCandidates = [];
 function toggleDualCheckRow(i, symbol) {
   const row = document.getElementById(`dcDetail-${i}`);
   if (!row) return;
   const isHidden = row.style.display === 'none';
   row.style.display = isHidden ? 'table-row' : 'none';
   if (isHidden) {
-    initGenericChart(`dcChart-${i}`, symbol);
+    const cand = _lastDualCheckCandidates[i] || null;
+    initGenericChart(`dcChart-${i}`, symbol, cand?.plan || null);
   }
 }
 
-async function initGenericChart(containerId, symbol) {
+async function initGenericChart(containerId, symbol, plan = null) {
   const container = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
   if (!container || container.dataset.loaded === '1') return;
   container.dataset.loaded = '1';
@@ -2000,6 +2122,52 @@ async function initGenericChart(containerId, symbol) {
     addSMA(sma20, '#58a6ff', 'SMA20');
     addSMA(sma50, '#d29922', 'SMA50');
     addSMA(sma200, '#a371f7', 'SMA200');
+
+    // Horizontal Price Lines for Entry, Stop Loss, Target 2R
+    let tradePlan = plan;
+    if (!tradePlan && RAW_DATA) {
+      const dcC = (RAW_DATA.dual_check?.candidates || []).find(c => c.symbol === symbol);
+      if (dcC?.plan) tradePlan = dcC.plan;
+      else {
+        const vcpC = (RAW_DATA.vcp?.results || []).find(r => r.symbol === symbol);
+        if (vcpC?.plan) tradePlan = vcpC.plan;
+      }
+    }
+    if (tradePlan && candleSeries) {
+      const entry = parseFloat(tradePlan.entry);
+      const stop = parseFloat(tradePlan.stop_loss || tradePlan.stop);
+      const target = parseFloat(tradePlan.take_profit || tradePlan.target);
+      if (entry > 0) {
+        candleSeries.createPriceLine({
+          price: entry,
+          color: '#58a6ff',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Entry ${entry.toFixed(2)}`
+        });
+      }
+      if (stop > 0) {
+        candleSeries.createPriceLine({
+          price: stop,
+          color: theme.red,
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Stop ${stop.toFixed(2)}`
+        });
+      }
+      if (target > 0) {
+        candleSeries.createPriceLine({
+          price: target,
+          color: theme.green,
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Target 2R ${target.toFixed(2)}`
+        });
+      }
+    }
 
     setupChartLegend(chart, container, symbol, data, candleSeries);
     chart.timeScale().fitContent();
@@ -2520,19 +2688,38 @@ async function initSwingChart(symbol, plan) {
     addLine(calcSMA(closes, 150), '#a855f7', 'SMA150'); // purple
     addLine(calcSMA(closes, 200), '#00d4ff', 'SMA200'); // cyan
 
-    // Entry / Stop / Target horizontal lines (last 60 bars)
-    if (plan && data.length > 0) {
-      const startIdx = Math.max(0, data.length - 60);
-      const startTime = data[startIdx].time;
-      const endTime = data[data.length - 1].time;
-      const addLevel = (price, color, title, style) => {
-        const s = chart.addLineSeries({ color, lineWidth: 2, lineStyle: style,
-          title, lastValueVisible: true, priceLineVisible: false });
-        s.setData([{ time: startTime, value: price }, { time: endTime, value: price }]);
-      };
-      if (plan.entry)  addLevel(plan.entry,  '#00e676', 'Entry',  0); // solid green
-      if (plan.stop)   addLevel(plan.stop,   '#f44336', 'Stop',   1); // dashed red
-      if (plan.target) addLevel(plan.target, '#ffd700', 'Target', 1); // dashed gold
+    // Entry / Stop / Target horizontal lines via native price lines
+    if (plan && candleSeries) {
+      if (plan.entry) {
+        candleSeries.createPriceLine({
+          price: plan.entry,
+          color: '#58a6ff',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Entry ${plan.entry.toFixed(2)}`
+        });
+      }
+      if (plan.stop) {
+        candleSeries.createPriceLine({
+          price: plan.stop,
+          color: '#f44336',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Stop ${plan.stop.toFixed(2)}`
+        });
+      }
+      if (plan.target) {
+        candleSeries.createPriceLine({
+          price: plan.target,
+          color: '#00e676',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Target 2R ${plan.target.toFixed(2)}`
+        });
+      }
     }
 
     setupChartLegend(chart, container, symbol, data, candleSeries);
@@ -2788,6 +2975,52 @@ async function initCANSLIMChart(symbol) {
     addSMALine(calcSMA(closes, 50),  '#ff9800', 'SMA50');
     addSMALine(calcSMA(closes, 150), '#a855f7', 'SMA150');
     addSMALine(calcSMA(closes, 200), '#00d4ff', 'SMA200');
+
+    // Horizontal Price Lines for Entry, Stop Loss, Target 2R
+    let tradePlan = null;
+    if (RAW_DATA) {
+      const dcC = (RAW_DATA.dual_check?.candidates || []).find(c => c.symbol === symbol);
+      if (dcC?.plan) tradePlan = dcC.plan;
+      else {
+        const vcpC = (RAW_DATA.vcp?.results || []).find(r => r.symbol === symbol);
+        if (vcpC?.plan) tradePlan = vcpC.plan;
+      }
+    }
+    if (tradePlan && candleSeries) {
+      const entry = parseFloat(tradePlan.entry);
+      const stop = parseFloat(tradePlan.stop_loss || tradePlan.stop);
+      const target = parseFloat(tradePlan.take_profit || tradePlan.target);
+      if (entry > 0) {
+        candleSeries.createPriceLine({
+          price: entry,
+          color: '#58a6ff',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Entry ${entry.toFixed(2)}`
+        });
+      }
+      if (stop > 0) {
+        candleSeries.createPriceLine({
+          price: stop,
+          color: '#f44336',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Stop ${stop.toFixed(2)}`
+        });
+      }
+      if (target > 0) {
+        candleSeries.createPriceLine({
+          price: target,
+          color: '#00e676',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Target 2R ${target.toFixed(2)}`
+        });
+      }
+    }
 
     setupChartLegend(chart, container, symbol, data, candleSeries);
     chart.timeScale().fitContent();
@@ -3069,27 +3302,46 @@ async function initChart(symbol) {
     addSMALine(calcSMA(closes, 150), '#a855f7', 'SMA150');
     addSMALine(calcSMA(closes, 200), '#00d4ff', 'SMA200');
 
-    // Pivot / Stop / Target horizontal lines from VCP data
+    // Pivot / Stop / Target horizontal lines from VCP data or synthesized plan
     const vcpR = (RAW_DATA?.vcp?.results || []).find(r => r.symbol === symbol);
-    const pivotPrice = vcpR?.vcp_pattern?.pivot_price;
-    const stopPrice  = vcpR?.pivot_proximity?.stop_loss_price;
+    const pivotPrice = vcpR?.vcp_pattern?.pivot_price || vcpR?.plan?.entry;
+    const stopPrice  = vcpR?.pivot_proximity?.stop_loss_price || vcpR?.plan?.stop_loss;
     const settings   = getSettings();
     const targetR    = parseFloat(settings.target_r) || 2.0;
-    const targetPrice = (pivotPrice && stopPrice)
-      ? pivotPrice + targetR * (pivotPrice - stopPrice) : null;
+    const targetPrice = vcpR?.plan?.take_profit || ((pivotPrice && stopPrice)
+      ? pivotPrice + targetR * (pivotPrice - stopPrice) : null);
 
-    if (data.length > 0 && (pivotPrice || stopPrice)) {
-      const startIdx = Math.max(0, data.length - 120);
-      const tStart   = data[startIdx].time;
-      const tEnd     = data[data.length - 1].time;
-      const addHLine = (price, color, title, style) => {
-        const s = chart.addLineSeries({ color, lineWidth: 2, lineStyle: style,
-          title, lastValueVisible: true, priceLineVisible: false });
-        s.setData([{ time: tStart, value: price }, { time: tEnd, value: price }]);
-      };
-      if (pivotPrice)  addHLine(pivotPrice,  '#ffd700', 'Pivot',              1); // gold dashed
-      if (stopPrice)   addHLine(stopPrice,   '#f44336', 'Stop',               1); // red  dashed
-      if (targetPrice) addHLine(targetPrice, '#ff80ab', `Target(${targetR}R)`,1); // pink dashed
+    if (candleSeries) {
+      if (pivotPrice) {
+        candleSeries.createPriceLine({
+          price: pivotPrice,
+          color: '#ffd700',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Entry/Pivot ${pivotPrice.toFixed(2)}`
+        });
+      }
+      if (stopPrice) {
+        candleSeries.createPriceLine({
+          price: stopPrice,
+          color: '#f44336',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Stop ${stopPrice.toFixed(2)}`
+        });
+      }
+      if (targetPrice) {
+        candleSeries.createPriceLine({
+          price: targetPrice,
+          color: '#00e676',
+          lineWidth: 2,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: `Target ${targetR}R ${targetPrice.toFixed(2)}`
+        });
+      }
     }
 
     setupChartLegend(chart, container, symbol, data, candleSeries);

@@ -26,7 +26,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 try:
     import yfinance as yf
@@ -121,7 +120,7 @@ def _check_symbol_earnings(
     symbol: str,
     from_date: date,
     to_date: date,
-) -> Optional[dict]:
+) -> dict | None:
     """Check if a symbol reported earnings in [from_date, to_date].
 
     Returns an earnings dict compatible with FMP's earning_calendar format,
@@ -163,8 +162,8 @@ class YFClient:
     # Expose for compatibility with analyze_earnings_trades.py exchange filter
     US_EXCHANGES = US_EXCHANGES
 
-    def __init__(self, api_key: Optional[str] = None, max_api_calls: int = 9999):
-        self._sp500_cache: Optional[list[str]] = None
+    def __init__(self, api_key: str | None = None, max_api_calls: int = 9999):
+        self._sp500_cache: list[str] | None = None
 
     def _get_sp500(self) -> list[str]:
         if self._sp500_cache is not None:
@@ -291,7 +290,7 @@ class YFClient:
 
     # ── Earnings Calendar ────────────────────────────────────────────────────
 
-    def get_earnings_calendar(self, from_date: str, to_date: str) -> Optional[list]:
+    def get_earnings_calendar(self, from_date: str, to_date: str) -> list | None:
         """Scan S&P 500 for stocks that reported earnings in [from_date, to_date].
 
         Results are cached 24 h per symbol in the earnings_scan table.
@@ -403,7 +402,7 @@ class YFClient:
 
     # ── Historical Prices ────────────────────────────────────────────────────
 
-    def get_historical_prices(self, symbol: str, days: int = 250) -> Optional[list[dict]]:
+    def get_historical_prices(self, symbol: str, days: int = 250) -> list[dict] | None:
         """Fetch daily OHLCV. Returns most-recent-first list[dict] (same as FMPClient).
 
         Serves from cache when possible; only fetches missing bars.

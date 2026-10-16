@@ -126,7 +126,7 @@ def comprehensive_report(ticker):
     )
     details = {"fundamental_analysis": fundamental_res, "technical_analysis": technical_res}
 
-    if "Placeholder" in fundamental_res["summary"] or "Placeholder" in technical_res["summary"]:
+    if any("Placeholder" in res["summary"] or "Error" in res["summary"] for res in [fundamental_res, technical_res]):
         summary_message += "Note: Some parts of the analysis are still placeholder due to incomplete implementation."
 
     # Synthesize using report-template.md
@@ -152,7 +152,7 @@ def comparison_analysis(tickers):
     )
 
     # Check if any of the sub-analyses returned placeholder summaries
-    if any("Placeholder" in res["summary"] for res in all_ticker_results):
+    if any("Placeholder" in res["summary"] or "Error" in res["summary"] for res in all_ticker_results):
         summary_message += "Note: Some individual stock analyses are still placeholder due to incomplete implementation."
 
     # Process results into a comparison table/summary

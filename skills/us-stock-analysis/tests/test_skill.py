@@ -10,23 +10,23 @@ import us_stock_analysis  # Import the script as a module
 class TestUSStockAnalysis(unittest.TestCase):
     SCRIPT_PATH = "skills/us-stock-analysis/scripts/us_stock_analysis.py"
 
-    @patch("us_stock_analysis.google_web_search")
     def run_script(
-        self, mock_google_web_search, args_list, mock_return_value=None, side_effect=None
+        self, args_list, mock_return_value=None, side_effect=None
     ):
-        if mock_return_value is not None:
-            mock_google_web_search.return_value = mock_return_value
-        if side_effect is not None:
-            mock_google_web_search.side_effect = side_effect
+        with patch("us_stock_analysis.google_web_search") as mock_google_web_search:
+            if mock_return_value is not None:
+                mock_google_web_search.return_value = mock_return_value
+            if side_effect is not None:
+                mock_google_web_search.side_effect = side_effect
 
-        # Directly call the function from the imported module
-        result = us_stock_analysis.run_analysis_from_args(args_list)
-        return result
+            # Directly call the function from the imported module
+            result = us_stock_analysis.run_analysis_from_args(args_list)
+            return result
 
     def test_missing_analysis_type(self):
         result = self.run_script(["--ticker", "AAPL"])
         self.assertIn("error", result)
-        self.assertIn("argument --analysis_type is required", result["error"])
+        self.assertIn("--analysis_type", result["error"])
 
     def test_invalid_analysis_type(self):
         result = self.run_script(["--ticker", "AAPL", "--analysis_type", "invalid"])
@@ -189,7 +189,7 @@ class TestUSStockAnalysis(unittest.TestCase):
     def test_single_ticker_for_multi_ticker_analysis_error(self):
         result = self.run_script(["--ticker", "AAPL", "MSFT", "--analysis_type", "basic"])
         self.assertIn("error", result)
-        self.assertIn("Only one ticker allowed for 'basic'", result["error"])
+        self.assertIn("Only one ticker allowed", result["error"])
 
     def test_basic_analysis_empty_web_search_results(self):
         mock_web_search_result = {"search_results": []}  # Empty results

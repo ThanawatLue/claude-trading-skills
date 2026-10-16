@@ -116,24 +116,32 @@ SOURCE_ALIASES = {
 }
 
 
-def _db() -> sqlite3.Connection:
+from contextlib import contextmanager
+
+
+@contextmanager
+def _db():
     conn = connect_sqlite(DB_PATH, timeout=30.0, check_same_thread=False)
-    apply_migrations(conn, "paper_trade", {1: SCHEMA})
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(paper_trade)").fetchall()}
-    migrations = {
-        "gross_realized_pnl": "REAL",
-        "transaction_cost_bps": "REAL NOT NULL DEFAULT 0",
-        "entry_cost": "REAL NOT NULL DEFAULT 0",
-        "exit_cost": "REAL NOT NULL DEFAULT 0",
-        "decision_trace_json": "TEXT",
-        "portfolio": "TEXT NOT NULL DEFAULT 'quant'",
-    }
-    for column, definition in migrations.items():
-        if column not in existing:
-            conn.execute(f"ALTER TABLE paper_trade ADD COLUMN {column} {definition}")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_paper_portfolio ON paper_trade(portfolio)")
-    mark_migration(conn, "paper_trade", 2)
-    return conn
+    try:
+        apply_migrations(conn, "paper_trade", {1: SCHEMA})
+        existing = {row["name"] for row in conn.execute("PRAGMA table_info(paper_trade)").fetchall()}
+        migrations = {
+            "gross_realized_pnl": "REAL",
+            "transaction_cost_bps": "REAL NOT NULL DEFAULT 0",
+            "entry_cost": "REAL NOT NULL DEFAULT 0",
+            "exit_cost": "REAL NOT NULL DEFAULT 0",
+            "decision_trace_json": "TEXT",
+            "portfolio": "TEXT NOT NULL DEFAULT 'quant'",
+        }
+        for column, definition in migrations.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE paper_trade ADD COLUMN {column} {definition}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_paper_portfolio ON paper_trade(portfolio)")
+        mark_migration(conn, "paper_trade", 2)
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 _trade_db = _db
@@ -359,7 +367,6 @@ def close_position(
         scale_out_info = trace.get("scale_out")
         if scale_out_info and scale_out_info.get("completed"):
             closed_shares = int(scale_out_info.get("shares_closed", 0))
-            t1_net_pnl = float(scale_out_info.get("t1_net_pnl", 0.0))
             rem_shares = max(0, shares - closed_shares)
             if side == "long":
                 rem_gross = (exit_price - entry) * rem_shares

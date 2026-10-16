@@ -85,6 +85,9 @@ def normalize_bars(bars: Sequence[Mapping[str, Any]] | None) -> list[dict[str, f
     return out
 
 
+from statistics import median
+
+
 def _sma(closes: Sequence[float], end_idx: int, window: int) -> float | None:
     if end_idx + 1 < window:
         return None
@@ -92,6 +95,71 @@ def _sma(closes: Sequence[float], end_idx: int, window: int) -> float | None:
     if len(chunk) < window:
         return None
     return sum(chunk) / window
+
+
+def _ema(closes: Sequence[float], end_idx: int, period: int) -> float | None:
+    if end_idx + 1 < period or period < 1:
+        return None
+    k = 2.0 / (period + 1.0)
+    ema_val = sum(closes[:period]) / float(period)
+    for i in range(period, end_idx + 1):
+        ema_val = closes[i] * k + ema_val * (1.0 - k)
+    return ema_val
+
+
+def _atr(
+    highs: Sequence[float],
+    lows: Sequence[float],
+    closes: Sequence[float],
+    end_idx: int,
+    period: int = 14,
+) -> float | None:
+    if end_idx + 1 < period or end_idx < 1:
+        return None
+    tr: list[float] = [highs[0] - lows[0]]
+    for i in range(1, end_idx + 1):
+        tr.append(
+            max(
+                highs[i] - lows[i],
+                abs(highs[i] - closes[i - 1]),
+                abs(lows[i] - closes[i - 1]),
+            )
+        )
+    if len(tr) < period:
+        return None
+    return sum(tr[end_idx - period + 1 : end_idx + 1]) / float(period)
+
+
+def _calculate_rsi_series(closes: Sequence[float], period: int = 14) -> list[float | None]:
+    if len(closes) < period + 1:
+        return [None] * len(closes)
+    rsi_list: list[float | None] = [None] * len(closes)
+    gains: list[float] = []
+    losses: list[float] = []
+    for i in range(1, len(closes)):
+        diff = closes[i] - closes[i - 1]
+        gains.append(max(diff, 0.0))
+        losses.append(max(-diff, 0.0))
+    if len(gains) < period:
+        return rsi_list
+    avg_gain = sum(gains[:period]) / float(period)
+    avg_loss = sum(losses[:period]) / float(period)
+    if avg_loss == 0:
+        rsi_list[period] = 100.0
+    else:
+        rs = avg_gain / avg_loss
+        rsi_list[period] = 100.0 - (100.0 / (1.0 + rs))
+
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / float(period)
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / float(period)
+        bar_idx = i + 1
+        if avg_loss == 0:
+            rsi_list[bar_idx] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            rsi_list[bar_idx] = 100.0 - (100.0 / (1.0 + rs))
+    return rsi_list
 
 
 def compute_day_bias(
@@ -116,6 +184,7 @@ def compute_day_bias(
     wins = 0
     total = 0
     ret_sum = 0.0
+    returns: list[float] = []
 
     start = 1 if hold_style == "overnight" else 0
     for i in range(start, idx + 1):
@@ -134,15 +203,18 @@ def compute_day_bias(
             ret = (float(bar["close"]) - prev) / prev * 100.0
         total += 1
         ret_sum += ret
+        returns.append(ret)
         if ret > 0:
             wins += 1
 
+    med_ret = median(returns) if returns else None
     if total < MIN_BIAS_SAMPLES:
         return {
             "day": DAY_NAMES[target_weekday],
             "hold_style": hold_style,
             "win_rate": round(wins / total * 100.0, 1) if total else None,
             "avg_return": round(ret_sum / total, 2) if total else None,
+            "median_return": round(med_ret, 2) if med_ret is not None else None,
             "count": total,
             "metric": "close_to_close" if hold_style == "overnight" else "open_to_close",
             "insufficient_samples": True,
@@ -155,6 +227,7 @@ def compute_day_bias(
         "hold_style": hold_style,
         "win_rate": round(win_rate, 1),
         "avg_return": round(avg_return, 2),
+        "median_return": round(med_ret, 2) if med_ret is not None else None,
         "count": total,
         "metric": "close_to_close" if hold_style == "overnight" else "open_to_close",
         "insufficient_samples": False,
@@ -189,7 +262,7 @@ def compute_confluence(
     sma50 = _sma(closes, idx, 50)
     sma200 = _sma(closes, idx, 200)
     vol20 = _sma(volumes, idx, 20)
-    high20 = max(highs[idx - 19 : idx]) if idx >= 20 else None
+    high20 = max(highs[idx - 20 : idx]) if idx >= 20 else None
     range10 = None
     if idx >= 9:
         range10 = sum(highs[i] - lows[i] for i in range(idx - 9, idx + 1)) / 10.0
@@ -271,36 +344,61 @@ def compute_confluence(
         sma10 = sum(weekly_closes[-10:]) / 10.0
         is_weekly_bull = weekly_closes[-1] > sma10
 
-    # RSI(14) + simple divergence flags
-    gains: list[float] = []
-    losses: list[float] = []
-    for i in range(1, idx + 1):
-        diff = closes[i] - closes[i - 1]
-        gains.append(max(diff, 0.0))
-        losses.append(max(-diff, 0.0))
-    rsi = None
-    if len(gains) >= 14:
-        avg_gain = sum(gains[:14]) / 14.0
-        avg_loss = sum(losses[:14]) / 14.0
-        for i in range(14, len(gains)):
-            avg_gain = (avg_gain * 13 + gains[i]) / 14.0
-            avg_loss = (avg_loss * 13 + losses[i]) / 14.0
-        if avg_loss == 0:
-            rsi = 100.0
-        else:
-            rs = avg_gain / avg_loss
-            rsi = 100.0 - (100.0 / (1.0 + rs))
+    # RSI(14) series and true swing-pivot divergence (aligned with app.js)
+    rsi_series = _calculate_rsi_series(closes, 14)
+    rsi = rsi_series[idx]
 
     is_rsi_bull_div = False
     is_rsi_bear_div = False
-    # Lightweight divergence proxy: RSI vs 10-day price extreme
-    if rsi is not None and idx >= 20:
-        window = closes[idx - 20 : idx + 1]
-        if closes[idx] <= min(window) and rsi < 45:
-            # price near window low while RSI not extremely oversold → soft bull
-            is_rsi_bull_div = rsi > 30
-        if closes[idx] >= max(window) and rsi > 55:
-            is_rsi_bear_div = rsi < 70
+    if idx >= 20 and rsi is not None:
+        price_today = closes[idx]
+        rsi_today = rsi
+
+        prev_low_idx = -1
+        for j in range(idx - 5, max(1, idx - 26), -1):
+            if (
+                j >= 2
+                and j + 2 < len(lows)
+                and lows[j] <= lows[j - 1]
+                and lows[j] <= lows[j - 2]
+                and lows[j] <= lows[j + 1]
+                and lows[j] <= lows[j + 2]
+            ):
+                prev_low_idx = j
+                break
+
+        if prev_low_idx != -1 and rsi_series[prev_low_idx] is not None:
+            price_prev_low = closes[prev_low_idx]
+            rsi_prev_low = float(rsi_series[prev_low_idx])  # type: ignore[arg-type]
+            if price_today < price_prev_low and rsi_today > rsi_prev_low and rsi_today < 45:
+                is_rsi_bull_div = True
+
+        prev_high_idx = -1
+        for j in range(idx - 5, max(1, idx - 26), -1):
+            if (
+                j >= 2
+                and j + 2 < len(highs)
+                and highs[j] >= highs[j - 1]
+                and highs[j] >= highs[j - 2]
+                and highs[j] >= highs[j + 1]
+                and highs[j] >= highs[j + 2]
+            ):
+                prev_high_idx = j
+                break
+
+        if prev_high_idx != -1 and rsi_series[prev_high_idx] is not None:
+            price_prev_high = closes[prev_high_idx]
+            rsi_prev_high = float(rsi_series[prev_high_idx])  # type: ignore[arg-type]
+            if price_today > price_prev_high and rsi_today < rsi_prev_high and rsi_today > 55:
+                is_rsi_bear_div = True
+
+    # EMA 10 and ATR 14 extension risk check
+    ema10 = _ema(closes, idx, 10)
+    atr14 = _atr(highs, lows, closes, idx, 14)
+    extension_ema10_atr: float | None = None
+    if ema10 is not None and atr14 is not None and atr14 > 0:
+        extension_ema10_atr = round((closes[idx] - ema10) / atr14, 2)
+    is_extended = bool(extension_ema10_atr is not None and extension_ema10_atr >= 2.5)
 
     bull = 0.0
     bear = 0.0
@@ -360,6 +458,8 @@ def compute_confluence(
         "net_score": round(net, 1),
         "label": label,
         "passes_threshold": net >= CONFLUENCE_MIN_NET,
+        "extension_ema10_atr": extension_ema10_atr,
+        "is_extended": is_extended,
         "flags": {
             "gap_streak": gap_streak,
             "gap_dir": gap_dir,
@@ -375,7 +475,13 @@ def compute_confluence(
             "wide_range_bear": is_wide_bear,
             "weekly_bull": is_weekly_bull,
             "rsi": round(rsi, 1) if rsi is not None else None,
+            "rsi_bull_div": is_rsi_bull_div,
+            "rsi_bear_div": is_rsi_bear_div,
             "above_sma200": is_above_sma200,
+            "ema10": round(ema10, 2) if ema10 is not None else None,
+            "atr14": round(atr14, 2) if atr14 is not None else None,
+            "extension_ema10_atr": extension_ema10_atr,
+            "is_extended": is_extended,
         },
     }
 

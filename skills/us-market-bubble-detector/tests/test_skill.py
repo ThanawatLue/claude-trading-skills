@@ -22,7 +22,7 @@ class TestSkill(unittest.TestCase):
     @unittest.mock.patch("builtins.input", side_effect=["0"] * 8)
     def test_manual_mode_output_format(self, mock_input):
         print("\nRunning manual mode test with mocked inputs (all 0s).")
-        process = self._run_scorer(["--manual"])
+        process = self._run_scorer(["--manual"], input_data="0\n" * 8)
         self.assertEqual(process.returncode, 0)
         self.assertIn("総合スコア", process.stdout)
         self.assertIn("市場フェーズ", process.stdout)

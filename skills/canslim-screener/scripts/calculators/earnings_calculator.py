@@ -20,7 +20,7 @@ def find_year_ago_quarter_index(income_statements: list[dict], base_index: int) 
     """Find index of the quarter closest to 365 days before the base_index quarter.
     Falls back to base_index + 4 if no matches found or errors occur.
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime
 
     if base_index >= len(income_statements):
         return base_index + 4
@@ -34,7 +34,6 @@ def find_year_ago_quarter_index(income_statements: list[dict], base_index: int) 
     except ValueError:
         return base_index + 4
 
-    target_date = base_date - timedelta(days=365)
     best_index = base_index + 4
     best_diff = float("inf")
 

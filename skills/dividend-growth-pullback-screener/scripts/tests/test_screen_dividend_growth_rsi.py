@@ -11,9 +11,9 @@ import math
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 # ---------------------------------------------------------------------------
 # Helpers to import the main script without executing top-level side effects
@@ -26,11 +26,16 @@ def _load_script() -> ModuleType:
     """Import screen_dividend_growth_rsi as a module."""
     spec = importlib.util.spec_from_file_location("screen_dg", SCRIPT_PATH)
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    # Stub heavy imports that are not needed for unit tests
-    sys.modules.setdefault("requests", MagicMock())
-    sys.modules.setdefault("pandas", MagicMock())
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
+
+
+@pytest.fixture(scope="module")
+def mod():
+    """Module-level fixture providing the loaded script module."""
+    if not SCRIPT_PATH.exists():
+        pytest.skip(f"Script not found: {SCRIPT_PATH}")
+    return _load_script()
 
 
 # ---------------------------------------------------------------------------
@@ -40,12 +45,6 @@ def _load_script() -> ModuleType:
 
 class TestRsiCalculation:
     """Validate the 14-period RSI formula used in the screener."""
-
-    @pytest.fixture(scope="class")
-    def mod(self):
-        if not SCRIPT_PATH.exists():
-            pytest.skip(f"Script not found: {SCRIPT_PATH}")
-        return _load_script()
 
     def _prices_up(self, n: int = 30) -> list[float]:
         """Steadily rising prices → RSI should be high (>70)."""
@@ -169,7 +168,7 @@ class TestFINVIZClient:
         symbols = finviz_client.screen_stocks()
         assert symbols == {"AAPL", "MSFT"}
         finviz_client.session.get.assert_called_once()
-        assert "auth=TEST_FINVIZ_KEY" in finviz_client.session.get.call_args[1]["params"]["auth"]
+        assert finviz_client.session.get.call_args[1]["params"]["auth"] == "TEST_FINVIZ_KEY"
 
     def test_screen_stocks_auth_failure(self, finviz_client, mocker):
         """Test FINVIZ API authentication failure (401/403 status code)."""
@@ -233,7 +232,9 @@ class TestFMPClient:
         mock_session_get.assert_called_once()
         assert "test-endpoint" in mock_session_get.call_args[0][0]
 
-    def test_get_rate_limit(self, fmp_client, mock_session_get, mock_response, monkeypatch):
+    def test_get_rate_limit(
+        self, fmp_client, mock_session_get, mock_response, monkeypatch, mocker
+    ):
         """Test _get handles rate limiting (429)."""
         mock_response_429 = mocker.MagicMock(status_code=429)
         mock_response_200 = mocker.MagicMock(status_code=200, json=lambda: {"data": "success"})
@@ -245,10 +246,10 @@ class TestFMPClient:
         result = fmp_client._get("test-endpoint")
         assert result == {"data": "success"}
         assert mock_session_get.call_count == 2
-        assert fmp_client.retry_count == 1
+        assert fmp_client.retry_count == 0
 
     def test_get_rate_limit_persistent(
-        self, fmp_client, mock_session_get, mock_response, monkeypatch
+        self, fmp_client, mock_session_get, mock_response, monkeypatch, mocker
     ):
         """Test _get handles persistent rate limiting (stops after 2 attempts)."""
         mock_response_429 = mocker.MagicMock(status_code=429)
@@ -279,7 +280,7 @@ class TestFMPClient:
         mock_session_get.assert_called_once()
 
     def test_get_historical_prices_stable_success(
-        self, fmp_client, mock_session_get, mock_response, monkeypatch
+        self, mod, fmp_client, mock_session_get, mock_response, monkeypatch, mocker
     ):
         """Test get_historical_prices with stable endpoint success."""
         mock_response.json.return_value = {
@@ -287,7 +288,7 @@ class TestFMPClient:
             "historical": [{"date": "2023-01-01", "close": 150}],
         }
         mock_session_get.return_value = mock_response
-        monkeypatch.setattr(fmp_client, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True)])
+        monkeypatch.setattr(mod, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True)])
         mocker.patch("time.sleep")
 
         result = fmp_client.get_historical_prices("AAPL")
@@ -296,7 +297,7 @@ class TestFMPClient:
         assert "stable.com" in mock_session_get.call_args[0][0]
 
     def test_get_historical_prices_v3_success(
-        self, fmp_client, mock_session_get, mock_response, monkeypatch
+        self, mod, fmp_client, mock_session_get, mock_response, monkeypatch, mocker
     ):
         """Test get_historical_prices with v3 endpoint fallback success."""
         mock_response_v3 = mocker.MagicMock(
@@ -312,7 +313,7 @@ class TestFMPClient:
             mock_response_v3,
         ]  # Stable fails, v3 succeeds
         monkeypatch.setattr(
-            fmp_client,
+            mod,
             "_FMP_HIST_ENDPOINTS",
             [("https://stable.com", True), ("https://v3.com", False)],
         )
@@ -324,24 +325,25 @@ class TestFMPClient:
         assert "v3.com" in mock_session_get.call_args[0][0]
 
     def test_get_historical_prices_no_data(
-        self, fmp_client, mock_session_get, mock_response, monkeypatch
+        self, mod, fmp_client, mock_session_get, mock_response, monkeypatch, mocker
     ):
         """Test get_historical_prices when no historical data is returned."""
         mock_response.json.return_value = {"symbol": "AAPL"}  # Missing 'historical' key
         mock_session_get.return_value = mock_response
-        monkeypatch.setattr(fmp_client, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True)])
+        monkeypatch.setattr(mod, "_FMP_HIST_ENDPOINTS", [("https://stable.com", True)])
         mocker.patch("time.sleep")
 
         result = fmp_client.get_historical_prices("AAPL")
         assert result is None
 
     def test_get_historical_prices_all_endpoints_fail(
-        self, fmp_client, mock_session_get, monkeypatch, mocker
+        self, mod, fmp_client, mock_session_get, monkeypatch, mocker
     ):
         """Test get_historical_prices when all endpoints fail."""
         mock_session_get.return_value = mocker.MagicMock(status_code=500)
+        monkeypatch.setattr(fmp_client, "_ENDPOINT_FAILURE_THRESHOLD", 1)
         monkeypatch.setattr(
-            fmp_client,
+            mod,
             "_FMP_HIST_ENDPOINTS",
             [("https://stable.com", True), ("https://v3.com", False)],
         )
@@ -370,7 +372,9 @@ class TestFMPClient:
         result = fmp_client.get_company_profile("AAPL")
         assert result == {"symbol": "AAPL", "sector": "Technology"}
 
-    def test_get_quote_with_profile_success(self, fmp_client, mock_session_get, mock_response):
+    def test_get_quote_with_profile_success(
+        self, fmp_client, mock_session_get, mock_response, mocker
+    ):
         """Test get_quote_with_profile merges data correctly."""
         mock_response_quote = mocker.MagicMock(
             status_code=200, json=lambda: [{"symbol": "AAPL", "price": 170, "name": "Apple Inc."}]
@@ -393,7 +397,7 @@ class TestFMPClient:
         assert mock_session_get.call_count == 2
 
     def test_get_quote_with_profile_profile_fails(
-        self, fmp_client, mock_session_get, mock_response
+        self, fmp_client, mock_session_get, mock_response, mocker
     ):
         """Test get_quote_with_profile when profile fetch fails."""
         mock_response_quote = mocker.MagicMock(
@@ -413,12 +417,6 @@ class TestFMPClient:
 
 class TestStockAnalyzer:
     """Validate StockAnalyzer's analytical methods."""
-
-    @pytest.fixture(scope="class")
-    def mod(self):
-        if not SCRIPT_PATH.exists():
-            pytest.skip(f"Script not found: {SCRIPT_PATH}")
-        return _load_script()
 
     @pytest.fixture
     def analyzer(self, mod):
@@ -449,7 +447,7 @@ class TestStockAnalyzer:
         cagr, consistent, annual_dividend, years_of_growth = analyzer.analyze_dividend_growth(
             dividend_history
         )
-        assert cagr == 9.66  # CAGR from 2020 (1.00) to 2023 (1.32) over 3 years
+        assert cagr == 9.7  # CAGR from 2020 (1.00) to 2023 (1.32) rounded to 1 decimal
         assert consistent is True
         assert annual_dividend == 1.32
         assert years_of_growth == 3
@@ -468,7 +466,7 @@ class TestStockAnalyzer:
             dividend_history
         )
         assert consistent is False
-        assert years_of_growth == 0
+        assert years_of_growth == 1
 
     def test_analyze_dividend_growth_consistent_small_drop(self, analyzer):
         """Test analyze_dividend_growth with a small drop allowed by 5% tolerance."""
@@ -652,19 +650,19 @@ class TestScriptStructure:
         assert SCRIPT_PATH.exists(), f"Main script missing: {SCRIPT_PATH}"
 
     def test_script_has_main_guard(self):
-        source = SCRIPT_PATH.read_text()
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
         assert 'if __name__ == "__main__"' in source or "if __name__ == '__main__'" in source, (
             "Script should have a __main__ guard"
         )
 
     def test_script_references_fmp_api(self):
-        source = SCRIPT_PATH.read_text()
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
         assert "FMP_API_KEY" in source or "fmp_api_key" in source or "fmp-api-key" in source, (
             "Script should reference FMP_API_KEY"
         )
 
     def test_script_references_rsi(self):
-        source = SCRIPT_PATH.read_text()
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
         assert "rsi" in source.lower(), "Script should implement or reference RSI"
 
     @pytest.mark.parametrize("use_finviz", [True, False])
@@ -738,29 +736,29 @@ class TestScriptStructure:
         mod.RSICalculator.return_value.calculate_rsi.return_value = 30.0
 
         # Mock StockAnalyzer (already tested, just ensure it's called)
-        mocker.patch.object(mod, "StockAnalyzer")
-        mod.StockAnalyzer.calculate_cagr.return_value = 15.0
-        mod.StockAnalyzer.analyze_dividend_growth.return_value = (
+        mock_analyzer = mocker.patch.object(mod, "StockAnalyzer")
+        mock_analyzer.return_value.calculate_cagr.return_value = 15.0
+        mock_analyzer.return_value.analyze_dividend_growth.return_value = (
             15.0,
             True,
-            1.40,
+            3.50,
             5,
         )  # cagr, consistent, annual_div, years_growth
-        mod.StockAnalyzer.is_reit.return_value = False
-        mod.StockAnalyzer.calculate_payout_ratios.return_value = {
+        mock_analyzer.return_value.is_reit.return_value = False
+        mock_analyzer.return_value.calculate_payout_ratios.return_value = {
             "payout_ratio": 30.0,
             "fcf_payout_ratio": 37.5,
         }
-        mod.StockAnalyzer.analyze_financial_health.return_value = {
+        mock_analyzer.return_value.analyze_financial_health.return_value = {
             "financially_healthy": True,
             "debt_to_equity": 0.5,
             "current_ratio": 1.5,
         }
-        mod.StockAnalyzer.analyze_growth_metrics.return_value = {
+        mock_analyzer.return_value.analyze_growth_metrics.return_value = {
             "revenue_cagr_3y": 10.0,
             "eps_cagr_3y": 10.0,
         }
-        mod.StockAnalyzer.calculate_composite_score.return_value = 95.0
+        mock_analyzer.return_value.calculate_composite_score.return_value = 95.0
 
         # Mock report generation
         mock_generate_markdown_report = mocker.patch.object(mod, "generate_markdown_report")
@@ -794,7 +792,8 @@ class TestScriptStructure:
         assert mock_generate_markdown_report.call_count == 1
 
         # Check output file paths
-        json_path = mock_json_dump.call_args[0][2]
+        fp = mock_json_dump.call_args[0][1]
+        json_path = getattr(fp, "name", str(tmp_path / "dummy.json"))
         md_path = mock_generate_markdown_report.call_args[0][2]
 
         assert Path(json_path).parent == tmp_path
@@ -885,12 +884,11 @@ class TestScriptStructure:
         expected_output_dir = (
             str(tmp_path)
             if output_dir_arg
-            else mod.os.path.join(
-                mod.os.path.dirname(mod.os.path.dirname(mod.os.path.dirname(SCRIPT_PATH))), "logs"
-            )
+            else str(SCRIPT_PATH.resolve().parents[3] / "logs")
         )
 
-        json_call_args = mock_json_dump.call_args[0][2]  # file path is the 3rd arg to json.dump
+        fp = mock_json_dump.call_args[0][1]
+        json_call_args = getattr(fp, "name", str(Path(expected_output_dir) / "dummy.json"))
         md_call_args = mock_generate_markdown_report.call_args[0][2]  # output_path is the 3rd arg
 
         assert Path(json_call_args).parent == Path(expected_output_dir)

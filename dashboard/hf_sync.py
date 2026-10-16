@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import threading
 from pathlib import Path
 
@@ -59,11 +60,26 @@ def _async_upload():
         print("[HF Sync] Upload already in progress. Skipping duplicate request.")
         return
 
+    temp_backup = DB_PATH.with_suffix(".upload_tmp")
     try:
         print(f"[HF Sync] Starting database upload to {cfg['repo_id']}...")
+        # Use SQLite Online Backup API to safely create a consistent, checkpointed snapshot
+        # even when other threads or WAL mode are writing to the database.
+        src = sqlite3.connect(str(DB_PATH))
+        try:
+            if temp_backup.exists():
+                temp_backup.unlink()
+            dst = sqlite3.connect(str(temp_backup))
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+
         api = HfApi()
         api.upload_file(
-            path_or_fileobj=str(DB_PATH),
+            path_or_fileobj=str(temp_backup),
             path_in_repo=DB_FILE,
             repo_id=cfg["repo_id"],
             repo_type="dataset",
@@ -73,6 +89,11 @@ def _async_upload():
     except Exception as e:
         print(f"[HF Sync] Error uploading database: {e}")
     finally:
+        if temp_backup.exists():
+            try:
+                temp_backup.unlink()
+            except OSError:
+                pass
         _upload_lock.release()
 
 

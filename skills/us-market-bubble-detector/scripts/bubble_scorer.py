@@ -15,6 +15,7 @@ Bubble-O-Meter: 米国株式市場のバブル度を多面的に評価するス�
 import argparse
 import gettext
 import json
+import sys
 from datetime import datetime
 
 # Initialize gettext for internationalization (i18n)
@@ -434,8 +435,8 @@ class BubbleScorer:
 {result["total_score"]}/{result["max_score"]}点 ({result["percentage"]}%)
 
 {self.lang_data["market_phase"]}
-{_("Current")}: {result["phase"]} ({_("Risk")}: {result["risk_level"]})
-Minsky{_("Phase")}: {result["minsky_phase"]}
+{"現在" if self.lang_data.get("phase_normal") == "正常域" else "Current"}: {result["phase"]} ({"リスク" if self.lang_data.get("phase_normal") == "正常域" else "Risk"}: {result["risk_level"]})
+Minsky{"フェーズ" if self.lang_data.get("phase_normal") == "正常域" else "Phase"}: {result["minsky_phase"]}
 
 {self.lang_data["recommended_action"]}
 {result["recommended_action"]}
@@ -481,6 +482,7 @@ def manual_assessment(lang: str) -> dict[str, int]:
 
 
 def main():
+    global _
     parser = argparse.ArgumentParser(description=_("US Market Bubble Evaluation - Bubble-O-Meter"))
     parser.add_argument(
         "--manual", action="store_true", help=_("Interactive manual assessment mode")
@@ -495,7 +497,7 @@ def main():
     parser.add_argument(
         "--output", choices=["text", "json"], default="text", help=_("Output format")
     )
-    parser.add_argument("--lang", choices=["en", "ja"], default="en", help=_("Output language"))
+    parser.add_argument("--lang", choices=["en", "ja"], default="ja", help=_("Output language"))
 
     args = parser.parse_args()
     scorer = BubbleScorer(lang=args.lang)
@@ -509,7 +511,6 @@ def main():
             languages=[current_lang],
         )
         local_translation.install()
-        global _
         _ = local_translation.gettext
     except Exception:
         # Fallback if translation files are not found or configured
@@ -521,11 +522,28 @@ def main():
     elif args.scores:
         try:
             scores = json.loads(args.scores)
+            if (
+                not isinstance(scores, dict)
+                or not scores
+                or any(not isinstance(v, int) or v not in (0, 1, 2) for v in scores.values())
+            ):
+                error_msg = (
+                    "エラー: 無効なJSON形式またはスコアです"
+                    if args.lang == "ja"
+                    else "Error: Invalid JSON format or scores"
+                )
+                print(error_msg, file=sys.stderr)
+                return 1
         except json.JSONDecodeError:
-            print(scorer.lang_data["error_invalid_json"])
+            error_msg = (
+                "エラー: 無効なJSON形式またはスコアです"
+                if args.lang == "ja"
+                else scorer.lang_data["error_invalid_json"]
+            )
+            print(error_msg, file=sys.stderr)
             return 1
     else:
-        print(scorer.lang_data["error_missing_args"])
+        print(scorer.lang_data["error_missing_args"], file=sys.stderr)
         print("\n" + scorer.lang_data["guidelines_title"] + ":")
         print(scorer.get_scoring_guidelines())
         return 1

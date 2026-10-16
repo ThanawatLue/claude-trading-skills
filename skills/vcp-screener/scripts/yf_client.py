@@ -26,7 +26,6 @@ import html
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 try:
     import yfinance as yf
@@ -76,13 +75,13 @@ def _df_to_bars(df) -> list[dict]:
 class YFClient:
     """Yahoo Finance client with the same interface as FMPClient."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         self._api_calls = 0
         self._quote_cache: dict = {}
 
     # ── S&P 500 Constituents ──────────────────────────────────────────────────
 
-    def get_sp500_constituents(self) -> Optional[list[dict]]:
+    def get_sp500_constituents(self) -> list[dict] | None:
         """Return S&P 500 list — cached 30 days, falls back to Wikipedia."""
         cached = _cache.get_universe(ttl_days=30)
         if cached:
@@ -95,7 +94,7 @@ class YFClient:
             _cache.save_universe(data)
         return data
 
-    def _fetch_sp500_wikipedia(self) -> Optional[list[dict]]:
+    def _fetch_sp500_wikipedia(self) -> list[dict] | None:
         if requests is None:
             print(
                 "WARNING: requests library not found, Wikipedia fallback for S&P 500 constituents is unavailable.",
@@ -146,7 +145,7 @@ class YFClient:
 
     # ── SET50 Constituents ────────────────────────────────────────────────────
 
-    def get_thai_constituents(self, index: str = "SET50") -> Optional[list[dict]]:
+    def get_thai_constituents(self, index: str = "SET50") -> list[dict] | None:
         try:
             from scripts.lib.tv_client import get_thai_set50, get_thai_set100, is_available
 
@@ -240,7 +239,7 @@ class YFClient:
 
     # ── Quote ─────────────────────────────────────────────────────────────────
 
-    def get_quote(self, symbols: str) -> Optional[list[dict]]:
+    def get_quote(self, symbols: str) -> list[dict] | None:
         cache_key = f"quote_{symbols}"
         if cache_key in self._quote_cache:
             return self._quote_cache[cache_key]
@@ -285,7 +284,7 @@ class YFClient:
 
     # ── Historical Prices (single symbol) ────────────────────────────────────
 
-    def get_historical_prices(self, symbol: str, days: int = 365) -> Optional[dict]:
+    def get_historical_prices(self, symbol: str, days: int = 365) -> dict | None:
         """Return FMP-compatible dict {"symbol": ..., "historical": [...]}.
 
         Serves from cache when possible; only fetches missing bars.
@@ -447,7 +446,7 @@ class YFClient:
             today = _date.today()
             max_behind = (
                 max(
-                    (_date.today() - (_cache.latest_bar_date(s) or _date(2000, 1, 1))).days
+                    (today - (_cache.latest_bar_date(s) or _date(2000, 1, 1))).days
                     for s in need_update
                 )
                 + 5

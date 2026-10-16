@@ -132,65 +132,6 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Enable automatic theme discovery for unmatched industries",
     )
-
-
-# ---------------------------------------------------------------------------
-# CLI argument parsing
-# ---------------------------------------------------------------------------
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Detect trending market themes from FINVIZ industry data"
-    )
-    parser.add_argument(
-        "--fmp-api-key",
-        default=os.environ.get("FMP_API_KEY"),
-        help="Financial Modeling Prep API key (env: FMP_API_KEY)",
-    )
-    parser.add_argument(
-        "--finviz-api-key",
-        default=os.environ.get("FINVIZ_API_KEY"),
-        help="FINVIZ Elite API key (env: FINVIZ_API_KEY)",
-    )
-    parser.add_argument(
-        "--finviz-mode",
-        choices=["public", "elite"],
-        default=None,
-        help="FINVIZ mode (auto-detected if not specified)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default="reports/",
-        help="Output directory for reports (default: reports/)",
-    )
-    parser.add_argument(
-        "--top",
-        type=int,
-        default=3,
-        help="Number of top themes to show in detail (default: 3)",
-    )
-    parser.add_argument(
-        "--max-themes",
-        type=int,
-        default=10,
-        help="Maximum themes to analyze (default: 10)",
-    )
-    parser.add_argument(
-        "--max-stocks-per-theme",
-        type=int,
-        default=10,
-        help="Maximum stocks per theme (default: 10)",
-    )
-    parser.add_argument(
-        "--themes-config",
-        default=None,
-        help="Path to custom themes.yaml (default: bundled)",
-    )
-    parser.add_argument(
-        "--discover-themes",
-        action="store_true",
-        default=False,
-        help="Enable automatic theme discovery for unmatched industries",
-    )
     parser.add_argument(
         "--dynamic-stocks",
         action="store_true",

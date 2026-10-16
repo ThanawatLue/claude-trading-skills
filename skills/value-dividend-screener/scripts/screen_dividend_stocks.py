@@ -799,7 +799,12 @@ class StockAnalyzer:
 
 
 def screen_value_dividend_stocks(
-    fmp_api_key: str, top_n: int = 20, finviz_symbols: Optional[set[str]] = None
+    fmp_api_key: str,
+    top_n: int = 20,
+    finviz_symbols: Optional[set[str]] = None,
+    dividend_yield_min: float = 3.0,
+    pe_max: float = 20.0,
+    pb_max: float = 2.0,
 ) -> list[dict]:
     """
     Main screening function
@@ -840,7 +845,7 @@ def screen_value_dividend_stocks(
                     )
                 candidates.append(stock_data)
 
-            if client.rate_limit_reached:
+            if client.rate_limit_reached is True:
                 print(
                     f"⚠️  FMP rate limit reached while fetching quotes. Using {len(candidates)} symbols.",
                     file=sys.stderr,
@@ -853,11 +858,11 @@ def screen_value_dividend_stocks(
         )
     else:
         print(
-            f"Step 1: Initial screening using FMP Stock Screener (Dividend Yield >= {args.dividend_yield_min}%, P/E <= {args.pe_max}, P/B <= {args.pb_max})...",
+            f"Step 1: Initial screening using FMP Stock Screener (Dividend Yield >= {dividend_yield_min}%, P/E <= {pe_max}, P/B <= {pb_max})...",
             file=sys.stderr,
         )
         candidates = client.screen_stocks(
-            dividend_yield_min=args.dividend_yield_min, pe_max=args.pe_max, pb_max=args.pb_max
+            dividend_yield_min=dividend_yield_min, pe_max=pe_max, pb_max=pb_max
         )
         print(f"Found {len(candidates)} initial candidates", file=sys.stderr)
 
@@ -877,7 +882,7 @@ def screen_value_dividend_stocks(
         print(f"[{i}/{len(candidates)}] Analyzing {symbol} - {company_name}...", file=sys.stderr)
 
         # Check if rate limit reached
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             print(f"\n⚠️  API rate limit reached after analyzing {i - 1} stocks.", file=sys.stderr)
             print(
                 f"Returning results collected so far: {len(results)} qualified stocks",
@@ -887,28 +892,28 @@ def screen_value_dividend_stocks(
 
         # Fetch detailed data
         income_stmts = client.get_income_statement(symbol, limit=5)
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             break
 
         balance_sheets = client.get_balance_sheet(symbol, limit=5)
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             break
 
         cash_flows = client.get_cash_flow(symbol, limit=5)
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             break
 
         key_metrics = client.get_key_metrics(symbol, limit=5)
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             break
 
         dividend_history = client.get_dividend_history(symbol)
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             break
 
         # Fetch historical prices for RSI calculation
         historical_prices = client.get_historical_prices(symbol, days=30)
-        if client.rate_limit_reached:
+        if client.rate_limit_reached is True:
             break
 
         # Calculate RSI for technical analysis
@@ -1208,7 +1213,12 @@ Environment Variables:
 
     # Run detailed screening
     results = screen_value_dividend_stocks(
-        fmp_api_key, top_n=args.top, finviz_symbols=finviz_symbols
+        fmp_api_key,
+        top_n=args.top,
+        finviz_symbols=finviz_symbols,
+        dividend_yield_min=args.dividend_yield_min,
+        pe_max=args.pe_max,
+        pb_max=args.pb_max,
     )
 
     if not results:

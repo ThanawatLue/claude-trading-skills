@@ -18,7 +18,6 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import pandas as pd
 
@@ -52,7 +51,7 @@ class ThaiFinClient:
         """Strip .BK suffix that yfinance uses."""
         return symbol.replace(".BK", "").upper()
 
-    def get_profile(self, symbol: str) -> Optional[dict]:
+    def get_profile(self, symbol: str) -> dict | None:
         """
         Get company profile: name, sector, industry, market.
 
@@ -79,7 +78,7 @@ class ThaiFinClient:
             logger.debug("thaifin profile error for %s: %s", symbol, e)
             return None
 
-    def get_yearly_financials(self, symbol: str) -> Optional[pd.DataFrame]:
+    def get_yearly_financials(self, symbol: str) -> pd.DataFrame | None:
         """
         Get yearly financial statements as a DataFrame.
 
@@ -103,7 +102,7 @@ class ThaiFinClient:
             logger.debug("thaifin yearly financials error for %s: %s", symbol, e)
             return None
 
-    def get_quarterly_financials(self, symbol: str) -> Optional[pd.DataFrame]:
+    def get_quarterly_financials(self, symbol: str) -> pd.DataFrame | None:
         """
         Get quarterly financial statements as a DataFrame.
 
@@ -124,7 +123,7 @@ class ThaiFinClient:
             logger.debug("thaifin quarterly financials error for %s: %s", symbol, e)
             return None
 
-    def get_eps_growth(self, symbol: str, periods: int = 4) -> Optional[dict]:
+    def get_eps_growth(self, symbol: str, periods: int = 4) -> dict | None:
         """
         Calculate recent EPS growth rate for CANSLIM 'E' factor.
 
@@ -172,7 +171,7 @@ class ThaiFinClient:
             logger.debug("EPS growth calc error for %s: %s", symbol, e)
             return None
 
-    def get_revenue_growth(self, symbol: str, periods: int = 4) -> Optional[dict]:
+    def get_revenue_growth(self, symbol: str, periods: int = 4) -> dict | None:
         """
         Calculate recent revenue growth rate for CANSLIM 'A' factor.
 

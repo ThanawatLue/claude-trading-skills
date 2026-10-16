@@ -104,8 +104,8 @@ pre-commit run --all-files
 ```
 
 Two skill test suites are intentionally excluded from `pyproject.toml` `testpaths`:
-- `canslim-screener` — requires optional `bs4` dependency
-- `theme-detector` — 27+ pre-existing failures
+- `canslim-screener` — run standalone via `pytest skills/canslim-screener/scripts/tests/` (67/67 pass standalone; isolated to prevent namespace collisions)
+- `theme-detector` — 22+ pre-existing formula/test drift failures; run explicitly when working on it
 
 ## Common Development Tasks
 

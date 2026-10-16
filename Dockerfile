@@ -17,14 +17,12 @@ WORKDIR /app
 # Install uv for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy dependency configuration
+# Copy dependency configuration and package source
 COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
 
-# Install project dependencies plus huggingface_hub and gunicorn
-RUN uv pip install --system --no-cache-dir \
-    huggingface_hub \
-    gunicorn \
-    ".[screener,thai,technical]"
+# Install project dependencies plus gunicorn
+RUN uv pip install --system --no-cache-dir gunicorn .
 
 # Copy all project files
 COPY . .
@@ -34,5 +32,5 @@ RUN mkdir -p /app/state /app/reports
 
 EXPOSE 7860
 
-# Run Flask using gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:7860", "--workers", "2", "--timeout", "120", "--chdir", "/app/dashboard", "app:app"]
+# Run Flask using gunicorn with --preload to prevent worker startup races
+CMD ["gunicorn", "--bind", "0.0.0.0:7860", "--workers", "2", "--timeout", "120", "--preload", "--chdir", "/app/dashboard", "app:app"]

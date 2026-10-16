@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from screen_dividend_stocks import FINVIZClient, FMPClient, RSICalculator, StockAnalyzer
 
 
@@ -244,6 +245,7 @@ class TestFMPClient(unittest.TestCase):
     @patch("requests.Session")
     @patch("time.sleep", return_value=None)  # Mock time.sleep to speed up tests
     def test_get_success(self, mock_sleep, mock_session):
+        self.client.session = mock_session.return_value
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"test": "data"}
@@ -258,6 +260,7 @@ class TestFMPClient(unittest.TestCase):
     @patch("requests.Session")
     @patch("time.sleep", return_value=None)
     def test_get_rate_limit_retry_success(self, mock_sleep, mock_session):
+        self.client.session = mock_session.return_value
         # First call is 429, second call is 200
         mock_response_429 = MagicMock()
         mock_response_429.status_code = 429
@@ -275,6 +278,7 @@ class TestFMPClient(unittest.TestCase):
     @patch("requests.Session")
     @patch("time.sleep", return_value=None)
     def test_get_rate_limit_stops(self, mock_sleep, mock_session):
+        self.client.session = mock_session.return_value
         # Two 429 responses, should set rate_limit_reached to True
         mock_response_429 = MagicMock()
         mock_response_429.status_code = 429
@@ -289,6 +293,7 @@ class TestFMPClient(unittest.TestCase):
     @patch("requests.Session")
     @patch("time.sleep", return_value=None)
     def test_get_http_error(self, mock_sleep, mock_session):
+        self.client.session = mock_session.return_value
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
@@ -301,6 +306,7 @@ class TestFMPClient(unittest.TestCase):
     @patch("requests.Session")
     @patch("time.sleep", return_value=None)
     def test_get_request_exception(self, mock_sleep, mock_session):
+        self.client.session = mock_session.return_value
         mock_session.return_value.get.side_effect = requests.exceptions.RequestException(
             "Test Exception"
         )
@@ -343,6 +349,7 @@ class TestFMPClient(unittest.TestCase):
     @patch("requests.Session")
     @patch("time.sleep", return_value=None)
     def test_get_historical_prices(self, mock_sleep, mock_session):
+        self.client.session = mock_session.return_value
         # Mock for stable endpoint success
         mock_response_stable = MagicMock()
         mock_response_stable.status_code = 200
@@ -394,45 +401,14 @@ class TestScreenValueDividendStocks(unittest.TestCase):
 
         # Setup FMP mock
         mock_fmp_instance = MockFMPClient.return_value
-        mock_fmp_instance._get.side_effect = [
-            # First for AAPL quote
-            [
-                {
-                    "symbol": "AAPL",
-                    "name": "Apple Inc",
-                    "price": 150.0,
-                    "marketCap": 2_500_000_000_000,
-                }
-            ],
-            # Then for AAPL profile
-            [
-                {
-                    "companyName": "Apple Inc",
-                    "sector": "Technology",
-                    "industry": "Consumer Electronics",
-                }
-            ],
-            # Then for MSFT quote
-            [
-                {
-                    "symbol": "MSFT",
-                    "name": "Microsoft Corp",
-                    "price": 200.0,
-                    "marketCap": 2_000_000_000_000,
-                }
-            ],
-            # Then for MSFT profile
-            [{"companyName": "Microsoft Corp", "sector": "Technology", "industry": "Software"}],
-        ]
-        # Mock for FMP detailed data for each stock (AAPL, MSFT)
-        # For AAPL
-        mock_fmp_instance.get_income_statement.return_value = [
+
+        income_statements = [
             {"date": "2023", "revenue": 400_000_000_000, "netIncome": 100_000_000_000, "eps": 6.0},
             {"date": "2022", "revenue": 380_000_000_000, "netIncome": 95_000_000_000, "eps": 5.5},
             {"date": "2021", "revenue": 360_000_000_000, "netIncome": 90_000_000_000, "eps": 5.0},
             {"date": "2020", "revenue": 340_000_000_000, "netIncome": 85_000_000_000, "eps": 4.5},
         ]
-        mock_fmp_instance.get_balance_sheet.return_value = [
+        balance_sheet = [
             {
                 "totalDebt": 100_000_000_000,
                 "totalStockholdersEquity": 500_000_000_000,
@@ -440,7 +416,7 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                 "totalCurrentLiabilities": 100_000_000_000,
             },
         ]
-        mock_fmp_instance.get_cash_flow.return_value = [
+        cash_flow = [
             {
                 "operatingCashFlow": 120_000_000_000,
                 "capitalExpenditure": -20_000_000_000,
@@ -448,129 +424,8 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                 "netIncome": 100_000_000_000,
             },
         ]
-        mock_fmp_instance.get_key_metrics.return_value = [
-            {"roe": 0.20},
-        ]
-        mock_fmp_instance.get_dividend_history.return_value = {
-            "historical": [
-                {"date": "2023-01-01", "dividend": 1.0},
-                {"date": "2022-01-01", "dividend": 0.95},
-                {"date": "2021-01-01", "dividend": 0.90},
-                {"date": "2020-01-01", "dividend": 0.85},
-                {"date": "2019-01-01", "dividend": 0.80},
-            ]
-        }
-        mock_fmp_instance.get_historical_prices.return_value = [
-            {"close": 100 + i} for i in range(30)
-        ]  # For RSI
+        key_metrics = [{"roe": 0.20}]
 
-        # --- Test execution ---
-        from screen_dividend_stocks import screen_value_dividend_stocks
-
-        results = screen_value_dividend_stocks(
-            self.fmp_api_key, top_n=2, finviz_symbols={"AAPL", "MSFT"}
-        )
-
-        # --- Assertions ---
-        self.assertEqual(len(results), 2)
-
-        # Verify specific stock data
-        aapl_result = next(item for item in results if item["symbol"] == "AAPL")
-        self.assertIsNotNone(aapl_result)
-        self.assertAlmostEqual(
-            aapl_result["dividend_yield"], (1.0 * 4 / 150.0) * 100, places=2
-        )  # Assuming quarterly dividend, actual is annual, but sample is 1.0 per quarter for 4.0 annual. I need to adjust this mocking.
-        # Adjusted dividend yield calculation from mock: current price 150, latest annual dividend is 1.0 per record, assuming 4 records per year so 4.0 annual. (4.0/150)*100 = 2.66%
-        # Let's adjust mock_fmp_instance.get_dividend_history.return_value to give annual_dividend = 4.5 for example to get 3%
-        # (4.5/150)*100 = 3%
-        # Recalculate based on current mock and code's use of 'annual_dividend' which comes from 'latest_annual_dividend' from analyze_dividend_growth
-        # For simplicity, let's assume get_dividend_history provides the sum of annual dividend for test
-        # Based on current mock: last dividend is 1.0, assuming it's annual. So yield = (1.0/150)*100 = 0.66. This fails the 3% threshold.
-        # I need to adjust dividend history to make it pass.
-        # Let's make annual_dividend = 4.5. So div_hist should reflect that.
-
-        # Let's re-mock dividend history to ensure it passes the 3% yield threshold and dividend growth threshold
-        mock_fmp_instance.get_dividend_history.side_effect = [
-            # For AAPL
-            {
-                "historical": [
-                    {"date": "2023-01-01", "dividend": 1.1},  # Sum for 2023 is 4.4
-                    {"date": "2023-04-01", "dividend": 1.1},
-                    {"date": "2023-07-01", "dividend": 1.1},
-                    {"date": "2023-10-01", "dividend": 1.1},
-                    {"date": "2022-01-01", "dividend": 1.0},  # Sum for 2022 is 4.0
-                    {"date": "2022-04-01", "dividend": 1.0},
-                    {"date": "2022-07-01", "dividend": 1.0},
-                    {"date": "2022-10-01", "dividend": 1.0},
-                    {"date": "2021-01-01", "dividend": 0.9},  # Sum for 2021 is 3.6
-                    {"date": "2021-04-01", "dividend": 0.9},
-                    {"date": "2021-07-01", "dividend": 0.9},
-                    {"date": "2021-10-01", "dividend": 0.9},
-                    {"date": "2020-01-01", "dividend": 0.8},  # Sum for 2020 is 3.2
-                    {"date": "2020-04-01", "dividend": 0.8},
-                    {"date": "2020-07-01", "dividend": 0.8},
-                    {"date": "2020-10-01", "dividend": 0.8},
-                ]
-            },
-            # For MSFT (same structure for now, adjust later if needed)
-            {
-                "historical": [
-                    {"date": "2023-01-01", "dividend": 1.1},  # Sum for 2023 is 4.4
-                    {"date": "2023-04-01", "dividend": 1.1},
-                    {"date": "2023-07-01", "dividend": 1.1},
-                    {"date": "2023-10-01", "dividend": 1.1},
-                    {"date": "2022-01-01", "dividend": 1.0},  # Sum for 2022 is 4.0
-                    {"date": "2022-04-01", "dividend": 1.0},
-                    {"date": "2022-07-01", "dividend": 1.0},
-                    {"date": "2022-10-01", "dividend": 1.0},
-                    {"date": "2021-01-01", "dividend": 0.9},  # Sum for 2021 is 3.6
-                    {"date": "2021-04-01", "dividend": 0.9},
-                    {"date": "2021-07-01", "dividend": 0.9},
-                    {"date": "2021-10-01", "dividend": 0.9},
-                    {"date": "2020-01-01", "dividend": 0.8},  # Sum for 2020 is 3.2
-                    {"date": "2020-04-01", "dividend": 0.8},
-                    {"date": "2020-07-01", "dividend": 0.8},
-                    {"date": "2020-10-01", "dividend": 0.8},
-                ]
-            },
-        ]
-        # For AAPL, latest_annual_dividend (for 2023) is 4.4. Price is 150. Yield = (4.4/150)*100 = 2.93% -> This will not pass the 3.0% filter.
-        # I need to adjust dividend history to ensure yield is >= 3.0%.
-        # Let's target annual dividend of 4.5 for a 3% yield on a 150 price.
-        # Let's adjust stock price to 140 for AAPL and 180 for MSFT to ensure 3%+ yield with 4.4 annual dividend.
-        # (4.4/140)*100 = 3.14%
-        # (4.4/180)*100 = 2.44% -> MSFT won't pass. Need to adjust MSFT dividend or price.
-
-        # Let's adjust MSFT's dividend history to have annual_dividend = 6.0. Price = 200. Yield = (6.0/200)*100 = 3.0%.
-        # AAPL: price 140, latest annual dividend 4.4 -> yield 3.14% (Pass)
-        # MSFT: price 200, latest annual dividend 6.0 -> yield 3.00% (Pass)
-
-        # Mock for FMP detailed data for each stock (AAPL, MSFT)
-        income_statements_aapl = [
-            {"date": "2023", "revenue": 400_000_000_000, "netIncome": 100_000_000_000, "eps": 6.0},
-            {"date": "2022", "revenue": 380_000_000_000, "netIncome": 95_000_000_000, "eps": 5.5},
-            {"date": "2021", "revenue": 360_000_000_000, "netIncome": 90_000_000_000, "eps": 5.0},
-            {"date": "2020", "revenue": 340_000_000_000, "netIncome": 85_000_000_000, "eps": 4.5},
-        ]
-        balance_sheet_aapl = [
-            {
-                "totalDebt": 100_000_000_000,
-                "totalStockholdersEquity": 500_000_000_000,
-                "totalCurrentAssets": 200_000_000_000,
-                "totalCurrentLiabilities": 100_000_000_000,
-            },
-        ]
-        cash_flow_aapl = [
-            {
-                "operatingCashFlow": 120_000_000_000,
-                "capitalExpenditure": -20_000_000_000,
-                "dividendsPaid": -15_000_000_000,
-                "netIncome": 100_000_000_000,
-            },
-        ]
-        key_metrics_aapl = [
-            {"roe": 0.20},
-        ]
         dividend_history_aapl = {
             "historical": [
                 {"date": "2023-01-01", "dividend": 1.1},
@@ -591,114 +446,50 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                 {"date": "2020-10-01", "dividend": 0.8},
             ]
         }
-        historical_prices_aapl = [{"close": 100 + i} for i in range(30)]  # For RSI
-
-        income_statements_msft = [
-            {"date": "2023", "revenue": 300_000_000_000, "netIncome": 80_000_000_000, "eps": 4.0},
-            {"date": "2022", "revenue": 280_000_000_000, "netIncome": 75_000_000_000, "eps": 3.5},
-            {"date": "2021", "revenue": 260_000_000_000, "netIncome": 70_000_000_000, "eps": 3.0},
-            {"date": "2020", "revenue": 240_000_000_000, "netIncome": 65_000_000_000, "eps": 2.5},
-        ]
-        balance_sheet_msft = [
-            {
-                "totalDebt": 50_000_000_000,
-                "totalStockholdersEquity": 400_000_000_000,
-                "totalCurrentAssets": 150_000_000_000,
-                "totalCurrentLiabilities": 80_000_000_000,
-            },
-        ]
-        cash_flow_msft = [
-            {
-                "operatingCashFlow": 100_000_000_000,
-                "capitalExpenditure": -15_000_000_000,
-                "dividendsPaid": -12_000_000_000,
-                "netIncome": 80_000_000_000,
-            },
-        ]
-        key_metrics_msft = [
-            {"roe": 0.18},
-        ]
         dividend_history_msft = {
             "historical": [
-                {"date": "2023-01-01", "dividend": 1.5},  # Sum for 2023 is 6.0
+                {"date": "2023-01-01", "dividend": 1.5},
                 {"date": "2023-04-01", "dividend": 1.5},
                 {"date": "2023-07-01", "dividend": 1.5},
                 {"date": "2023-10-01", "dividend": 1.5},
-                {"date": "2022-01-01", "dividend": 1.4},  # Sum for 2022 is 5.6
+                {"date": "2022-01-01", "dividend": 1.4},
                 {"date": "2022-04-01", "dividend": 1.4},
                 {"date": "2022-07-01", "dividend": 1.4},
                 {"date": "2022-10-01", "dividend": 1.4},
-                {"date": "2021-01-01", "dividend": 1.3},  # Sum for 2021 is 5.2
+                {"date": "2021-01-01", "dividend": 1.3},
                 {"date": "2021-04-01", "dividend": 1.3},
                 {"date": "2021-07-01", "dividend": 1.3},
                 {"date": "2021-10-01", "dividend": 1.3},
-                {"date": "2020-01-01", "dividend": 1.2},  # Sum for 2020 is 4.8
+                {"date": "2020-01-01", "dividend": 1.2},
                 {"date": "2020-04-01", "dividend": 1.2},
                 {"date": "2020-07-01", "dividend": 1.2},
                 {"date": "2020-10-01", "dividend": 1.2},
             ]
         }
-        historical_prices_msft = [{"close": 150 + i} for i in range(30)]  # For RSI
+        prices_hist = [{"close": 100 + i} for i in range(30)]
 
         mock_fmp_instance._get.side_effect = [
-            # For AAPL quote and profile
-            [
-                {
-                    "symbol": "AAPL",
-                    "name": "Apple Inc",
-                    "price": 140.0,
-                    "marketCap": 2_500_000_000_000,
-                    "pe": 20,
-                    "priceToBook": 2,
-                }
-            ],  # Quote
-            [
-                {
-                    "companyName": "Apple Inc",
-                    "sector": "Technology",
-                    "industry": "Consumer Electronics",
-                }
-            ],  # Profile
-            # For MSFT quote and profile
-            [
-                {
-                    "symbol": "MSFT",
-                    "name": "Microsoft Corp",
-                    "price": 200.0,
-                    "marketCap": 2_000_000_000_000,
-                    "pe": 20,
-                    "priceToBook": 2,
-                }
-            ],  # Quote
-            [
-                {"companyName": "Microsoft Corp", "sector": "Technology", "industry": "Software"}
-            ],  # Profile
-            # FMP detailed data for AAPL
-            income_statements_aapl,
-            balance_sheet_aapl,
-            cash_flow_aapl,
-            key_metrics_aapl,
-            dividend_history_aapl,
-            historical_prices_aapl,
-            # FMP detailed data for MSFT
-            income_statements_msft,
-            balance_sheet_msft,
-            cash_flow_msft,
-            key_metrics_msft,
-            dividend_history_msft,
-            historical_prices_msft,
+            [{"symbol": "AAPL", "name": "Apple Inc", "price": 140.0, "marketCap": 2_500_000_000_000, "pe": 20, "priceToBook": 2}],
+            [{"symbol": "MSFT", "name": "Microsoft Corp", "price": 200.0, "marketCap": 2_000_000_000_000, "pe": 20, "priceToBook": 2}],
         ]
+        mock_fmp_instance.get_company_profile.side_effect = [
+            {"companyName": "Apple Inc", "sector": "Technology", "industry": "Consumer Electronics"},
+            {"companyName": "Microsoft Corp", "sector": "Technology", "industry": "Software"},
+        ]
+        mock_fmp_instance.get_income_statement.return_value = income_statements
+        mock_fmp_instance.get_balance_sheet.return_value = balance_sheet
+        mock_fmp_instance.get_cash_flow.return_value = cash_flow
+        mock_fmp_instance.get_key_metrics.return_value = key_metrics
+        mock_fmp_instance.get_dividend_history.side_effect = [dividend_history_aapl, dividend_history_msft]
+        mock_fmp_instance.get_historical_prices.return_value = prices_hist
 
-        # --- Test execution ---
         from screen_dividend_stocks import screen_value_dividend_stocks
 
         results = screen_value_dividend_stocks(
             self.fmp_api_key, top_n=2, finviz_symbols={"AAPL", "MSFT"}
         )
 
-        # --- Assertions ---
         self.assertEqual(len(results), 2)
-
         aapl_result = next(item for item in results if item["symbol"] == "AAPL")
         self.assertIsNotNone(aapl_result)
         self.assertAlmostEqual(aapl_result["dividend_yield"], (4.4 / 140.0) * 100, places=2)
@@ -707,7 +498,7 @@ class TestScreenValueDividendStocks(unittest.TestCase):
         self.assertTrue(aapl_result["earnings_uptrend"])
         self.assertTrue(aapl_result["dividend_sustainable"])
         self.assertTrue(aapl_result["financially_healthy"])
-        self.assertGreater(aapl_result["composite_score"], 0)  # Score should be calculated
+        self.assertGreater(aapl_result["composite_score"], 0)
 
         msft_result = next(item for item in results if item["symbol"] == "MSFT")
         self.assertIsNotNone(msft_result)
@@ -717,7 +508,7 @@ class TestScreenValueDividendStocks(unittest.TestCase):
         self.assertTrue(msft_result["earnings_uptrend"])
         self.assertTrue(msft_result["dividend_sustainable"])
         self.assertTrue(msft_result["financially_healthy"])
-        self.assertGreater(msft_result["composite_score"], 0)  # Score should be calculated
+        self.assertGreater(msft_result["composite_score"], 0)
 
     @patch("screen_dividend_stocks.FMPClient")
     @patch("screen_dividend_stocks.FINVIZClient")
@@ -1087,13 +878,15 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                 {"date": "2020-10-01", "dividend": 0.65},
             ]
         }
-        # Prices for RSI calculation
-        prices_oversold = [100.0] * 10 + [90.0] * 10 + [80.0] * 10  # Simulates drop, RSI < 40
-        prices_normal = [100.0] * 10 + [105.0] * 10 + [110.0] * 10  # Simulates rise, RSI > 40
+        # Prices for RSI calculation (historical prices are newest first in FMP)
+        p_oversold = [100.0 - i * 1.5 for i in range(30)]  # price drops, RSI < 40
+        p_normal = [100.0 + i * 1.5 for i in range(30)]    # price rises, RSI > 40
+        prices_oversold = list(reversed(p_oversold))
+        prices_normal = list(reversed(p_normal))
 
         mock_fmp_instance = MockFMPClient.return_value
         mock_fmp_instance._get.side_effect = [
-            # AAPL quote and profile (for RSI < 40)
+            # AAPL quote
             [
                 {
                     "symbol": "AAPL",
@@ -1104,14 +897,7 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                     "priceToBook": 1.5,
                 }
             ],
-            [
-                {
-                    "companyName": "Apple Inc",
-                    "sector": "Technology",
-                    "industry": "Consumer Electronics",
-                }
-            ],
-            # MSFT quote and profile (for RSI > 40)
+            # MSFT quote
             [
                 {
                     "symbol": "MSFT",
@@ -1122,7 +908,10 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                     "priceToBook": 1.8,
                 }
             ],
-            [{"companyName": "Microsoft Corp", "sector": "Technology", "industry": "Software"}],
+        ]
+        mock_fmp_instance.get_company_profile.side_effect = [
+            {"companyName": "Apple Inc", "sector": "Technology", "industry": "Consumer Electronics"},
+            {"companyName": "Microsoft Corp", "sector": "Technology", "industry": "Software"},
         ]
 
         mock_fmp_instance.get_income_statement.return_value = income_statements_template
@@ -1131,9 +920,6 @@ class TestScreenValueDividendStocks(unittest.TestCase):
         mock_fmp_instance.get_key_metrics.return_value = key_metrics_template
         mock_fmp_instance.get_dividend_history.return_value = dividend_history_template
 
-        # We need specific historical prices for RSI calculation
-        # FMPClient.get_historical_prices is called inside screen_value_dividend_stocks
-        # This will be called for AAPL first, then for MSFT
         mock_fmp_instance.get_historical_prices.side_effect = [
             [{"close": p} for p in prices_oversold],  # For AAPL (RSI < 40)
             [{"close": p} for p in prices_normal],  # For MSFT (RSI > 40)
@@ -1207,15 +993,19 @@ class TestScreenValueDividendStocks(unittest.TestCase):
             ]
         }
 
-        # Prices for RSI calculation (both > 40, but GOOG lower)
-        prices_goog = (
-            [100.0] * 10 + [102.0] * 10 + [104.0] * 10
-        )  # RSI ~ 60 (still rising but less steeply)
-        prices_amzn = [100.0] * 10 + [105.0] * 10 + [110.0] * 10  # RSI ~ 70 (stronger rise)
+        # Prices for RSI calculation (both > 40, but GOOG lower; historical prices are newest first in FMP)
+        p_goog = [100.0]
+        for i in range(29):
+            p_goog.append(p_goog[-1] + (0.5 if i % 2 == 0 else -0.4))
+        p_amzn = [100.0]
+        for i in range(29):
+            p_amzn.append(p_amzn[-1] + (2.0 if i % 4 != 0 else -0.5))
+        prices_goog = list(reversed(p_goog))
+        prices_amzn = list(reversed(p_amzn))
 
         mock_fmp_instance = MockFMPClient.return_value
         mock_fmp_instance._get.side_effect = [
-            # GOOG quote and profile
+            # GOOG quote
             [
                 {
                     "symbol": "GOOG",
@@ -1226,14 +1016,7 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                     "priceToBook": 5,
                 }
             ],
-            [
-                {
-                    "companyName": "Alphabet Inc",
-                    "sector": "Technology",
-                    "industry": "Internet Content & Information",
-                }
-            ],
-            # AMZN quote and profile
+            # AMZN quote
             [
                 {
                     "symbol": "AMZN",
@@ -1244,13 +1027,18 @@ class TestScreenValueDividendStocks(unittest.TestCase):
                     "priceToBook": 6,
                 }
             ],
-            [
-                {
-                    "companyName": "Amazon.com Inc",
-                    "sector": "Technology",
-                    "industry": "Internet Retail",
-                }
-            ],
+        ]
+        mock_fmp_instance.get_company_profile.side_effect = [
+            {
+                "companyName": "Alphabet Inc",
+                "sector": "Technology",
+                "industry": "Internet Content & Information",
+            },
+            {
+                "companyName": "Amazon.com Inc",
+                "sector": "Technology",
+                "industry": "Internet Retail",
+            },
         ]
 
         mock_fmp_instance.get_income_statement.return_value = income_statements_template

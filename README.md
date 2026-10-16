@@ -123,10 +123,12 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Market News Analyst** (`market-news-analyst`) | This skill should be used when analyzing recent market-moving news events and their impact on equity markets and commodities. | `websearch` **required** | production |
 | **Market Top Detector** (`market-top-detector`) | Detects market top probability using O'Neil Distribution Days, Minervini Leading Stock Deterioration, and Monty Defensive Sector Rotation. | `public_csv` **required** | production |
 | **Sector Analyst** (`sector-analyst`) | This skill should be used when analyzing sector rotation patterns and market cycle positioning. | `chart_image` **required** | production |
-| **Thai Breadth Analyzer** (`thai-breadth-analyzer`) | Compute a fast Thai SET market breadth snapshot using TradingView Screener data, including SMA50/SMA200 participation, advance-decline, new highs/lows, RSI distribution, and a composite score. | `tradingview_public` **required** | production |
-| **Thai Sector Heatmap** (`thai-sector-heatmap`) | Generate a Thai SET sector-rotation heatmap using TradingView Screener data and median sector momentum across 1M, 3M, 6M, and YTD returns. | `tradingview_public` **required** | production |
+| **Thai Breadth Analyzer** (`thai-breadth-analyzer`) | Compute fast market-breadth snapshot for the Thai SET market via TradingView Screener. | `tv_public` **required** | beta |
+| **Thai Sector Heatmap** (`thai-sector-heatmap`) | Generate a sector-rotation heatmap for the Thai SET market using TradingView Screener data. | `tv_public` **required** | beta |
 | **Uptrend Analyzer** (`uptrend-analyzer`) | Analyzes market breadth using Monty's Uptrend Ratio Dashboard data to diagnose the current market environment. | `public_csv` **required** | production |
+| **US Breadth Analyzer (TV)** (`us-breadth-analyzer-tv`) | Compute fast market-breadth snapshot for the US market via TradingView Screener. | `tv_public` **required** | beta |
 | **US Market Bubble Detector** (`us-market-bubble-detector`) | Evaluates market bubble risk through quantitative data-driven analysis using the revised Minsky/Kindleberger framework v2.1. | `user_input` **required** | production |
+| **US Sector Heatmap** (`us-sector-heatmap`) | Generate a sector-rotation heatmap for the US market using TradingView Screener data. | `tv_public` **required** | beta |
 
 ### Core Portfolio
 
@@ -136,8 +138,8 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Kanchi Dividend Review Monitor** (`kanchi-dividend-review-monitor`) | Monitor dividend portfolios with Kanchi-style forced-review triggers (T1-T5) and convert anomalies into OK/WARN/REVIEW states without auto-selling. | `fmp` _recommended_ | production |
 | **Kanchi Dividend SOP** (`kanchi-dividend-sop`) | Convert Kanchi-style dividend investing into a repeatable US-stock operating procedure. | `fmp` _recommended_ | production |
 | **Kanchi Dividend US Tax Accounting** (`kanchi-dividend-us-tax-accounting`) | Provide US dividend tax and account-location workflow for Kanchi-style income portfolios. | `local_calculation` — | production |
+| **Paper Trade Simulator** (`paper-trade-simulator`) | Simulate trades without real money to test strategy and emotional discipline. Track open positions, P/L in R-multiples, MAE/MFE, journal entries, and discipline metrics. | `local_db` **required** | beta |
 | **Portfolio Manager** (`portfolio-manager`) | Comprehensive portfolio analysis using Alpaca MCP Server integration to fetch holdings and positions, then analyze asset allocation, risk metrics, individual stock positions, diversification, and generate rebalancing recommendations. | `alpaca` **required** | production |
-| **Thai Dividend Screener** (`thai-dividend-screener`) | Screen Thai SET stocks for dividend income candidates using TradingView Screener filters for yield, valuation, liquidity, and trend health. | `tradingview_public` **required** | production |
 | **Value Dividend Screener** (`value-dividend-screener`) | Screen US stocks for high-quality dividend opportunities combining value characteristics (P/E ratio under 20, P/B ratio under 2), attractive yields (3% or higher), and consistent growth (dividend/revenue/EPS trending up over 3 years). | `fmp` **required**, `finviz` _recommended_ | production |
 
 ### Swing Opportunity
@@ -147,8 +149,11 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Breakout Trade Planner** (`breakout-trade-planner`) | Generate Minervini-style breakout trade plans from VCP screener output with worst-case risk calculation, portfolio heat management, and Alpaca-compatible order templates (stop-limit bracket for pre-placement, limit bracket for post-confi... | `local_calculation` — | production |
 | **CANSLIM Screener** (`canslim-screener`) | Screen US stocks using William O'Neil's CANSLIM growth stock methodology. | `fmp` **required** | production |
 | **Finviz Screener** (`finviz-screener`) | Build and open FinViz screener URLs from natural language requests. | `finviz` optional | production |
-| **Thai Watchlist Builder** (`thai-watchlist-builder`) | Build curated Thai SET watchlists for Growth, Value, Momentum, and Mean-Reversion buckets using TradingView Screener filters. | `tradingview_public` **required** | production |
+| **Thai Dividend Screener** (`thai-dividend-screener`) | Screen Thai SET stocks for high-quality dividend income opportunities. | `tv_public` **required** | beta |
+| **Thai Watchlist Builder** (`thai-watchlist-builder`) | Auto-build 4 curated watchlists from the Thai SET market using TradingView Screener filters. | `tv_public` **required** | beta |
 | **Theme Detector** (`theme-detector`) | Detect and analyze trending market themes across sectors. | `fmp` optional, `finviz` _recommended_ | production |
+| **US Dividend Screener** (`us-dividend-screener`) | Screen US stocks for high-quality dividend income opportunities. | `tv_public` **required** | beta |
+| **US Watchlist Builder** (`us-watchlist-builder`) | Auto-build 4 curated watchlists from the US market using TradingView Screener filters. | `tv_public` **required** | beta |
 | **VCP Screener** (`vcp-screener`) | Screen S&P 500 stocks for Mark Minervini's Volatility Contraction Pattern (VCP). | `fmp` **required** | production |
 
 ### Trade Planning
@@ -163,7 +168,6 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 
 | Skill | Summary | Integrations | Status |
 |---|---|---|---|
-| **Paper Trade Simulator** (`paper-trade-simulator`) | Simulate trades without real money, track open positions, R-multiple P/L, MAE/MFE, journal entries, and discipline metrics with dashboard integration. | `sqlite` **required**, `local_calculation` — | production |
 | **Signal Postmortem** (`signal-postmortem`) | Record and analyze post-trade outcomes for signals generated by edge pipeline and other skills. | `local_calculation` — | production |
 | **Trade Hypothesis Ideator** (`trade-hypothesis-ideator`) | Generate falsifiable trade strategy hypotheses from market data, trade logs, and journal snippets with ranked hypothesis cards and optional strategy.yaml export. | `local_calculation` — | production |
 | **Trader Memory Core** (`trader-memory-core`) | Track investment theses across their lifecycle — from screening idea to closed position with postmortem. | `fmp` optional | production |
@@ -180,7 +184,7 @@ The detailed catalog below is **auto-generated** from `skills-index.yaml` by `sc
 | **Edge Signal Aggregator** (`edge-signal-aggregator`) | Aggregate and rank signals from multiple edge-finding skills (edge-candidate-agent, theme-detector, sector-analyst, institutional-flow-tracker) into a prioritized conviction dashboard with weighted scoring, deduplication, and contradicti... | `local_calculation` — | production |
 | **Edge Strategy Designer** (`edge-strategy-designer`) | Convert abstract edge concepts into strategy draft variants and optional exportable ticket YAMLs for edge-candidate-agent export/validation. | `local_calculation` — | production |
 | **Edge Strategy Reviewer** (`edge-strategy-reviewer`) | Critically review strategy drafts from edge-strategy-designer for edge plausibility, overfitting risk, sample size adequacy, and execution realism. | `local_calculation` — | production |
-| **Scenario Analyzer** (`scenario-analyzer`) | Analyze 18-month scenarios from news headlines via scenario-analyst agent with strategy-reviewer second opinion; outputs primary/secondary/tertiary impact analysis and stock picks in Japanese. | `websearch` **required** | production |
+| **Scenario Analyzer** (`scenario-analyzer`) | Analyze 18-month scenarios from news headlines via scenario-analyst agent with strategy-reviewer second opinion; outputs primary/secondary/tertiary impact analysis and stock picks in English. | `websearch` **required** | production |
 | **Stanley Druckenmiller Investment** (`stanley-druckenmiller-investment`) | Druckenmiller Strategy Synthesizer - Integrates 8 upstream skill outputs (Market Breadth, Uptrend Analysis, Market Top, Macro Regime, FTD Detector, VCP Screener, Theme Detector, CANSLIM Screener) into a unified conviction score (0-100),... | `local_calculation` — | production |
 | **Strategy Pivot Designer** (`strategy-pivot-designer`) | Detect backtest iteration stagnation and generate structurally different strategy pivot proposals when parameter tuning reaches a local optimum. | `local_calculation` — | production |
 

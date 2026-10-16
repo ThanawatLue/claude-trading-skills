@@ -201,7 +201,6 @@ def _run_thai_analysis(args):
     for i in range(20, len(raw_breadth_data)):
         # Calculate 8MA as average of last 8 days (scaled 0.0 - 1.0)
         ma8 = sum(r["pct_50"] for r in raw_breadth_data[i - 7 : i + 1]) / 800.0
-        ma150 = sum(r["pct_150"] for r in raw_breadth_data[i - 7 : i + 1]) / 800.0
         ma200 = sum(r["pct_200"] for r in raw_breadth_data[i - 7 : i + 1]) / 800.0
 
         # 200MA Trend based on last 5 days

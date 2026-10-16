@@ -388,8 +388,54 @@ def evaluate_candidate(
         reject_reasons.append(b_code)
 
     passed = not reject_reasons
+
+    # Synthesize trade execution plan if available
+    price = _number(row.get("price"))
+    raw_plan = row.get("plan")
+    plan: dict[str, Any] | None = None
+    if isinstance(raw_plan, Mapping):
+        entry_p = _number(raw_plan.get("entry")) or price
+        stop_p = _number(raw_plan.get("stop_loss") or raw_plan.get("stop"))
+        target_p = _number(raw_plan.get("take_profit") or raw_plan.get("target"))
+        risk_pct = _number(raw_plan.get("risk_pct"))
+        if entry_p is not None and entry_p > 0:
+            if stop_p is None:
+                stop_p = round(entry_p * 0.95, 2)
+            risk = entry_p - stop_p
+            if target_p is None:
+                target_p = round(entry_p + (risk * 2.0), 2)
+            if risk_pct is None:
+                risk_pct = round((risk / entry_p) * 100.0, 2)
+            plan = {
+                "entry": round(entry_p, 2),
+                "stop_loss": round(stop_p, 2),
+                "take_profit": round(target_p, 2),
+                "risk_pct": risk_pct,
+            }
+    elif price is not None and price > 0:
+        stop_p = _number(row.get("stop_loss") or row.get("stop") or row.get("suggested_stop"))
+        target_p = _number(
+            row.get("take_profit") or row.get("target") or row.get("suggested_target")
+        )
+        pivot_p = _number(row.get("pivot"))
+        entry_p = pivot_p if (pivot_p is not None and pivot_p > 0) else price
+        if stop_p is None:
+            stop_p = round(entry_p * 0.95, 2)
+        risk = entry_p - stop_p
+        if target_p is None:
+            target_p = round(entry_p + (risk * 2.0), 2)
+        risk_pct = round((risk / entry_p) * 100.0, 2)
+        plan = {
+            "entry": round(entry_p, 2),
+            "stop_loss": round(stop_p, 2),
+            "take_profit": round(target_p, 2),
+            "risk_pct": risk_pct,
+        }
+
     return {
         "symbol": symbol,
+        "price": price,
+        "plan": plan,
         "composite_score": score,
         "execution_state": state,
         "distance_from_pivot_pct": distance,

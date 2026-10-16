@@ -2564,7 +2564,9 @@ def api_paper_emotions():
 
 @app.route("/api/patterns")
 def api_patterns():
-    import sqlite3
+    from statistics import median
+
+    market = normalize_market(request.args.get("market", "TH"))
 
     db_path = os.path.join(BASE_DIR, "state", "market_cache.db")
     if not os.path.exists(db_path):
@@ -2574,9 +2576,14 @@ def api_patterns():
     conn.execute("PRAGMA busy_timeout=5000;")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute(
-        "SELECT symbol, date, open, close, high, low, volume FROM price_bar ORDER BY symbol, date ASC"
-    )
+    if market == "TH":
+        c.execute(
+            "SELECT symbol, date, open, close, high, low, volume FROM price_bar WHERE symbol LIKE '%.BK' ORDER BY symbol, date ASC"
+        )
+    else:
+        c.execute(
+            "SELECT symbol, date, open, close, high, low, volume FROM price_bar WHERE symbol NOT LIKE '%.BK' ORDER BY symbol, date ASC"
+        )
     rows = c.fetchall()
 
     data = {}
@@ -2616,7 +2623,8 @@ def api_patterns():
 
             occurrences = 0
             wins = 0
-            sum_returns = 0
+            sum_returns = 0.0
+            returns: list[float] = []
 
             curr_streak = 0
             for i in range(len(bars) - 1):
@@ -2637,10 +2645,11 @@ def api_patterns():
                     occurrences += 1
 
                     if b["close"] > 0:
-                        next_return = (next_b["close"] - b["close"]) / b["close"] * 100
+                        next_return = (next_b["close"] - b["close"]) / b["close"] * 100.0
                     else:
-                        next_return = 0
+                        next_return = 0.0
                     sum_returns += next_return
+                    returns.append(next_return)
 
                     if is_oversold and next_b["close"] > b["close"]:
                         wins += 1
@@ -2648,10 +2657,27 @@ def api_patterns():
                         wins += 1
 
             if occurrences > 0:
-                win_rate = (wins / occurrences) * 100
+                win_rate = (wins / occurrences) * 100.0
                 avg_return = sum_returns / occurrences
+                med_return = median(returns) if returns else 0.0
 
-                if occurrences >= 3 and win_rate > 50.0:
+                # Trend health calculation (SMA50 & SMA200)
+                closes = [b["close"] for b in bars]
+                sma50 = sum(closes[-50:]) / 50.0 if len(closes) >= 50 else None
+                sma200 = sum(closes[-200:]) / 200.0 if len(closes) >= 200 else None
+                latest_close = bars[-1]["close"]
+                above_sma50 = latest_close > sma50 if sma50 is not None else None
+                above_sma200 = latest_close > sma200 if sma200 is not None else None
+
+                # Gate out severe Stage-4 freefall for oversold bounce setups
+                severe_freefall = False
+                if is_oversold:
+                    if sma50 is not None and latest_close < sma50 * 0.88:
+                        severe_freefall = True
+                    if sma200 is not None and latest_close < sma200 * 0.80:
+                        severe_freefall = True
+
+                if occurrences >= 5 and win_rate >= 50.0 and not severe_freefall:
                     latest = bars[-1]
                     item = {
                         "symbol": sym,
@@ -2659,6 +2685,13 @@ def api_patterns():
                         "occurrences": occurrences,
                         "win_rate": round(win_rate, 2),
                         "avg_return": round(avg_return, 2),
+                        "median_return": round(med_return, 2),
+                        "trend_health": {
+                            "above_sma50": above_sma50,
+                            "above_sma200": above_sma200,
+                            "sma50": round(sma50, 2) if sma50 is not None else None,
+                            "sma200": round(sma200, 2) if sma200 is not None else None,
+                        },
                         "latest": {
                             "date": latest["date"],
                             "open": latest["open"],
@@ -2673,7 +2706,7 @@ def api_patterns():
                     else:
                         overbought.append(item)
 
-    return jsonify({"Oversold": oversold, "Overbought": overbought})
+    return jsonify({"Oversold": oversold, "Overbought": overbought, "market": market})
 
 
 @app.route("/api/jules/status")

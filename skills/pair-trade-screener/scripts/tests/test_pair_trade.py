@@ -43,12 +43,12 @@ def test_test_cointegration():
 
     res = find_pairs.test_cointegration(prices_a, prices_b, 1.0)
     assert res is not None
-    assert res["is_cointegrated"] == True
+    assert res["is_cointegrated"] is True
     assert res["p_value"] < 0.05
 
     res2 = analyze_spread.test_cointegration(spread)
     assert res2 is not None
-    assert res2["is_cointegrated"] == True
+    assert res2["is_cointegrated"] is True
 
 
 def test_calculate_half_life():
