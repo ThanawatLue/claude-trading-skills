@@ -232,9 +232,7 @@ class TestFMPClient:
         mock_session_get.assert_called_once()
         assert "test-endpoint" in mock_session_get.call_args[0][0]
 
-    def test_get_rate_limit(
-        self, fmp_client, mock_session_get, mock_response, monkeypatch, mocker
-    ):
+    def test_get_rate_limit(self, fmp_client, mock_session_get, mock_response, monkeypatch, mocker):
         """Test _get handles rate limiting (429)."""
         mock_response_429 = mocker.MagicMock(status_code=429)
         mock_response_200 = mocker.MagicMock(status_code=200, json=lambda: {"data": "success"})
@@ -841,6 +839,14 @@ class TestScriptStructure:
         mock_generate_markdown_report = mocker.patch.object(mod, "generate_markdown_report")
         mock_os_makedirs = mocker.patch("os.makedirs")
         mock_json_dump = mocker.patch("json.dump")
+        mock_file = mocker.mock_open()
+
+        def fake_open(file, *args, **kwargs):
+            handle = mock_file(file, *args, **kwargs)
+            handle.name = str(file)
+            return handle
+
+        mocker.patch("builtins.open", side_effect=fake_open)
 
         # Prepare sys.argv
         sys_argv = ["screen_dividend_growth_rsi.py"]
@@ -882,9 +888,7 @@ class TestScriptStructure:
 
         # Verify output directory
         expected_output_dir = (
-            str(tmp_path)
-            if output_dir_arg
-            else str(SCRIPT_PATH.resolve().parents[3] / "logs")
+            str(tmp_path) if output_dir_arg else str(SCRIPT_PATH.resolve().parents[3] / "logs")
         )
 
         fp = mock_json_dump.call_args[0][1]
