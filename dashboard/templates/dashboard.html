@@ -695,12 +695,17 @@
   <div class="card decision-analytics-card" id="decisionAnalyticsPanel">
     <div class="section-title analytics-section-title">
       <span>Decision Quality Analytics</span>
+      <div class="horizon-switcher" style="display:inline-flex;gap:4px;margin-left:12px">
+        <button class="guide-btn horizon-btn active" id="btnHorizon5" data-horizon="5" type="button" onclick="switchDecisionHorizon('5')" style="background:var(--cyan);color:#000;font-weight:bold;padding:4px 10px;border-radius:6px">5D</button>
+        <button class="guide-btn horizon-btn" id="btnHorizon20" data-horizon="20" type="button" onclick="switchDecisionHorizon('20')" style="background:var(--bg3);color:var(--text);padding:4px 10px;border-radius:6px">20D (Swing)</button>
+        <button class="guide-btn horizon-btn" id="btnHorizon60" data-horizon="60" type="button" onclick="switchDecisionHorizon('60')" style="background:var(--bg3);color:var(--text);padding:4px 10px;border-radius:6px">60D (Trend)</button>
+      </div>
       <span class="analytics-status" id="decisionAnalyticsStatus">Loading...</span>
       <button class="guide-btn" type="button" onclick="loadDecisionAnalytics()">Refresh analytics</button>
     </div>
     <div id="decisionAnalyticsNotes" class="signal-note">กำลังอ่าน complete signal outcomes...</div>
     <div class="analytics-kpi-grid">
-      <div class="metric signal-kpi"><b>5D Expectancy</b><span id="daExpectancy">--</span></div>
+      <div class="metric signal-kpi"><b id="daExpectancyLabel">5D Expectancy</b><span id="daExpectancy">--</span></div>
       <div class="metric signal-kpi"><b>Win Rate / 95% CI</b><span id="daWinRate">--</span></div>
       <div class="metric signal-kpi"><b>Profit Factor</b><span id="daProfitFactor">--</span></div>
       <div class="metric signal-kpi"><b>Max Drawdown</b><span id="daDrawdown">--</span></div>

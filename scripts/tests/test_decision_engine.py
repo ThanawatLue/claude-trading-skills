@@ -76,3 +76,51 @@ def test_evaluate_signal_accounts_for_history_and_round_trip_cost() -> None:
     assert trace["execution"]["round_trip_cost_r"] > 0
     assert trace["history"]["posterior_win_rate"] < 0.5
     assert trace["components"]["expected_net_r"] < trace["components"]["gross_reward_r"]
+
+
+def test_evaluate_signal_calibrated_predicted_probability() -> None:
+    # 0 trades history -> posterior_win_rate = 0.5
+    # raw_score = 85.0 -> score_prior = 0.587
+    # predicted_probability = 0.5 * 0.5 + 0.5 * 0.587 = 0.5435
+    trace = evaluate_signal(
+        {
+            "symbol": "PTTGC.BK",
+            "market": "TH",
+            "source_skill": "thai-swing-dip",
+            "raw_score": 85.0,
+            "payload": {},
+            "entry": 30.0,
+            "stop": 28.5,
+            "target": 33.0,
+            "history": {"closed_count": 0, "wins": 0, "losses": 0, "sum_realized_r": 0},
+        }
+    )
+    assert trace["predicted_probability"] == 0.5435
+    assert trace["components"]["predicted_probability"] == 0.5435
+
+
+def test_extract_features_dip_buy_reversal_score_bounce_floor() -> None:
+    # Mild pullback (-1.5%) with strong support (+3% above SMA50) and good pullback gap (-2%)
+    features_mild = extract_features(
+        {
+            "price": 10.0,
+            "sma20": 10.2,  # gap -1.96% -> pullback_score high
+            "sma50": 9.7,  # dist +3.09% -> support_score high
+            "perf_1m": -1.5,
+        }
+    )
+    # Reversal score elevated by bounce floor above raw -1.5% normalisation (0.35)
+    assert features_mild["reversal_score"] is not None
+    assert features_mild["reversal_score"] >= 0.60
+
+    # Severe falling knife (-4.4%) does not get elevated
+    features_knife = extract_features(
+        {
+            "price": 10.0,
+            "sma20": 10.2,
+            "sma50": 9.7,
+            "perf_1m": -4.4,
+        }
+    )
+    assert features_knife["reversal_score"] is not None
+    assert features_knife["reversal_score"] < 0.20

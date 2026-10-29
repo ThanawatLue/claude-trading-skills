@@ -260,7 +260,9 @@ def calibration_summary(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
-def build_decision_analytics(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+def build_decision_analytics(
+    records: Iterable[Mapping[str, Any]], preferred_horizon: str | int | None = None
+) -> dict[str, Any]:
     """Build all decision-quality views from complete outcome rows."""
     rows = list(records)
     by_horizon: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
@@ -273,7 +275,12 @@ def build_decision_analytics(records: Iterable[Mapping[str, Any]]) -> dict[str, 
         horizon: summarize_records(items)
         for horizon, items in sorted(by_horizon.items(), key=lambda item: int(item[0]))
     }
-    primary_horizon = "5" if "5" in horizon_stats else (next(iter(horizon_stats), None))
+    pref_num = _number(preferred_horizon)
+    pref_str = str(int(pref_num)) if pref_num is not None else None
+    if pref_str and pref_str in horizon_stats:
+        primary_horizon = pref_str
+    else:
+        primary_horizon = "5" if "5" in horizon_stats else (next(iter(horizon_stats), None))
     primary_rows = by_horizon.get(primary_horizon, []) if primary_horizon else []
     notes = []
     if not primary_rows:

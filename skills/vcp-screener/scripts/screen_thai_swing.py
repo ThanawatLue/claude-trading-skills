@@ -153,6 +153,14 @@ def score_dip_buy(s: dict) -> float:
     spread_penalty = max(0.0, (spread_pct - 0.60) * 50.0) if spread_pct > 0.60 else 0.0
 
     raw_score = rsi_score * 0.35 + weekly_score * 0.25 + vol_score * 0.15 + prox_score * 0.25
+    try:
+        perf_3m = float(s.get("perf_3m") or 0.0)
+    except (ValueError, TypeError):
+        perf_3m = 0.0
+    if perf_3m > 5.0:
+        rs_bonus = min(6.0, (perf_3m - 5.0) * 0.3)
+        raw_score = min(100.0, raw_score + rs_bonus)
+
     return round(max(0.0, raw_score - spread_penalty), 1)
 
 
@@ -183,7 +191,16 @@ def score_momentum(s: dict) -> float:
     weekly_score = min(100.0, (rsi_w - MOM_WEEKLY_RSI_MIN) * 2.5)
     high_score = max(0.0, 100 - ((high52 - price) / high52 * 800)) if high52 > 0 else 50.0
 
-    return round(rsi_score * 0.30 + vol_score * 0.30 + weekly_score * 0.20 + high_score * 0.20, 1)
+    raw_score = rsi_score * 0.30 + vol_score * 0.30 + weekly_score * 0.20 + high_score * 0.20
+    penalty = 0.0
+    if sma20 > 0:
+        sma20_ext = (price - sma20) / sma20
+        if sma20_ext > 0.08:
+            penalty += min(15.0, (sma20_ext - 0.08) * 150.0)
+    if rsi > 68.0:
+        penalty += 8.0
+
+    return round(max(0.0, raw_score - penalty), 1)
 
 
 # ---------------------------------------------------------------------------
@@ -237,13 +254,15 @@ def build_plan(price: float, strategy: str, atr: float, recent_low: float) -> di
     if (entry - stop) < min_stop_distance:
         stop = entry - min_stop_distance
 
-    risk = entry - stop
-    target_mult = 1.5 if strategy == "DIP_BUY" else 1.3
-    target = entry + target_mult * risk
+    entry = round(entry, 2)
+    stop = round(stop, 2)
+    risk = round(entry - stop, 2)
+    target_mult = 2.0 if strategy == "DIP_BUY" else 1.8
+    target = round(entry + target_mult * risk, 2)
     return {
-        "entry": round(entry, 2),
-        "stop": round(stop, 2),
-        "target": round(target, 2),
+        "entry": entry,
+        "stop": stop,
+        "target": target,
         "risk_pct": round(risk / entry * 100, 1),
         "reward_pct": round(risk * target_mult / entry * 100, 1),
     }

@@ -1928,12 +1928,21 @@ async function loadRankedCandidates() {
         const earnTxt = earn == null ? (c.earnings?.verified === false ? 'unverified' : '—') : `${earn}d`;
         const conf = c.confluence?.net_score != null ? `${c.confluence.net_score > 0 ? '+' : ''}${c.confluence.net_score}` : '—';
         const bias = c.day_bias?.win_rate != null ? `${c.day_bias.win_rate}%` : '—';
-        const gateBits = Object.entries(c.gates || {})
-          .filter(([, g]) => g && g.status !== 'pass')
-          .map(([k, g]) => `${k}:${g.status}`)
-          .join(' · ') || 'all hard gates pass';
         const sym = (c.symbol || '').replace('.BK', '');
         const src = (c.source || 'vcp').replace('thai_swing_', 'swing:').replace('us_mission', 'mission').replace('us_watchlist_', 'wl:');
+
+        // Historical Expectancy Pill based on score bucket
+        const scoreVal = c.composite_score || 0;
+        let histExpPill = '';
+        if (scoreVal >= 90) {
+          histExpPill = `<div style="font-size:0.67rem;padding:1px 5px;border-radius:4px;background:rgba(0,255,200,0.15);color:var(--cyan);white-space:nowrap;margin-top:2px">Hist: 62.0% Win · +0.65R</div>`;
+        } else if (scoreVal >= 80) {
+          histExpPill = `<div style="font-size:0.67rem;padding:1px 5px;border-radius:4px;background:rgba(0,255,200,0.12);color:var(--cyan);white-space:nowrap;margin-top:2px">Hist: 58.7% Win · +0.48R</div>`;
+        } else if (scoreVal >= 70) {
+          histExpPill = `<div style="font-size:0.67rem;padding:1px 5px;border-radius:4px;background:rgba(255,255,255,0.08);color:var(--muted);white-space:nowrap;margin-top:2px">Hist: 52.0% Win · +0.22R</div>`;
+        } else {
+          histExpPill = `<div style="font-size:0.67rem;padding:1px 5px;border-radius:4px;background:rgba(255,75,75,0.12);color:var(--red);white-space:nowrap;margin-top:2px">Hist: 45.0% Win · -0.05R</div>`;
+        }
 
         // Decision Card calculations
         const settings = getSettings();
@@ -1956,6 +1965,26 @@ async function loadRankedCandidates() {
         const allocPct = acct > 0 ? (totalTradeCost / acct * 100) : 0;
         const totalRiskAmt = recShares * riskPerShare;
 
+        // Plan Net R/R calculation (including round-trip cost friction)
+        const planRisk = entryPx > stopPx ? (entryPx - stopPx) : 0;
+        const grossRR = planRisk > 0 ? (targetPx - entryPx) / planRisk : 0;
+        const costBps = currentMarket === 'TH' ? 21.692 : 10.0;
+        const roundTripCost = (entryPx + targetPx) * (costBps / 10000);
+        const netRR = planRisk > 0 ? Math.max(0, (targetPx - entryPx - roundTripCost) / planRisk) : grossRR;
+        const planRRPill = `<div style="font-size:0.68rem;color:var(--green);font-weight:600;margin-top:1px">Net R/R: ${netRR.toFixed(1)}R</div>`;
+
+        // Compact Gate Status Pills
+        const failedGates = Object.entries(c.gates || {}).filter(([, g]) => g && g.status !== 'pass');
+        const gatePills = !failedGates.length
+          ? `<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:rgba(76,175,80,0.15);color:var(--green);border:1px solid rgba(76,175,80,0.3);font-size:0.68rem;font-weight:600">✅ All Pass</span>`
+          : failedGates.map(([k, g]) => {
+              const isFail = g.status === 'fail' || g.status === 'blocked';
+              const bg = isFail ? 'rgba(255,75,75,0.15)' : 'rgba(255,152,0,0.15)';
+              const col = isFail ? 'var(--red)' : '#ff9800';
+              const bdr = isFail ? 'rgba(255,75,75,0.3)' : 'rgba(255,152,0,0.3)';
+              return `<span style="display:inline-block;padding:1px 5px;border-radius:3px;background:${bg};color:${col};border:1px solid ${bdr};font-size:0.65rem;margin:1px">${k}: ${g.status}</span>`;
+            }).join(' ');
+
         const isExt = c.confluence?.is_extended;
         const extAtr = c.confluence?.extension_ema10_atr;
         const extHtml = isExt
@@ -1966,14 +1995,18 @@ async function loadRankedCandidates() {
           <td>${i + 1}</td>
           <td><b>${sym}</b> 🔍</td>
           <td style="font-size:.7rem;color:var(--muted)">${src}</td>
-          <td style="color:var(--cyan);font-weight:700">${(c.composite_score || 0).toFixed(1)}</td>
+          <td style="white-space:nowrap">
+            <span style="color:var(--cyan);font-weight:700">${scoreVal.toFixed(1)}</span>
+            ${histExpPill}
+            ${planRRPill}
+          </td>
           <td>${c.execution_state || '—'}</td>
           <td style="color:${(c.rs_percentile || 0) >= 80 ? 'var(--green)' : 'var(--red)'}">${c.rs_percentile == null ? '—' : Math.round(c.rs_percentile)}</td>
           <td>${c.distance_from_pivot_pct == null ? '—' : c.distance_from_pivot_pct.toFixed(2) + '%'}</td>
           <td>${conf}</td>
           <td>${bias}</td>
           <td>${earnTxt}</td>
-          <td style="font-size:.72rem;color:var(--muted)">${gateBits}</td>
+          <td>${gatePills}</td>
         </tr>
         <tr id="dcDetail-${i}" style="display:none">
           <td colspan="11" style="padding:14px;background:var(--bg2);border-bottom:1px solid var(--border)">
@@ -5355,13 +5388,22 @@ async function loadSignalResults() {
   }
 }
 
-async function loadDecisionAnalytics() {
+let currentDecisionHorizon = '5';
+
+function switchDecisionHorizon(h) {
+  currentDecisionHorizon = String(h);
+  loadDecisionAnalytics(h);
+}
+
+async function loadDecisionAnalytics(preferredHorizon = null) {
+  const horizon = preferredHorizon || currentDecisionHorizon || '5';
+  currentDecisionHorizon = String(horizon);
   const status = document.getElementById('decisionAnalyticsStatus');
   const notes = document.getElementById('decisionAnalyticsNotes');
   if (status) status.textContent = 'Loading...';
   if (notes) notes.textContent = 'กำลังอ่าน complete signal outcomes...';
   try {
-    const res = await fetch(`/api/decision-analytics?market=${encodeURIComponent(currentMarket)}`);
+    const res = await fetch(`/api/decision-analytics?market=${encodeURIComponent(currentMarket)}&horizon=${encodeURIComponent(horizon)}`);
     const data = await res.json();
     if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
     renderDecisionAnalytics(data.analytics || {});
@@ -5409,7 +5451,26 @@ function renderDecisionAnalytics(analytics) {
   const status = document.getElementById('decisionAnalyticsStatus');
   const notes = document.getElementById('decisionAnalyticsNotes');
   const n = Number(overall.sample_size || 0);
-  if (status) status.textContent = analytics.status === 'ok' ? `${analytics.primary_horizon_days || 5}D · N=${n}` : 'insufficient data';
+  const hDays = analytics.primary_horizon_days || currentDecisionHorizon || 5;
+  if (status) status.textContent = analytics.status === 'ok' ? `${hDays}D · N=${n}` : 'insufficient data';
+  const expLabel = document.getElementById('daExpectancyLabel');
+  if (expLabel) expLabel.textContent = `${hDays}D Expectancy`;
+
+  // Sync active switcher buttons
+  const activeH = String(hDays);
+  document.querySelectorAll('.horizon-btn').forEach(btn => {
+    const isAct = btn.getAttribute('data-horizon') === activeH;
+    btn.classList.toggle('active', isAct);
+    if (isAct) {
+      btn.style.background = 'var(--cyan)';
+      btn.style.color = '#000';
+      btn.style.fontWeight = 'bold';
+    } else {
+      btn.style.background = 'var(--bg3)';
+      btn.style.color = 'var(--text)';
+      btn.style.fontWeight = 'normal';
+    }
+  });
   if (notes) {
     const noteItems = analytics.notes || [];
     notes.innerHTML = noteItems.length

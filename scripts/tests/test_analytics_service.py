@@ -70,6 +70,12 @@ def test_build_decision_analytics_groups_horizons_score_regime_and_calibration()
     assert result["calibration"]["available"] is True
     assert result["by_horizon"]["20"]["sample_size"] == 1
 
+    # Test preferred_horizon selection
+    result_20d = build_decision_analytics(rows, preferred_horizon="20")
+    assert result_20d["primary_horizon_days"] == 20
+    assert result_20d["overall"]["sample_size"] == 1
+    assert {item["label"] for item in result_20d["score_buckets"]} == {"90-100"}
+
 
 def test_calibration_summary_is_explicitly_unavailable_without_probabilities() -> None:
     result = calibration_summary([{"theoretical_r": 1}, {"theoretical_r": -1}])

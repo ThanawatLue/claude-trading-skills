@@ -13,6 +13,7 @@ from screen_thai_swing import (
     get_set_tick_size,
     get_tick_spread_pct,
     score_dip_buy,
+    score_momentum,
 )
 
 
@@ -81,3 +82,53 @@ def test_score_dip_buy_rejects_severe_spread_traps():
     score_trap = score_dip_buy(candidate_trap)
     score_good = score_dip_buy(candidate_good)
     assert score_good > score_trap
+
+
+def test_score_dip_buy_rs_bonus():
+    base = {
+        "price": 4.50,
+        "rsi": 44,
+        "rsi_weekly": 48,
+        "sma20": 4.65,
+        "sma50": 4.30,
+        "sma200": 4.00,
+        "volume": 1_000_000,
+        "avgVolume": 1_000_000,
+        "perf_3m": 0.0,
+    }
+    candidate_high_rs = dict(base, perf_3m=15.0)  # +10 above 5.0 -> +3.0 bonus
+    score_base = score_dip_buy(base)
+    score_high_rs = score_dip_buy(candidate_high_rs)
+    assert score_high_rs == round(score_base + 3.0, 1)
+
+
+def test_score_momentum_overextension_penalty():
+    base_mom = {
+        "price": 10.0,
+        "rsi": 63,
+        "rsi_weekly": 58,
+        "sma20": 9.5,  # ext = 0.5/9.5 = 5.2% <= 8%
+        "yearHigh": 10.2,
+        "volume": 1_500_000,
+        "avgVolume": 1_000_000,
+    }
+    score_normal = score_momentum(base_mom)
+    # Overextended above SMA20 (>8%)
+    overextended = dict(base_mom, price=10.5, sma20=9.0)  # ext = 1.5/9.0 = 16.6% -> penalty
+    score_overextended = score_momentum(overextended)
+    assert score_overextended < score_normal
+
+    # High RSI (>68)
+    overheated = dict(base_mom, rsi=70)
+    score_overheated = score_momentum(overheated)
+    assert score_overheated <= score_normal - 8.0
+
+
+def test_build_plan_target_multipliers():
+    plan_dip = build_plan(price=10.0, strategy="DIP_BUY", atr=0.5, recent_low=9.5)
+    risk_dip = plan_dip["entry"] - plan_dip["stop"]
+    assert round(plan_dip["target"], 2) == round(plan_dip["entry"] + 2.0 * risk_dip, 2)
+
+    plan_mom = build_plan(price=10.0, strategy="MOMENTUM", atr=0.5, recent_low=9.5)
+    risk_mom = plan_mom["entry"] - plan_mom["stop"]
+    assert round(plan_mom["target"], 2) == round(plan_mom["entry"] + 1.8 * risk_mom, 2)

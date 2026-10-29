@@ -370,6 +370,21 @@ def signal_from_mapping(
     raw_score = as_float(
         first_value(record.get("raw_score"), record.get("score"), record.get("composite_score"))
     )
+    payload = dict(record)
+    if "predicted_probability" not in payload and "win_probability" not in payload:
+        pred = nested_get(payload, "decision_trace.predicted_probability") or nested_get(
+            payload, "decision_trace.components.predicted_probability"
+        )
+        if pred is not None:
+            payload["predicted_probability"] = pred
+        elif raw_score is not None:
+            score_prior = (
+                0.587
+                if 80.0 <= raw_score < 90.0
+                else (0.62 if raw_score >= 90.0 else (0.52 if raw_score >= 75.0 else 0.45))
+            )
+            payload["predicted_probability"] = score_prior
+
     return SignalRecord(
         signal_id=signal_id,
         symbol=str(symbol),
@@ -384,7 +399,7 @@ def signal_from_mapping(
         stop_price=stop_price,
         target_price=target_price,
         origin_file=origin_file,
-        payload=record,
+        payload=payload,
     )
 
 

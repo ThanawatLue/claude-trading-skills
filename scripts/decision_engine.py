@@ -82,6 +82,18 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
     pullback_score = (
         _clip(1 - abs(sma20_gap_pct + 2.0) / 5.0) if sma20_gap_pct is not None else None
     )
+    # If healthy support bounce is observed (support_score >= 0.5, pullback_score >= 0.5)
+    # and 1m drop is not a severe falling knife (perf_1m > -3.5),
+    # elevate reversal_score floor to avoid penalizing valid dip-buy consolidation
+    if reversal_score is not None and support_score is not None and pullback_score is not None:
+        if (
+            perf_1m is not None
+            and perf_1m > -3.5
+            and support_score >= 0.5
+            and pullback_score >= 0.5
+        ):
+            bounce_floor = min(0.75, 0.4 + 0.3 * support_score + 0.2 * pullback_score)
+            reversal_score = max(reversal_score, round(bounce_floor, 4))
     trend_score = None
     if perf_3m is not None and sma50_distance_pct is not None:
         trend_score = _clip(
@@ -166,6 +178,18 @@ def evaluate_signal(context: dict[str, Any]) -> dict[str, Any]:
         failed.append("symbol_cooldown_after_loss")
 
     raw_score = _number(context.get("raw_score")) or 0.0
+    if 80.0 <= raw_score < 90.0:
+        score_prior = 0.587
+    elif raw_score >= 90.0:
+        score_prior = 0.62
+    elif raw_score >= 75.0:
+        score_prior = 0.52
+    else:
+        score_prior = 0.45
+    predicted_probability = round(
+        _clip(0.5 * posterior_win_rate + 0.5 * score_prior, 0.05, 0.95), 4
+    )
+
     confirmation_adjustment = (confirmation - 0.5) * 20 if confirmation is not None else 0.0
     behavior_adjustment = posterior_avg_r * 10
     decision_score = raw_score + confirmation_adjustment + behavior_adjustment + expected_net_r * 5
@@ -176,6 +200,7 @@ def evaluate_signal(context: dict[str, Any]) -> dict[str, Any]:
         "symbol": context.get("symbol"),
         "market": context.get("market"),
         "source_skill": context.get("source_skill"),
+        "predicted_probability": predicted_probability,
         "features": features,
         "history": {
             "closed_count": closed_count,
@@ -197,6 +222,7 @@ def evaluate_signal(context: dict[str, Any]) -> dict[str, Any]:
         },
         "components": {
             "raw_score": round(raw_score, 4),
+            "predicted_probability": predicted_probability,
             "confirmation_adjustment": round(confirmation_adjustment, 4),
             "behavior_adjustment": round(behavior_adjustment, 4),
             "gross_reward_r": round(gross_reward_r, 4),

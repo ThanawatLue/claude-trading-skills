@@ -2307,6 +2307,7 @@ def api_signal_results():
 def api_decision_analytics():
     """Read-only expectancy, risk excursion, and calibration analytics."""
     market = request.args.get("market") or None
+    horizon = request.args.get("horizon") or None
     try:
         market_clause = "WHERE s.market = ?" if market else ""
         params = [market.upper()] if market else []
@@ -2326,7 +2327,7 @@ def api_decision_analytics():
                     ORDER BY o.evaluation_date ASC, s.signal_id ASC""",
                 params,
             ).fetchall()
-        analytics = build_decision_analytics([dict(row) for row in rows])
+        analytics = build_decision_analytics([dict(row) for row in rows], preferred_horizon=horizon)
         payload = {
             "as_of": datetime.now().isoformat(timespec="seconds"),
             "market": market.upper() if market else None,
