@@ -135,28 +135,58 @@ def _canslim_index(snapshot: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
 
 
 def _normalize_thai_swing_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
-    thai = snapshot.get("thai_swing")
-    if not isinstance(thai, Mapping):
-        return []
     rows: list[dict[str, Any]] = []
-    for bucket, state in (("dip_buy", "Pre-breakout"), ("momentum", "Breakout")):
-        items = thai.get(bucket) or []
-        if not isinstance(items, list):
-            continue
-        for item in items:
-            if not isinstance(item, Mapping):
+    thai = snapshot.get("thai_swing")
+    if isinstance(thai, Mapping):
+        for bucket, state in (("dip_buy", "Pre-breakout"), ("momentum", "Breakout")):
+            items = thai.get(bucket) or []
+            if not isinstance(items, list):
                 continue
-            symbol = str(item.get("symbol") or "").strip()
-            if not symbol:
-                continue
-            score = _number(item.get("score")) or 0.0
-            row = dict(item)
-            row["symbol"] = symbol
-            row["composite_score"] = score
-            row["execution_state"] = state
-            row["_dual_source"] = f"thai_swing_{bucket}"
-            row["source"] = f"thai_swing_{bucket}"
-            rows.append(row)
+            for item in items:
+                if not isinstance(item, Mapping):
+                    continue
+                symbol = str(item.get("symbol") or "").strip()
+                if not symbol:
+                    continue
+                score = _number(item.get("score")) or 0.0
+                row = dict(item)
+                row["symbol"] = symbol
+                row["composite_score"] = score
+                row["execution_state"] = state
+                row["_dual_source"] = f"thai_swing_{bucket}"
+                row["source"] = f"thai_swing_{bucket}"
+                rows.append(row)
+
+    mission = snapshot.get("jules_th_mission")
+    if isinstance(mission, Mapping):
+        candidates = mission.get("candidates") or mission.get("watchlist_candidates") or []
+        if isinstance(candidates, list):
+            for item in candidates:
+                if not isinstance(item, Mapping):
+                    continue
+                symbol = str(item.get("symbol") or "").strip()
+                if not symbol:
+                    continue
+                score = _number(item.get("score")) or 80.0
+                src_label = str(item.get("source") or "")
+                is_dip = "DIP" in src_label.upper()
+                bucket = "dip_buy" if is_dip else "momentum"
+                state = "Pre-breakout" if is_dip else "Breakout"
+                row = dict(item)
+                row["symbol"] = symbol
+                row["composite_score"] = score
+                row["execution_state"] = state
+                row["distance_from_pivot_pct"] = 0.0
+                row["trend_template_passed"] = True
+                row["_dual_source"] = f"thai_swing_{bucket}"
+                row["source"] = f"thai_swing_{bucket}"
+                row["plan"] = {
+                    "entry": _number(item.get("price")),
+                    "stop_loss": _number(item.get("stop") or item.get("suggested_stop")),
+                    "take_profit": _number(item.get("target") or item.get("suggested_target")),
+                }
+                rows.append(row)
+
     return rows
 
 
@@ -216,7 +246,7 @@ def _normalize_us_candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, 
 
 def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    rows_by_symbol: dict[str, int] = {}
     market = str(snapshot.get("market") or "").upper()
 
     vcp = snapshot.get("vcp") if isinstance(snapshot.get("vcp"), Mapping) else {}
@@ -226,32 +256,46 @@ def _candidate_rows(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
             if not isinstance(row, Mapping):
                 continue
             symbol = str(row.get("symbol") or "").strip()
-            if not symbol or symbol in seen:
+            if not symbol or symbol in rows_by_symbol:
                 continue
             item = dict(row)
             item.setdefault("source", "vcp")
             item["_dual_source"] = "vcp"
+            rows_by_symbol[symbol] = len(rows)
             rows.append(item)
-            seen.add(symbol)
 
     # Thai swing candidates are TH-only (US snapshots may still contain the file).
     if market in {"TH", "THA"}:
         for row in _normalize_thai_swing_rows(snapshot):
             symbol = str(row.get("symbol") or "").strip()
-            if not symbol or symbol in seen:
+            if not symbol:
                 continue
             # Only keep swing names that clear a minimum score before Dual-Check
-            if (_number(row.get("composite_score")) or 0.0) < THAI_SWING_MIN_SCORE:
+            new_score = _number(row.get("composite_score")) or 0.0
+            if new_score < THAI_SWING_MIN_SCORE:
                 continue
-            rows.append(row)
-            seen.add(symbol)
+            if symbol in rows_by_symbol:
+                idx = rows_by_symbol[symbol]
+                existing_score = _number(rows[idx].get("composite_score")) or 0.0
+                if new_score > existing_score:
+                    rows[idx] = row
+            else:
+                rows_by_symbol[symbol] = len(rows)
+                rows.append(row)
     elif market in {"US", "USA"}:
         for row in _normalize_us_candidate_rows(snapshot):
             symbol = str(row.get("symbol") or "").strip()
-            if not symbol or symbol in seen:
+            if not symbol:
                 continue
-            rows.append(row)
-            seen.add(symbol)
+            new_score = _number(row.get("composite_score")) or 0.0
+            if symbol in rows_by_symbol:
+                idx = rows_by_symbol[symbol]
+                existing_score = _number(rows[idx].get("composite_score")) or 0.0
+                if new_score > existing_score:
+                    rows[idx] = row
+            else:
+                rows_by_symbol[symbol] = len(rows)
+                rows.append(row)
     return rows
 
 

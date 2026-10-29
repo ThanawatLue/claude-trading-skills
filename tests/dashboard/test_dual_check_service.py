@@ -202,3 +202,53 @@ def test_stage2_failure_rejects() -> None:
     out = rank_candidates(snap, hold_style="intraday", require_verified_earnings=False)
     assert out["passed"] == []
     assert "stage2_failed" in out["rejected"][0]["reject_reasons"]
+
+
+def test_jules_th_mission_and_higher_scoring_candidate_replaces_vcp() -> None:
+    snap = {
+        "market": "TH",
+        "exposure": {"recommendation": "NEW_ENTRY_ALLOWED"},
+        "vcp": {
+            "results": [
+                {
+                    "symbol": "PTTGC.BK",
+                    "composite_score": 49.0,
+                    "execution_state": "Damaged",
+                    "trend_template_passed": False,
+                    "distance_from_pivot_pct": 5.0,
+                    "source": "vcp",
+                }
+            ]
+        },
+        "jules_th_mission": {
+            "candidates": [
+                {
+                    "symbol": "PTTGC.BK",
+                    "score": 87.2,
+                    "price": 51.0,
+                    "stop": 48.75,
+                    "target": 55.0,
+                    "source": "Thai Swing (DIP_BUY)",
+                },
+                {
+                    "symbol": "BBGI.BK",
+                    "score": 81.0,
+                    "price": 6.5,
+                    "stop": 6.2,
+                    "target": 7.1,
+                    "source": "Thai Swing (MOMENTUM)",
+                },
+            ]
+        },
+    }
+    out = rank_candidates(
+        snap,
+        hold_style="overnight",
+        require_verified_earnings=False,
+    )
+    passed_symbols = [c["symbol"] for c in out["passed"]]
+    assert "PTTGC.BK" in passed_symbols
+    assert "BBGI.BK" in passed_symbols
+    pttgc_row = next(c for c in out["passed"] if c["symbol"] == "PTTGC.BK")
+    assert pttgc_row["composite_score"] == 87.2
+    assert pttgc_row["execution_state"] == "Pre-breakout"

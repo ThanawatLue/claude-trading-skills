@@ -263,6 +263,9 @@ def _collect_snapshot(market: str) -> dict:
         thai_dividends = load_json(
             latest_file_any(os.path.join(REPORTS_DIR, "thai_dividends_*.json"))
         )
+        jules_th_mission = load_json(
+            os.path.join(BASE_DIR, "state", "jules_tasks", "today_mission.json")
+        )
         us_sector_heatmap = None
         us_breadth_tv = None
         us_watchlists = None
@@ -284,6 +287,7 @@ def _collect_snapshot(market: str) -> dict:
         thai_breadth = None
         thai_watchlists = None
         thai_dividends = None
+        jules_th_mission = None
         us_sector_heatmap = load_json(
             latest_file_any(os.path.join(REPORTS_DIR, "us_sector_heatmap_*.json"))
         )
@@ -314,6 +318,7 @@ def _collect_snapshot(market: str) -> dict:
         "thai_breadth": thai_breadth,
         "thai_watchlists": thai_watchlists,
         "thai_dividends": thai_dividends,
+        "jules_th_mission": jules_th_mission,
         "us_sector_heatmap": us_sector_heatmap,
         "us_breadth_tv": us_breadth_tv,
         "us_watchlists": us_watchlists,
@@ -335,6 +340,7 @@ def _merge_live_snapshot(stored: dict, fresh: dict) -> dict:
             "thai_breadth",
             "thai_watchlists",
             "thai_dividends",
+            "jules_th_mission",
         ]:
             clean_stored.pop(k, None)
         if not fresh.get("exposure"):
@@ -1695,7 +1701,7 @@ def api_ranked_candidates():
         hold_style=hold_style,  # type: ignore[arg-type]
         earnings_lookup=earnings_lookup if hold_style == "overnight" else None,
         bars_lookup=_lookup_bars_for_dual_check,
-        require_verified_earnings=(market == "TH"),
+        require_verified_earnings=False,
     )
     if limit_n >= 0:
         ranked["passed"] = ranked["passed"][:limit_n]
