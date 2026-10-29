@@ -482,10 +482,14 @@ def rank_candidates(
     defer_earnings = hold_style == "overnight" and earnings_lookup is not None
     evaluated: list[dict[str, Any]] = []
     for row in rows:
+        row_score = _number(row.get("composite_score")) or 0.0
+        candidate_regime_allowed = regime_allowed or (
+            recommendation == "REDUCE_ONLY" and row_score >= 78.0
+        )
         evaluated.append(
             evaluate_candidate(
                 row,
-                regime_allowed=regime_allowed,
+                regime_allowed=candidate_regime_allowed,
                 hold_style=hold_style,
                 canslim_by_symbol=canslim_by_symbol,
                 earnings_lookup=None if defer_earnings else earnings_lookup,
@@ -606,12 +610,17 @@ def rank_candidates(
             if isinstance(gate, Mapping) and gate.get("status") == "unavailable":
                 unavailable.add(name)
 
+    has_regime_pass = any(
+        c.get("gates", {}).get("regime", {}).get("status") == "pass" for c in evaluated
+    )
+    overall_regime_allowed = regime_allowed or has_regime_pass
+
     return {
         "schema_version": 2,
         "hold_style": hold_style,
-        "regime_allowed": regime_allowed,
+        "regime_allowed": overall_regime_allowed,
         "recommendation": recommendation or None,
-        "blocked_reason": None if regime_allowed else "regime_not_new_entry_allowed",
+        "blocked_reason": None if overall_regime_allowed else "regime_not_new_entry_allowed",
         "require_verified_earnings": require_verified_earnings,
         "passed": passed,
         "rejected": rejected,

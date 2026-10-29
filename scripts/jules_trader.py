@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -55,6 +56,9 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 # Quantitative Limits & Guardrails
 MAX_POSITIONS = 4
 BASE_RISK_PER_TRADE_PCT = 0.010  # 1.0% portfolio risk
+MAX_SINGLE_TRADE_RISK_PCT = 0.022  # 2.2% max cap
+MAX_CONSECUTIVE_LOSSES = 3
+COOLDOWN_DAYS = 3
 
 # TH Limits
 MIN_CASH_REQUIRED_TH = 5000.0
@@ -256,7 +260,24 @@ def check_circuit_breakers(market: str = "TH") -> tuple[bool, float, str]:
         else:
             break
 
-    if consecutive_losses >= 3:
+    if consecutive_losses >= MAX_CONSECUTIVE_LOSSES:
+        last_exit_str = None
+        if closed:
+            last_exit_str = closed[-1].get("exit_at") or closed[-1].get("last_updated")
+        if last_exit_str:
+            try:
+                exit_dt = datetime.fromisoformat(last_exit_str.replace("Z", "+00:00"))
+                if exit_dt.tzinfo is None:
+                    exit_dt = exit_dt.replace(tzinfo=timezone.utc)
+                now_utc = datetime.now(timezone.utc)
+                if (now_utc - exit_dt).total_seconds() / 86400.0 >= COOLDOWN_DAYS:
+                    return (
+                        True,
+                        0.75,
+                        f"Cooldown expired after {consecutive_losses} losses; recovery mode (Risk mult: 0.75x)",
+                    )
+            except Exception as e:
+                logger.debug("Failed parsing circuit breaker exit_at: %s", e)
         return (
             False,
             0.0,
@@ -397,6 +418,16 @@ def calculate_volatility_sizing(
 
     allowed_shares = min(raw_risk_shares, max_cap_shares)
     board_lot_shares = (allowed_shares // 100) * 100
+    if board_lot_shares == 0 and allowed_shares > 0:
+        price_d = Decimal(str(price))
+        cash_d = Decimal(str(cash))
+        if (
+            100 * price_d <= Decimal(str(max_capital_for_trade))
+            and 100 * risk_per_share_float <= equity * MAX_SINGLE_TRADE_RISK_PCT
+            and 100 * price_d * Decimal("1.002") <= cash_d
+        ):
+            board_lot_shares = 100
+
     if board_lot_shares < 100:
         return 0, 0.0
 
@@ -431,6 +462,7 @@ def evaluate_and_select_trade(
     open_clusters = {p.get("cluster") for p in open_positions if p.get("cluster")}
 
     scored_candidates = []
+    rejection_reasons: list[str] = []
     for cand in candidates:
         sym = cand["symbol"]
         price = float(cand.get("price") or 0.0)
@@ -557,6 +589,26 @@ def evaluate_and_select_trade(
         base_score = float(cand.get("score") or 60.0)
         final_score = base_score + sector_bonus + nvdr_bonus
 
+        # Anti-Chasing Overbought RSI Filter
+        rsi_val = cand.get("rsi")
+        if rsi_val is None:
+            m = re.search(r"RSI:\s*([\d.]+)", str(cand.get("highlights", "")))
+            if m:
+                try:
+                    rsi_val = float(m.group(1))
+                except ValueError:
+                    rsi_val = None
+        if rsi_val is not None:
+            try:
+                rsi_float = float(rsi_val)
+                if rsi_float > 68.0:
+                    msg = f"{sym} (RSI {rsi_float:.1f} > 68.0 overbought chase limit)"
+                    logger.info("Candidate %s rejected: %s", sym, msg)
+                    rejection_reasons.append(msg)
+                    continue
+            except (ValueError, TypeError):
+                pass
+
         shares, est_cost = calculate_volatility_sizing(
             entry_tick, stop_tick, equity, cash, risk_mult, market=market_clean
         )
@@ -595,7 +647,8 @@ def evaluate_and_select_trade(
         )
 
     if not scored_candidates:
-        return None, "No candidates passed all risk, sector, liquidity, and R/R gates"
+        suffix = f": {'; '.join(rejection_reasons)}" if rejection_reasons else ""
+        return None, f"No candidates passed all risk, sector, liquidity, and R/R gates{suffix}"
 
     # Sort by final conviction score descending
     scored_candidates.sort(key=lambda x: x["final_score"], reverse=True)

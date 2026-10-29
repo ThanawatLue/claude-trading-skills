@@ -94,7 +94,7 @@ def get_us_screened_candidates(limit: int = 15) -> list[dict[str, Any]]:
             continue
 
         rsi = float(s.get("rsi") or 0.0)
-        if rsi < 45.0 or rsi > 78.0:
+        if not (40.0 <= rsi <= 68.0):
             continue
 
         sma50 = float(s.get("sma50") or 0.0)

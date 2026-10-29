@@ -50,9 +50,9 @@ SETUP_AWARE_SOURCES = frozenset(
 DEFAULT_SOURCE_RULES = {
     "thai-swing-dip": {
         "take_profit_r": 2.2,
-        "max_hold_days": 10,
+        "max_hold_days": 15,
         "time_stop_min_r": -0.5,
-        "velocity_stall_days": 4,
+        "velocity_stall_days": 8,
         "velocity_min_mfe_r": 0.3,
         "early_fakeout_enabled": True,
         "early_fakeout_vol_ratio": 0.40,
@@ -60,9 +60,19 @@ DEFAULT_SOURCE_RULES = {
     },
     "thai-swing-momentum": {
         "take_profit_r": 2.2,
-        "max_hold_days": 10,
+        "max_hold_days": 15,
         "time_stop_min_r": -0.5,
-        "velocity_stall_days": 4,
+        "velocity_stall_days": 8,
+        "velocity_min_mfe_r": 0.3,
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
+    },
+    "thai-stock-screener": {
+        "take_profit_r": 2.2,
+        "max_hold_days": 15,
+        "time_stop_min_r": -0.5,
+        "velocity_stall_days": 8,
         "velocity_min_mfe_r": 0.3,
         "early_fakeout_enabled": True,
         "early_fakeout_vol_ratio": 0.40,
@@ -70,9 +80,9 @@ DEFAULT_SOURCE_RULES = {
     },
     "vcp-screener": {
         "take_profit_r": 2.2,
-        "max_hold_days": 12,
+        "max_hold_days": 15,
         "time_stop_min_r": -0.5,
-        "velocity_stall_days": 4,
+        "velocity_stall_days": 8,
         "velocity_min_mfe_r": 0.3,
         "early_fakeout_enabled": True,
         "early_fakeout_vol_ratio": 0.40,
@@ -80,9 +90,19 @@ DEFAULT_SOURCE_RULES = {
     },
     "vcp": {
         "take_profit_r": 2.2,
-        "max_hold_days": 12,
+        "max_hold_days": 15,
         "time_stop_min_r": -0.5,
-        "velocity_stall_days": 4,
+        "velocity_stall_days": 8,
+        "velocity_min_mfe_r": 0.3,
+        "early_fakeout_enabled": True,
+        "early_fakeout_vol_ratio": 0.40,
+        "early_fakeout_max_mfe_r": 0.20,
+    },
+    "canslim-screener": {
+        "take_profit_r": 2.2,
+        "max_hold_days": 15,
+        "time_stop_min_r": -0.5,
+        "velocity_stall_days": 8,
         "velocity_min_mfe_r": 0.3,
         "early_fakeout_enabled": True,
         "early_fakeout_vol_ratio": 0.40,
@@ -93,9 +113,9 @@ DEFAULT_SOURCE_RULES = {
         "scale_out_r": 1.5,
         "scale_out_fraction": 0.5,
         "take_profit_r": 2.5,
-        "max_hold_days": 10,
+        "max_hold_days": 15,
         "time_stop_min_r": -0.5,
-        "velocity_stall_days": 4,
+        "velocity_stall_days": 8,
         "velocity_min_mfe_r": 0.3,
         "early_fakeout_enabled": True,
         "early_fakeout_vol_ratio": 0.40,
@@ -598,12 +618,12 @@ def update_all() -> list[dict]:
         else:
             volumes[sym] = 0.0
 
-    # TradingView fallback for Thai stocks (.BK)
-    thai_failures = [
-        sym for sym in unique_symbols if sym.upper().endswith(".BK") and prices[sym] is None
-    ]
-    if thai_failures:
-        print(f"Attempting TradingView fallback for Thai stocks: {thai_failures}", file=sys.stderr)
+    # TradingView fallback for Thai stocks (.BK) and US stocks
+    fetch_failures = [sym for sym in unique_symbols if prices[sym] is None]
+    thai_failures = [sym for sym in fetch_failures if sym.upper().endswith(".BK")]
+    us_failures = [sym for sym in fetch_failures if not sym.upper().endswith(".BK")]
+
+    if thai_failures or us_failures:
         try:
             if "tv_client" in sys.modules:
                 tv_client = sys.modules["tv_client"]
@@ -614,31 +634,99 @@ def update_all() -> list[dict]:
                     import tv_client
 
             if tv_client.is_available():
-                stocks = tv_client.get_thai_stocks()
-                tv_prices = {
-                    s["symbol"].upper(): s["price"]
-                    for s in stocks
-                    if "symbol" in s and "price" in s
-                }
-                for sym in thai_failures:
-                    prices[sym] = tv_prices.get(sym.upper())
-                    if prices[sym] is not None:
-                        print(
-                            f"  Successfully fetched TV fallback price for {sym}: {prices[sym]}",
-                            file=sys.stderr,
-                        )
+                if thai_failures:
+                    print(
+                        f"Attempting TradingView fallback for Thai stocks: {thai_failures}",
+                        file=sys.stderr,
+                    )
+                    stocks = tv_client.get_thai_stocks()
+                    if isinstance(stocks, list):
+                        tv_prices = {
+                            s["symbol"].upper(): (
+                                s.get("price") if s.get("price") is not None else s.get("close")
+                            )
+                            for s in stocks
+                            if isinstance(s, dict) and "symbol" in s
+                        }
+                        for sym in thai_failures:
+                            val = tv_prices.get(sym.upper())
+                            if val is not None:
+                                prices[sym] = float(val)
+                                if sym in fetch_failures:
+                                    fetch_failures.remove(sym)
+                                print(
+                                    f"  Successfully fetched TV fallback price for {sym}: {prices[sym]}",
+                                    file=sys.stderr,
+                                )
+
+                if us_failures and hasattr(tv_client, "get_us_stocks"):
+                    print(
+                        f"Attempting TradingView fallback for US stocks: {us_failures}",
+                        file=sys.stderr,
+                    )
+                    try:
+                        us_stocks = tv_client.get_us_stocks()
+                        if isinstance(us_stocks, list):
+                            us_tv_prices = {
+                                s["symbol"].upper(): (
+                                    s.get("price") if s.get("price") is not None else s.get("close")
+                                )
+                                for s in us_stocks
+                                if isinstance(s, dict) and "symbol" in s
+                            }
+                            for sym in list(us_failures):
+                                val = us_tv_prices.get(sym.upper())
+                                if val is not None:
+                                    prices[sym] = float(val)
+                                    if sym in fetch_failures:
+                                        fetch_failures.remove(sym)
+                                    print(
+                                        f"  Successfully fetched TV fallback price for US {sym}: {prices[sym]}",
+                                        file=sys.stderr,
+                                    )
+                    except Exception as e_us:
+                        print(f"  TradingView US fallback failed: {e_us}", file=sys.stderr)
             else:
                 print(
                     "  TradingView screener is not available (is_available() returned False)",
                     file=sys.stderr,
                 )
         except ImportError:
-            logging.warning(
-                "tv_client not found. TradingView fallback for Thai stocks is disabled. "
-                "Ensure 'vcp-screener' skill is correctly installed if you need this functionality."
-            )
+            logging.warning("tv_client not found. TradingView fallback is disabled.")
         except Exception as e:
             print(f"  TradingView fallback failed: {e}", file=sys.stderr)
+
+    # SQLite market_cache.db fallback for ANY remaining symbols in fetch_failures (both US and TH)
+    remaining_failures = [sym for sym in fetch_failures if prices[sym] is None]
+    if remaining_failures:
+        cache_paths = [
+            PROJECT_ROOT / "state" / "market_cache" / "market_cache.db",
+            PROJECT_ROOT / "state" / "market_cache.db",
+        ]
+        db_file = next((p for p in cache_paths if p.exists()), None)
+        if db_file:
+            try:
+                with sqlite3.connect(db_file, timeout=10.0) as conn:
+                    for sym in list(remaining_failures):
+                        row = conn.execute(
+                            "SELECT close FROM price_bar WHERE symbol = ? ORDER BY date DESC LIMIT 1",
+                            (sym,),
+                        ).fetchone()
+                        if not row and sym.upper().endswith(".BK"):
+                            row = conn.execute(
+                                "SELECT close FROM price_bar WHERE symbol = ? ORDER BY date DESC LIMIT 1",
+                                (sym[:-3],),
+                            ).fetchone()
+                        if row and row[0] is not None and float(row[0]) > 0:
+                            prices[sym] = float(row[0])
+                            if sym in fetch_failures:
+                                fetch_failures.remove(sym)
+                            print(
+                                f"  Successfully fetched market_cache.db fallback price for {sym}: {prices[sym]}",
+                                file=sys.stderr,
+                            )
+            except Exception as e_db:
+                logger.debug("Failed to query market_cache.db for fallback prices: %s", e_db)
 
     source_rules = _load_exit_rules()
     results = []

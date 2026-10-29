@@ -278,12 +278,19 @@ def _risk_sized_shares(entry: float, stop: float, config: AutoPaperConfig) -> in
         if risk_per_share <= 0:
             return 0
         risk_budget = config.account_size * risk_pct / 100
-        shares = int(risk_budget // risk_per_share)
-        if config.max_position_pct:
-            position_cap = config.account_size * config.max_position_pct / 100
-            shares = min(shares, int(position_cap // entry))
+        raw_shares = int(risk_budget // risk_per_share)
+        position_cap = (
+            config.account_size * config.max_position_pct / 100
+            if config.max_position_pct
+            else config.account_size
+        )
+        shares = min(raw_shares, int(position_cap // entry)) if entry > 0 else 0
         lot = max(1, int(config.board_lot_size))
-        return (shares // lot) * lot
+        board_lot_shares = (shares // lot) * lot
+        if lot > 1 and board_lot_shares == 0 and raw_shares > 0:
+            if lot * entry <= position_cap and lot * risk_per_share <= config.account_size * 0.015:
+                board_lot_shares = lot
+        return board_lot_shares
     return config.shares
 
 
@@ -322,7 +329,7 @@ def _candidate_from_prices(
 def _require_verified_earnings(config: AutoPaperConfig) -> bool:
     if config.require_verified_earnings is not None:
         return bool(config.require_verified_earnings)
-    return (config.market or "").upper() in {"TH", "THA"}
+    return False
 
 
 def _dual_check_for_row(

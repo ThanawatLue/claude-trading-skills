@@ -439,6 +439,57 @@ class TestJulesTrader(unittest.TestCase):
         staged_files = list(self.test_staged.glob("JULES-TH-*-DIP.yaml"))
         self.assertTrue(len(staged_files) >= 1)
 
+    def test_circuit_breaker_cooldown_expired_recovery_mode(self):
+        """Verify that 3 consecutive losses past COOLDOWN_DAYS allows trading in recovery mode (0.75x)."""
+        from datetime import datetime, timedelta, timezone
+
+        exit_dt = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+        with patch("paper_trade.list_positions") as mock_list:
+            mock_list.return_value = [
+                {"id": 1, "realized_pnl": -100.0, "exit_at": exit_dt},
+                {"id": 2, "realized_pnl": -100.0, "exit_at": exit_dt},
+                {"id": 3, "realized_pnl": -100.0, "exit_at": exit_dt},
+            ]
+            allowed, risk_mult, reason = jt.check_circuit_breakers(market="TH")
+            self.assertTrue(allowed)
+            self.assertEqual(risk_mult, 0.75)
+            self.assertIn("Cooldown expired", reason)
+
+    def test_th_board_lot_minimum_rounding_for_valid_trade(self):
+        """Verify that calculate_volatility_sizing allows 1 board lot (100 shares) when risk is within cap."""
+        shares, est_cost = jt.calculate_volatility_sizing(
+            price=51.00,
+            stop=48.75,
+            equity=29697.0,
+            cash=29697.0,
+            risk_mult=0.5,
+            market="TH",
+        )
+        self.assertEqual(shares, 100)
+        self.assertEqual(est_cost, 5100.0)
+
+    def test_overbought_rsi_rejected(self):
+        """Verify that candidates with RSI > 68.0 are rejected due to overbought chase limit."""
+        cand = {
+            "symbol": "CHASE.BK",
+            "price": 10.0,
+            "stop": 9.40,
+            "target": 12.0,
+            "sector": "Technology",
+            "score": 85.0,
+            "highlights": "RSI: 75.2 | Vol: 1.8x",
+        }
+        winner, reason = jt.evaluate_and_select_trade(
+            candidates=[cand],
+            open_positions=[],
+            sector_mods={},
+            equity=30000.0,
+            cash=30000.0,
+            market="TH",
+        )
+        self.assertIsNone(winner)
+        self.assertIn("overbought chase limit", reason)
+
 
 if __name__ == "__main__":
     unittest.main()

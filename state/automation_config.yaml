@@ -68,9 +68,9 @@ auto_paper:
       early_fakeout_enabled: true
       early_fakeout_vol_ratio: 0.4
       early_fakeout_max_mfe_r: 0.2
-      max_hold_days: 7
+      max_hold_days: 15
       time_stop_min_r: -0.3
-      velocity_stall_days: 3
+      velocity_stall_days: 8
       velocity_min_mfe_r: 0.2
       max_age_days: 1
     thai-swing-momentum:
@@ -86,9 +86,9 @@ auto_paper:
       early_fakeout_enabled: true
       early_fakeout_vol_ratio: 0.4
       early_fakeout_max_mfe_r: 0.2
-      max_hold_days: 5
+      max_hold_days: 15
       time_stop_min_r: -0.2
-      velocity_stall_days: 3
+      velocity_stall_days: 8
       velocity_min_mfe_r: 0.2
       max_age_days: 0
     vcp-screener:
@@ -109,11 +109,8 @@ auto_paper:
       early_fakeout_max_mfe_r: 0.2
       max_hold_days: 15
       time_stop_min_r: -0.5
-      velocity_stall_days: 4
+      velocity_stall_days: 8
       velocity_min_mfe_r: 0.3
-      ratchet_tiers:
-      - - 2.0
-        - 1.0
     canslim-screener:
       min_score: 75
       max_new_per_run: 2
@@ -148,9 +145,9 @@ auto_paper:
       scale_out_r: 1.5
       scale_out_fraction: 0.5
       take_profit_r: 2.5
-      max_hold_days: 12
+      max_hold_days: 15
       time_stop_min_r: -0.5
-      velocity_stall_days: 4
+      velocity_stall_days: 8
       velocity_min_mfe_r: 0.3
       ratchet_tiers:
       - - 2.0
@@ -179,27 +176,36 @@ auto_paper:
 paper_exit_rules:
   thai-swing-dip:
     take_profit_r: 2.2
-    max_hold_days: 10
+    max_hold_days: 15
     time_stop_min_r: -0.5
-    velocity_stall_days: 4
+    velocity_stall_days: 8
     velocity_min_mfe_r: 0.3
     early_fakeout_enabled: true
     early_fakeout_vol_ratio: 0.4
     early_fakeout_max_mfe_r: 0.2
   thai-swing-momentum:
     take_profit_r: 2.2
-    max_hold_days: 10
+    max_hold_days: 15
     time_stop_min_r: -0.5
-    velocity_stall_days: 4
+    velocity_stall_days: 8
     velocity_min_mfe_r: 0.3
     early_fakeout_enabled: true
     early_fakeout_vol_ratio: 0.4
     early_fakeout_max_mfe_r: 0.2
   vcp-screener:
     take_profit_r: 2.2
-    max_hold_days: 12
+    max_hold_days: 15
     time_stop_min_r: -0.5
-    velocity_stall_days: 4
+    velocity_stall_days: 8
+    velocity_min_mfe_r: 0.3
+    early_fakeout_enabled: true
+    early_fakeout_vol_ratio: 0.4
+    early_fakeout_max_mfe_r: 0.2
+  canslim-screener:
+    take_profit_r: 2.2
+    max_hold_days: 15
+    time_stop_min_r: -0.5
+    velocity_stall_days: 8
     velocity_min_mfe_r: 0.3
     early_fakeout_enabled: true
     early_fakeout_vol_ratio: 0.4
@@ -209,9 +215,9 @@ paper_exit_rules:
     scale_out_r: 1.5
     scale_out_fraction: 0.5
     take_profit_r: 2.5
-    max_hold_days: 10
+    max_hold_days: 15
     time_stop_min_r: -0.5
-    velocity_stall_days: 4
+    velocity_stall_days: 8
     velocity_min_mfe_r: 0.3
     ratchet_tiers:
     - - 2.0
