@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-03 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-04 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -28,10 +28,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. ASEFA.BK** | ฿6.95 | **1,000** หุ้น | ฿6,950.00 | ฿6.55 (-5.8%) | ฿7.70 (Swing Target) | RSI: 48.5 | Vol: 1.1x | Swing Score: 69.7 |
-| **2. TKN.BK** | ฿4.54 | **1,500** หุ้น | ฿6,810.00 | ฿4.40 (-3.1%) | ฿4.82 (Swing Target) | RSI: 50.7 | Vol: 1.0x | Swing Score: 65.7 |
-| **3. IRPC.BK** | ฿2.88 | **2,400** หุ้น | ฿6,912.00 | ฿2.72 (-5.6%) | ฿3.20 (2.0R) | High Volume: 92,247,300 shares @ ฿2.88 |
-| **4. GUNKUL.BK** | ฿3.84 | **1,800** หุ้น | ฿6,912.00 | ฿3.64 (-5.2%) | ฿4.24 (2.0R) | High Volume: 69,250,300 shares @ ฿3.84 |
+| **1. RCL.BK** | ฿47.00 | **100** หุ้น | ฿4,700.00 | ฿45.50 (-3.2%) | ฿49.75 (Swing Target) | RSI: 49.5 | Vol: 1.8x | Swing Score: 85.7 |
+| **2. SMT.BK** | ฿6.85 | **1,000** หุ้น | ฿6,850.00 | ฿6.60 (-3.6%) | ฿7.25 (Swing Target) | RSI: 48.1 | Vol: 1.8x | Swing Score: 84.3 |
+| **3. APH** | ฿79.84 | **100** หุ้น | ฿7,984.00 | ฿75.75 (-5.1%) | ฿88.00 (2.0R) | CANSLIM Score: 60.5 | 52w Dist: -11.2% |
+| **4. IRPC.BK** | ฿2.88 | **2,400** หุ้น | ฿6,912.00 | ฿2.72 (-5.6%) | ฿3.20 (2.0R) | High Volume: 92,247,300 shares @ ฿2.88 |
 
 ---
 
@@ -48,33 +48,46 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: ASEFA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_ASEFA.yaml
+# Order Template 1: RCL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_RCL.yaml
 action: buy
-symbol: "ASEFA.BK"
+symbol: "RCL.BK"
+market: "TH"
+shares: 100
+entry_price: 47.00
+stop_price: 45.50
+target_price: 49.75
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 2: SMT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SMT.yaml
+action: buy
+symbol: "SMT.BK"
 market: "TH"
 shares: 1000
-entry_price: 6.95
-stop_price: 6.55
-target_price: 7.70
+entry_price: 6.85
+stop_price: 6.60
+target_price: 7.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: TKN.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TKN.yaml
+# Order Template 3: APH
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APH.yaml
 action: buy
-symbol: "TKN.BK"
+symbol: "APH"
 market: "TH"
-shares: 1500
-entry_price: 4.54
-stop_price: 4.40
-target_price: 4.82
+shares: 100
+entry_price: 79.84
+stop_price: 75.75
+target_price: 88.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: IRPC.BK
+# Order Template 4: IRPC.BK
 # หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_IRPC.yaml
 action: buy
 symbol: "IRPC.BK"
@@ -83,18 +96,5 @@ shares: 2400
 entry_price: 2.88
 stop_price: 2.72
 target_price: 3.20
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: GUNKUL.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GUNKUL.yaml
-action: buy
-symbol: "GUNKUL.BK"
-market: "TH"
-shares: 1800
-entry_price: 3.84
-stop_price: 3.64
-target_price: 4.24
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
