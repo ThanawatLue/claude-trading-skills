@@ -1,0 +1,19 @@
+order_id: JULES-TH-20261106-RCL
+action: buy
+symbol: RCL.BK
+market: TH
+shares: 100
+entry_price: 46.5
+stop_price: 44.75
+target_price: 49.75
+t1_price: 49.0
+t2_price: 49.75
+max_chase_pct: 0.01
+created_at: '2026-11-06T02:40:08.770934+00:00'
+expires_at: '2026-11-06T04:00:00+00:00'
+sector: Transportation
+cluster: Marine Shipping
+target_note: "T1: \u0E3F49.00 (1.5R) | T2: \u0E3F49.75 (2.5R)"
+thesis: "Autonomous conviction buy: RSI: 47.3 | Vol: 0.8x | Swing Score: 75.9 | R/R:\
+  \ 1.86R | Sector/Cluster: Marine Shipping | Plan: Scale-out 50% at T1 (\u0E3F49.00,\
+  \ 1.5R), shift stop to BE, trail runner to T2 (\u0E3F49.75, 2.5R)"
