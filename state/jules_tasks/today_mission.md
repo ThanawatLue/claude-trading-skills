@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-05 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-06 | **สถานะพอร์ต:** ว่าง 3/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. RCL.BK** | ฿46.75 | **100** หุ้น | ฿4,675.00 | ฿45.00 (-3.7%) | ฿50.00 (Swing Target) | RSI: 48.4 | Vol: 1.1x | Swing Score: 78.1 |
-| **2. BGRIM.BK** | ฿20.40 | **300** หุ้น | ฿6,120.00 | ฿19.50 (-4.4%) | ฿21.80 (Swing Target) | RSI: 62.9 | Vol: 2.0x | Swing Score: 63.8 |
-| **3. APH** | ฿84.19 | **100** หุ้น | ฿8,419.00 | ฿79.75 (-5.3%) | ฿93.00 (2.0R) | CANSLIM Score: 62.5 | 52w Dist: -6.4% |
-| **4. TRUE.BK** | ฿12.80 | **500** หุ้น | ฿6,400.00 | ฿12.10 (-5.5%) | ฿14.20 (2.0R) | High Volume: 153,583,700 shares @ ฿12.80 |
+| **1. GPSC.BK** | ฿53.00 | **100** หุ้น | ฿5,300.00 | ฿50.75 (-4.2%) | ฿56.50 (Swing Target) | RSI: 63.0 | Vol: 3.2x | Swing Score: 77.3 |
+| **2. RCL.BK** | ฿46.50 | **100** หุ้น | ฿4,650.00 | ฿44.75 (-3.8%) | ฿49.75 (Swing Target) | RSI: 47.3 | Vol: 0.8x | Swing Score: 75.9 |
+| **3. AWC.BK** | ฿3.32 | **2,100** หุ้น | ฿6,972.00 | ฿3.20 (-3.6%) | ฿3.52 (Swing Target) | RSI: 65.7 | Vol: 1.6x | Swing Score: 64.1 |
+| **4. XO.BK** | ฿18.90 | **300** หุ้น | ฿5,670.00 | ฿18.30 (-3.2%) | ฿20.00 (Swing Target) | RSI: 50.0 | Vol: 0.9x | Swing Score: 63.1 |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: RCL.BK
+# Order Template 1: GPSC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GPSC.yaml
+action: buy
+symbol: "GPSC.BK"
+market: "TH"
+shares: 100
+entry_price: 53.00
+stop_price: 50.75
+target_price: 56.50
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 2: RCL.BK
 # หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_RCL.yaml
 action: buy
 symbol: "RCL.BK"
 market: "TH"
 shares: 100
-entry_price: 46.75
-stop_price: 45.00
-target_price: 50.00
+entry_price: 46.50
+stop_price: 44.75
+target_price: 49.75
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: BGRIM.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BGRIM.yaml
+# Order Template 3: AWC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AWC.yaml
 action: buy
-symbol: "BGRIM.BK"
+symbol: "AWC.BK"
+market: "TH"
+shares: 2100
+entry_price: 3.32
+stop_price: 3.20
+target_price: 3.52
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 4: XO.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_XO.yaml
+action: buy
+symbol: "XO.BK"
 market: "TH"
 shares: 300
-entry_price: 20.40
-stop_price: 19.50
-target_price: 21.80
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 3: APH
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APH.yaml
-action: buy
-symbol: "APH"
-market: "TH"
-shares: 100
-entry_price: 84.19
-stop_price: 79.75
-target_price: 93.00
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: TRUE.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TRUE.yaml
-action: buy
-symbol: "TRUE.BK"
-market: "TH"
-shares: 500
-entry_price: 12.80
-stop_price: 12.10
-target_price: 14.20
+entry_price: 18.90
+stop_price: 18.30
+target_price: 20.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
