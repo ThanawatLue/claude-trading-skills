@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-09 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-10 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. SMT.BK** | ฿6.60 | **1,000** หุ้น | ฿6,600.00 | ฿6.15 (-6.8%) | ฿7.40 (Swing Target) | RSI: 44.3 | Vol: 1.7x | Swing Score: 86.8 |
-| **2. SSP.BK** | ฿7.15 | **900** หุ้น | ฿6,435.00 | ฿6.90 (-3.5%) | ฿7.55 (Swing Target) | RSI: 42.6 | Vol: 1.3x | Swing Score: 85.4 |
-| **3. NEO.BK** | ฿24.90 | **200** หุ้น | ฿4,980.00 | ฿24.00 (-3.6%) | ฿26.50 (Swing Target) | RSI: 48.1 | Vol: 1.3x | Swing Score: 73.3 |
-| **4. RJH.BK** | ฿16.10 | **400** หุ้น | ฿6,440.00 | ฿15.60 (-3.1%) | ฿17.00 (Swing Target) | RSI: 51.2 | Vol: 1.3x | Swing Score: 68.8 |
+| **1. IRPC.BK** | ฿2.88 | **2,400** หุ้น | ฿6,912.00 | ฿2.72 (-5.6%) | ฿3.20 (2.0R) | High Volume: 92,247,300 shares @ ฿2.88 |
+| **2. GUNKUL.BK** | ฿3.84 | **1,800** หุ้น | ฿6,912.00 | ฿3.64 (-5.2%) | ฿4.24 (2.0R) | High Volume: 69,250,300 shares @ ฿3.84 |
+| **3. CPAXT.BK** | ฿14.90 | **400** หุ้น | ฿5,960.00 | ฿14.10 (-5.4%) | ฿16.50 (2.0R) | High Volume: 30,571,543 shares @ ฿14.90 |
+| **4. JMART.BK** | ฿9.55 | **700** หุ้น | ฿6,685.00 | ฿9.05 (-5.2%) | ฿10.50 (2.0R) | High Volume: 27,323,000 shares @ ฿9.55 |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: SMT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SMT.yaml
+# Order Template 1: IRPC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_IRPC.yaml
 action: buy
-symbol: "SMT.BK"
+symbol: "IRPC.BK"
 market: "TH"
-shares: 1000
-entry_price: 6.60
-stop_price: 6.15
-target_price: 7.40
+shares: 2400
+entry_price: 2.88
+stop_price: 2.72
+target_price: 3.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: SSP.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SSP.yaml
+# Order Template 2: GUNKUL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GUNKUL.yaml
 action: buy
-symbol: "SSP.BK"
+symbol: "GUNKUL.BK"
 market: "TH"
-shares: 900
-entry_price: 7.15
-stop_price: 6.90
-target_price: 7.55
+shares: 1800
+entry_price: 3.84
+stop_price: 3.64
+target_price: 4.24
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: NEO.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_NEO.yaml
+# Order Template 3: CPAXT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CPAXT.yaml
 action: buy
-symbol: "NEO.BK"
-market: "TH"
-shares: 200
-entry_price: 24.90
-stop_price: 24.00
-target_price: 26.50
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: RJH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_RJH.yaml
-action: buy
-symbol: "RJH.BK"
+symbol: "CPAXT.BK"
 market: "TH"
 shares: 400
-entry_price: 16.10
-stop_price: 15.60
-target_price: 17.00
+entry_price: 14.90
+stop_price: 14.10
+target_price: 16.50
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 4: JMART.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_JMART.yaml
+action: buy
+symbol: "JMART.BK"
+market: "TH"
+shares: 700
+entry_price: 9.55
+stop_price: 9.05
+target_price: 10.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
