@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-11 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-12 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. BA.BK** | ฿20.00 | **300** หุ้น | ฿6,000.00 | ฿19.20 (-4.0%) | ฿21.40 (Swing Target) | RSI: 62.3 | Vol: 2.6x | Swing Score: 75.0 |
-| **2. SCGD.BK** | ฿5.85 | **1,100** หุ้น | ฿6,435.00 | ฿5.60 (-4.3%) | ฿6.25 (Swing Target) | RSI: 60.9 | Vol: 2.5x | Swing Score: 74.3 |
-| **3. WHA.BK** | ฿5.20 | **1,300** หุ้น | ฿6,760.00 | ฿5.00 (-3.8%) | ฿5.45 (Swing Target) | RSI: 64.2 | Vol: 2.9x | Swing Score: 70.6 |
-| **4. APH** | ฿80.71 | **100** หุ้น | ฿8,071.00 | ฿76.50 (-5.2%) | ฿89.00 (2.0R) | CANSLIM Score: 62.5 | 52w Dist: -10.3% |
+| **1. SCGD.BK** | ฿5.80 | **1,200** หุ้น | ฿6,960.00 | ฿5.55 (-4.3%) | ฿6.20 (Swing Target) | RSI: 57.9 | Vol: 6.9x | Swing Score: 74.7 |
+| **2. KLINIQ.BK** | ฿33.75 | **200** หุ้น | ฿6,750.00 | ฿32.50 (-3.7%) | ฿35.75 (Swing Target) | RSI: 67.3 | Vol: 2.6x | Swing Score: 73.4 |
+| **3. ICN.BK** | ฿2.14 | **3,200** หุ้น | ฿6,848.00 | ฿2.08 (-2.8%) | ฿2.24 (Swing Target) | RSI: 60.6 | Vol: 4.8x | Swing Score: 68.0 |
+| **4. COM7.BK** | ฿32.25 | **200** หุ้น | ฿6,450.00 | ฿31.25 (-3.1%) | ฿34.00 (Swing Target) | RSI: 49.5 | Vol: 1.1x | Swing Score: 63.6 |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: BA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BA.yaml
-action: buy
-symbol: "BA.BK"
-market: "TH"
-shares: 300
-entry_price: 20.00
-stop_price: 19.20
-target_price: 21.40
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 2: SCGD.BK
+# Order Template 1: SCGD.BK
 # หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SCGD.yaml
 action: buy
 symbol: "SCGD.BK"
 market: "TH"
-shares: 1100
-entry_price: 5.85
-stop_price: 5.60
-target_price: 6.25
+shares: 1200
+entry_price: 5.80
+stop_price: 5.55
+target_price: 6.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: WHA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_WHA.yaml
+# Order Template 2: KLINIQ.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_KLINIQ.yaml
 action: buy
-symbol: "WHA.BK"
+symbol: "KLINIQ.BK"
 market: "TH"
-shares: 1300
-entry_price: 5.20
-stop_price: 5.00
-target_price: 5.45
+shares: 200
+entry_price: 33.75
+stop_price: 32.50
+target_price: 35.75
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 4: APH
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APH.yaml
+# Order Template 3: ICN.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_ICN.yaml
 action: buy
-symbol: "APH"
+symbol: "ICN.BK"
 market: "TH"
-shares: 100
-entry_price: 80.71
-stop_price: 76.50
-target_price: 89.00
+shares: 3200
+entry_price: 2.14
+stop_price: 2.08
+target_price: 2.24
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 4: COM7.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_COM7.yaml
+action: buy
+symbol: "COM7.BK"
+market: "TH"
+shares: 200
+entry_price: 32.25
+stop_price: 31.25
+target_price: 34.00
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
