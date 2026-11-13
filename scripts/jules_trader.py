@@ -339,7 +339,15 @@ def get_latest_exposure_posture(market: str = "TH") -> dict[str, Any]:
     if not posture_files:
         return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75}
     try:
-        with open(posture_files[-1], encoding="utf-8") as f:
+        latest_file = posture_files[-1]
+        file_mtime = datetime.fromtimestamp(latest_file.stat().st_mtime, tz=timezone.utc)
+        if (datetime.now(timezone.utc) - file_mtime).days > 3:
+            logger.warning(
+                "Latest posture file %s is stale (>3 days old). Falling back to NORMAL (75%% ceiling).",
+                latest_file.name,
+            )
+            return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0}
+        with open(latest_file, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75}
@@ -437,6 +445,62 @@ def calculate_volatility_sizing(
         est_cost = round(price * board_lot_shares, 2)
 
     return board_lot_shares, est_cost
+
+
+def get_symbol_history_context(
+    symbol: str, market: str = "TH", db_path: Path | None = None, cooldown_days: int = COOLDOWN_DAYS
+) -> dict[str, Any]:
+    """Extract symbol trade history and loss cooldown status from paper_trade table."""
+    empty = {
+        "closed_count": 0,
+        "wins": 0,
+        "losses": 0,
+        "sum_realized_r": 0.0,
+        "avg_loss_r": -1.0,
+        "cooldown_active": False,
+        "last_exit_at": None,
+    }
+    target_db = db_path or DB_PATH
+    if not target_db.exists():
+        return empty
+    try:
+        with sqlite3.connect(target_db, timeout=10.0) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """SELECT status, realized_r, exit_at FROM paper_trade
+                   WHERE symbol=? AND market=? AND status != 'open'
+                   ORDER BY exit_at DESC""",
+                (symbol.upper(), market.upper()),
+            ).fetchall()
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        return empty
+
+    closed = [r for r in rows if r["realized_r"] is not None]
+    if not closed:
+        return empty
+    wins = sum(1 for r in closed if float(r["realized_r"]) > 0)
+    losses = sum(1 for r in closed if float(r["realized_r"]) < 0)
+    loss_values = [float(r["realized_r"]) for r in closed if float(r["realized_r"]) < 0]
+    last = closed[0]
+    cooldown_active = False
+    if float(last["realized_r"]) < 0 and last["exit_at"]:
+        try:
+            exit_at = datetime.fromisoformat(str(last["exit_at"]).replace("Z", "+00:00"))
+            elapsed = (
+                datetime.now(timezone.utc).date() - exit_at.astimezone(timezone.utc).date()
+            ).days
+            cooldown_active = elapsed <= int(cooldown_days)
+        except (ValueError, TypeError):
+            cooldown_active = False
+    return {
+        "closed_count": len(closed),
+        "wins": wins,
+        "losses": losses,
+        "sum_realized_r": round(sum(float(r["realized_r"]) for r in closed), 4),
+        "avg_loss_r": round(sum(loss_values) / len(loss_values), 4) if loss_values else -1.0,
+        "cooldown_active": cooldown_active,
+        "last_exit_at": last["exit_at"],
+    }
 
 
 def evaluate_and_select_trade(
@@ -609,6 +673,58 @@ def evaluate_and_select_trade(
             except (ValueError, TypeError):
                 pass
 
+        # Quant Decision Engine & Bayesian Edge Gate
+        trace = None
+        try:
+            from scripts import decision_engine
+
+            history_ctx = get_symbol_history_context(sym, market=market_clean)
+            fee_bps = 21.692 if market_clean == "TH" else 0.0
+
+            payload_data = dict(cand.get("raw_features") or cand.get("payload") or {})
+            for k in (
+                "rsi",
+                "rsi_weekly",
+                "sma20",
+                "sma50",
+                "sma200",
+                "volume",
+                "avg_volume",
+                "perf_1m",
+                "perf_3m",
+            ):
+                if k in cand and k not in payload_data and cand[k] is not None:
+                    payload_data[k] = cand[k]
+
+            min_conf = 0.65 if allow_only_dip_buy else 0.60
+            eval_context = {
+                "symbol": sym,
+                "market": market_clean,
+                "source_skill": source_name,
+                "raw_score": base_score,
+                "payload": payload_data,
+                "entry": entry_tick,
+                "stop": stop_tick,
+                "target": final_target,
+                "transaction_cost_bps": fee_bps,
+                "history": history_ctx,
+                "cooldown_active": history_ctx.get("cooldown_active", False),
+                "min_confirmation_score": min_conf,
+                "min_expected_net_r": 0.05,
+            }
+            trace = decision_engine.evaluate_signal(eval_context)
+            if trace.get("decision") != "open":
+                failed_gates = trace.get("gates", {}).get("failed", [])
+                gate_str = (
+                    ", ".join(failed_gates) if failed_gates else "Quant decision gates failed"
+                )
+                msg = f"{sym} ({gate_str})"
+                logger.info("Candidate %s rejected by Quant decision engine: %s", sym, msg)
+                rejection_reasons.append(msg)
+                continue
+        except Exception as e:
+            logger.warning("Decision engine check error for %s: %s", sym, e)
+
         shares, est_cost = calculate_volatility_sizing(
             entry_tick, stop_tick, equity, cash, risk_mult, market=market_clean
         )
@@ -625,6 +741,11 @@ def evaluate_and_select_trade(
             )
             continue
 
+        decision_score = (
+            float(trace["components"]["decision_score"])
+            if trace and "components" in trace and "decision_score" in trace["components"]
+            else final_score
+        )
         scored_candidates.append(
             {
                 "candidate": cand,
@@ -637,6 +758,8 @@ def evaluate_and_select_trade(
                 "t2_price": t2_price,
                 "rr_ratio": rr_ratio,
                 "final_score": final_score,
+                "decision_score": decision_score,
+                "decision_trace": trace,
                 "nvdr_status": nvdr_status,
                 "nvdr_bonus": nvdr_bonus,
                 "est_cost": est_cost,
@@ -650,8 +773,10 @@ def evaluate_and_select_trade(
         suffix = f": {'; '.join(rejection_reasons)}" if rejection_reasons else ""
         return None, f"No candidates passed all risk, sector, liquidity, and R/R gates{suffix}"
 
-    # Sort by final conviction score descending
-    scored_candidates.sort(key=lambda x: x["final_score"], reverse=True)
+    # Sort by Quant decision score and final conviction score descending
+    scored_candidates.sort(
+        key=lambda x: (x.get("decision_score", x["final_score"]), x["final_score"]), reverse=True
+    )
     winner = scored_candidates[0]
     reason = (
         f"Selected {winner['symbol']} (Score: {winner['final_score']:.1f}, "
@@ -740,10 +865,19 @@ def run_autonomous_decision(
     posture_data = get_latest_exposure_posture(market=market_clean)
     recom = str(posture_data.get("recommendation", "NORMAL")).upper()
     ceiling = float(posture_data.get("exposure_ceiling_pct", 75))
+    participation = str(posture_data.get("participation", "NORMAL")).upper()
+    comp_score = float(posture_data.get("composite_score", 50.0))
 
-    # Severe cash priority or severe exposure collapse (<= 20%) -> Total cash lockdown
-    if recom == "CASH_PRIORITY" or ceiling <= 20.0:
-        msg = f"Market posture is {recom} (Ceiling: {ceiling}%). Prudence gate: holding 100% cash."
+    # Severe cash priority, exposure collapse (<= 20%), or fragile/narrow REDUCE_ONLY -> Total cash lockdown
+    if (
+        recom == "CASH_PRIORITY"
+        or ceiling <= 20.0
+        or (
+            recom == "REDUCE_ONLY"
+            and (ceiling <= 25.0 or participation == "NARROW" or comp_score <= 35.0)
+        )
+    ):
+        msg = f"Market posture is {recom} (Ceiling: {ceiling}%, Participation: {participation}, Score: {comp_score}). Prudence gate: holding 100% cash."
         logger.info(msg)
         if not dry_run:
             record_decision(today_str, "HOLD_CASH", None, None, recom, msg, market=market_clean)
@@ -819,6 +953,8 @@ def run_autonomous_decision(
             f"Plan: Scale-out 50% at T1 ({curr_sym}{winner.get('t1_price', 0):.2f}, 1.5R), shift stop to BE, trail runner to T2 ({curr_sym}{winner.get('t2_price', 0):.2f}, 2.5R)"
         ),
     }
+    if winner.get("decision_trace"):
+        order_payload["decision_trace"] = winner["decision_trace"]
 
     if dry_run:
         logger.info("[DRY-RUN] Would stage order: %s", order_payload)

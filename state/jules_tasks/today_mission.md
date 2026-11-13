@@ -3,7 +3,7 @@
 
 ---
 
-## 🧬 Trader DNA Memory (Gen 4)
+## 🧬 Trader DNA Memory (Gen 3)
 Jules ต้องใช้กฎที่เรียนรู้มาในอดีตมาช่วยตัดสินใจเลือกลงทุน:
 - 📜 Always verify positive Q2/Q3 net profit growth before entering.
 - 📜 Avoid stocks trading within 5 days of XD dividend record date.
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. BJC.BK** | ฿19.00 | **300** หุ้น | ฿5,700.00 | ฿18.40 (-3.2%) | ฿19.90 (Resistance Pivot) | RSI: 48.0 | Vol: 1.6x | Swing Score: 83.7 |
-| **2. APH** | ฿79.31 | **100** หุ้น | ฿7,931.00 | ฿75.25 (-5.1%) | ฿87.25 (2.0R) | CANSLIM Score: 62.5 | 52w Dist: -11.8% |
-| **3. XO.BK** | ฿19.60 | **300** หุ้น | ฿5,880.00 | ฿18.90 (-3.6%) | ฿20.80 (Swing Target) | RSI: 58.0 | Vol: 3.5x | Swing Score: 62.3 |
-| **4. III.BK** | ฿4.90 | **1,400** หุ้น | ฿6,860.00 | ฿4.70 (-4.1%) | ฿5.20 (Swing Target) | RSI: 60.6 | Vol: 5.0x | Swing Score: 61.8 |
+| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
+| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
+| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
+| **4. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿25.00 (-5.7%) | ฿29.50 (2.0R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: BJC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BJC.yaml
+# Order Template 1: GROREIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
 action: buy
-symbol: "BJC.BK"
+symbol: "GROREIT.BK"
+market: "TH"
+shares: 700
+entry_price: 9.60
+stop_price: 9.35
+target_price: 10.00
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 2: VIH.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
+action: buy
+symbol: "VIH.BK"
+market: "TH"
+shares: 700
+entry_price: 9.15
+stop_price: 8.85
+target_price: 9.70
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 3: TIDLOR.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
+action: buy
+symbol: "TIDLOR.BK"
 market: "TH"
 shares: 300
-entry_price: 19.00
-stop_price: 18.40
-target_price: 19.90
+entry_price: 19.20
+stop_price: 18.20
+target_price: 21.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: APH
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APH.yaml
+# Order Template 4: AMATA.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
 action: buy
-symbol: "APH"
+symbol: "AMATA.BK"
 market: "TH"
-shares: 100
-entry_price: 79.31
-stop_price: 75.25
-target_price: 87.25
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 3: XO.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_XO.yaml
-action: buy
-symbol: "XO.BK"
-market: "TH"
-shares: 300
-entry_price: 19.60
-stop_price: 18.90
-target_price: 20.80
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: III.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_III.yaml
-action: buy
-symbol: "III.BK"
-market: "TH"
-shares: 1400
-entry_price: 4.90
-stop_price: 4.70
-target_price: 5.20
+shares: 200
+entry_price: 26.50
+stop_price: 25.00
+target_price: 29.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```

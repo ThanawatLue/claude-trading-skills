@@ -1,0 +1,76 @@
+order_id: JULES-TH-20261113-TIDLOR
+action: buy
+symbol: TIDLOR.BK
+market: TH
+shares: 300
+entry_price: 19.2
+stop_price: 18.2
+target_price: 21.7
+t1_price: 20.7
+t2_price: 21.7
+max_chase_pct: 0.01
+created_at: '2026-11-13T02:22:31.954343+00:00'
+expires_at: '2026-11-13T04:00:00+00:00'
+sector: Financial Services
+cluster: Consumer Finance & Leasing
+target_note: "T1: \u0E3F20.70 (1.5R) | T2: \u0E3F21.70 (2.5R)"
+thesis: "Autonomous conviction buy: CANSLIM Score: 67.8 | 52w Dist: -14.7% | R/R:\
+  \ 2.50R | Sector/Cluster: Consumer Finance & Leasing | Plan: Scale-out 50% at T1\
+  \ (\u0E3F20.70, 1.5R), shift stop to BE, trail runner to T2 (\u0E3F21.70, 2.5R)"
+decision_trace:
+  version: dynamic-v1
+  decision: open
+  symbol: TIDLOR.BK
+  market: TH
+  source_skill: CANSLIM Screener
+  predicted_probability: 0.475
+  features:
+    price: 19.200000762939453
+    rsi: null
+    rsi_weekly: null
+    sma20: null
+    sma50: null
+    sma200: null
+    perf_1m: null
+    perf_3m: null
+    volume: null
+    avg_volume: null
+    volume_ratio: null
+    sma50_distance_pct: null
+    sma20_gap_pct: null
+    sma200_distance_pct: null
+    plan_risk_pct: null
+    plan_reward_pct: null
+    plan_reward_r: null
+    reversal_score: null
+    support_score: null
+    pullback_score: null
+    trend_score: null
+    confirmation_score: null
+  history:
+    closed_count: 0
+    wins: 0
+    losses: 0
+    sum_realized_r: 0.0
+    avg_loss_r: -1.0
+    posterior_win_rate: 0.5
+    posterior_avg_r: 0.0
+    cooldown_active: false
+  execution:
+    entry: 19.2
+    stop: 18.2
+    target: 21.7
+    gross_reward_r: 2.5
+    round_trip_cost_r: 0.0887
+    net_reward_r: 2.4113
+  components:
+    raw_score: 72.8
+    predicted_probability: 0.475
+    confirmation_adjustment: 0.0
+    behavior_adjustment: 0.0
+    gross_reward_r: 2.5
+    expected_net_r: 0.7056
+    decision_score: 76.3282
+  gates:
+    failed: []
+    passed: true

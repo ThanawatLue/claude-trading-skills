@@ -204,6 +204,7 @@ def execute_buy(
     target: float | None = None,
     thesis: str | None = None,
     fee_bps: float | None = None,
+    decision_trace: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a buy order for Jules AI Fund under fair competition rules."""
     market_clean = market.upper()
@@ -256,7 +257,9 @@ def execute_buy(
             f"Insufficient cash: order requires {total_cost:.2f} {currency}, but available cash is {status['cash_balance']:.2f} {currency}."
         )
 
-    decision_trace = {
+    base_trace = decision_trace or {}
+    final_decision_trace = {
+        **base_trace,
         "fund": "jules_ai",
         "market": market_clean,
         "thesis": thesis or "Fundamental and catalyst momentum thesis",
@@ -283,7 +286,7 @@ def execute_buy(
         source_score=85.0,
         notes=thesis,
         transaction_cost_bps=fee_bps,
-        decision_trace=decision_trace,
+        decision_trace=final_decision_trace,
         portfolio="jules",
     )
     logger.info(
@@ -423,6 +426,7 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
                     stop=data.get("stop_price") or data.get("stop"),
                     target=data.get("target_price") or data.get("target"),
                     thesis=data.get("thesis") or data.get("notes"),
+                    decision_trace=data.get("decision_trace"),
                 )
             elif action == "sell":
                 res = execute_sell(

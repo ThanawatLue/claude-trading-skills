@@ -170,6 +170,7 @@ def get_latest_canslim_candidates() -> list[dict[str, Any]]:
                         "score": float(r.get("composite_score") or 0.0),
                         "source": "CANSLIM Screener",
                         "highlights": f"CANSLIM Score: {r.get('composite_score', 0):.1f} | 52w Dist: {r.get('n_component', {}).get('distance_from_high_pct', 0):.1f}%",
+                        "raw_features": r,
                     }
                 )
     except Exception as e:
@@ -211,6 +212,29 @@ def get_latest_thai_swing_candidates() -> list[dict[str, Any]]:
                         "highlights": f"RSI: {float(r.get('rsi') or 0):.1f} | Vol: {vol_ratio:.1f}x | Swing Score: {float(r.get('score') or 0):.1f}",
                         "suggested_stop": plan.get("stop"),
                         "suggested_target": plan.get("target"),
+                        "rsi": float(r.get("rsi") or 0.0) if r.get("rsi") is not None else None,
+                        "rsi_weekly": float(r.get("rsi_weekly") or 0.0)
+                        if r.get("rsi_weekly") is not None
+                        else None,
+                        "sma20": float(r.get("sma20") or 0.0)
+                        if r.get("sma20") is not None
+                        else None,
+                        "sma50": float(r.get("sma50") or 0.0)
+                        if r.get("sma50") is not None
+                        else None,
+                        "volume": float(r.get("volume") or 0.0)
+                        if r.get("volume") is not None
+                        else None,
+                        "avg_volume": float(r.get("avg_volume") or 0.0)
+                        if r.get("avg_volume") is not None
+                        else None,
+                        "perf_1m": float(r.get("perf_1m") or 0.0)
+                        if r.get("perf_1m") is not None
+                        else None,
+                        "perf_3m": float(r.get("perf_3m") or 0.0)
+                        if r.get("perf_3m") is not None
+                        else None,
+                        "raw_features": r,
                     }
                 )
     except Exception as e:

@@ -490,6 +490,136 @@ class TestJulesTrader(unittest.TestCase):
         self.assertIsNone(winner)
         self.assertIn("overbought chase limit", reason)
 
+    def test_quant_gate_rejection_reversal_not_confirmed(self):
+        """Verify that candidates with unconfirmed dip or falling knife are rejected by Quant gates."""
+        cand = {
+            "symbol": "KNIFE.BK",
+            "price": 10.0,
+            "stop": 9.40,
+            "target": 12.0,
+            "sector": "Technology",
+            "score": 85.0,
+            "source": "Thai Swing (DIP_BUY)",
+            "perf_1m": -5.0,  # Falling knife: negative 1m return without support bounce
+            "perf_3m": -12.0,
+        }
+        winner, reason = jt.evaluate_and_select_trade(
+            candidates=[cand],
+            open_positions=[],
+            sector_mods={},
+            equity=30000.0,
+            cash=30000.0,
+            market="TH",
+            allow_only_dip_buy=True,
+        )
+        self.assertIsNone(winner)
+        self.assertIn("reversal_not_confirmed", reason)
+
+    def test_quant_gate_rejection_cooldown_active(self):
+        """Verify that symbols stopped out recently are blocked by loss cooldown."""
+        from datetime import datetime, timezone
+
+        # Insert a recent loss for COOL.BK in the test paper_trade DB
+        with sqlite3.connect(self.test_db) as conn:
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS paper_trade (
+                    id INTEGER PRIMARY KEY, symbol TEXT, market TEXT, status TEXT,
+                    realized_r REAL, exit_at TEXT
+                )"""
+            )
+            conn.execute(
+                """INSERT INTO paper_trade (symbol, market, status, realized_r, exit_at)
+                   VALUES ('COOL.BK', 'TH', 'closed_stop', -1.1, ?)""",
+                (datetime.now(timezone.utc).isoformat(),),
+            )
+
+        cand = {
+            "symbol": "COOL.BK",
+            "price": 10.0,
+            "stop": 9.40,
+            "target": 12.0,
+            "sector": "Technology",
+            "score": 88.0,
+            "source": "Thai Swing (DIP_BUY)",
+        }
+        winner, reason = jt.evaluate_and_select_trade(
+            candidates=[cand],
+            open_positions=[],
+            sector_mods={},
+            equity=30000.0,
+            cash=30000.0,
+            market="TH",
+        )
+        self.assertIsNone(winner)
+        self.assertIn("symbol_cooldown_after_loss", reason)
+
+    def test_prudence_gate_narrow_reduce_only_cash_lockdown(self):
+        """Verify that when market posture is REDUCE_ONLY with NARROW participation, Jules holds 100% cash."""
+        mission = {
+            "candidates": [
+                {
+                    "symbol": "DIP.BK",
+                    "price": 5.0,
+                    "stop": 4.70,
+                    "target": 5.60,
+                    "sector": "Technology",
+                    "source": "Thai Swing (DIP_BUY)",
+                    "score": 85.0,
+                }
+            ]
+        }
+        self.test_mission_file.write_text(json.dumps(mission), encoding="utf-8")
+
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={
+                "recommendation": "REDUCE_ONLY",
+                "exposure_ceiling_pct": 23.0,
+                "participation": "NARROW",
+                "composite_score": 30.0,
+            },
+        ):
+            res = jt.run_autonomous_decision(force=True, market="TH")
+
+        self.assertEqual(res["status"], "HOLD_CASH")
+        self.assertIn("Prudence gate: holding 100% cash", res["reason"])
+
+    def test_decision_trace_attached_to_staged_order(self):
+        """Verify that staged orders contain the Quant decision_trace."""
+        mission = {
+            "candidates": [
+                {
+                    "symbol": "GOOD.BK",
+                    "price": 10.0,
+                    "stop": 9.40,
+                    "target": 12.0,
+                    "sector": "Technology",
+                    "source": "Thai Swing (MOMENTUM)",
+                    "score": 85.0,
+                }
+            ]
+        }
+        self.test_mission_file.write_text(json.dumps(mission), encoding="utf-8")
+
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0},
+        ):
+            res = jt.run_autonomous_decision(force=True, market="TH")
+
+        self.assertEqual(res["status"], "ORDER_STAGED")
+        self.assertEqual(res["symbol"], "GOOD.BK")
+        staged_files = list(self.test_staged.glob("JULES-TH-*-GOOD.yaml"))
+        self.assertTrue(len(staged_files) >= 1)
+        import yaml
+
+        order_data = yaml.safe_load(staged_files[0].read_text(encoding="utf-8"))
+        self.assertIn("decision_trace", order_data)
+        self.assertEqual(order_data["decision_trace"]["decision"], "open")
+        self.assertTrue(order_data["decision_trace"]["gates"]["passed"])
+
 
 if __name__ == "__main__":
     unittest.main()
