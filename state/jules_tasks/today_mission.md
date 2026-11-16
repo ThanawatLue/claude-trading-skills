@@ -1,9 +1,9 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-13 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-16 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
-## 🧬 Trader DNA Memory (Gen 3)
+## 🧬 Trader DNA Memory (Gen 4)
 Jules ต้องใช้กฎที่เรียนรู้มาในอดีตมาช่วยตัดสินใจเลือกลงทุน:
 - 📜 Always verify positive Q2/Q3 net profit growth before entering.
 - 📜 Avoid stocks trading within 5 days of XD dividend record date.
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. GROREIT.BK** | ฿9.60 | **700** หุ้น | ฿6,720.00 | ฿9.35 (-2.6%) | ฿10.00 (Swing Target) | RSI: 71.0 | Vol: 4.4x | Swing Score: 72.5 |
-| **2. VIH.BK** | ฿9.15 | **700** หุ้น | ฿6,405.00 | ฿8.85 (-3.3%) | ฿9.70 (Swing Target) | RSI: 67.4 | Vol: 9.8x | Swing Score: 71.9 |
-| **3. TIDLOR.BK** | ฿19.20 | **300** หุ้น | ฿5,760.00 | ฿18.20 (-5.2%) | ฿21.20 (2.0R) | CANSLIM Score: 67.8 | 52w Dist: -14.7% |
-| **4. AMATA.BK** | ฿26.50 | **200** หุ้น | ฿5,300.00 | ฿25.00 (-5.7%) | ฿29.50 (2.0R) | CANSLIM Score: 63.8 | 52w Dist: -5.4% |
+| **1. CENTEL.BK** | ฿47.00 | **100** หุ้น | ฿4,700.00 | ฿45.00 (-4.3%) | ฿50.25 (Swing Target) | RSI: 63.1 | Vol: 2.0x | Swing Score: 71.7 |
+| **2. CREDIT.BK** | ฿23.80 | **200** หุ้น | ฿4,760.00 | ฿23.00 (-3.4%) | ฿25.00 (Swing Target) | RSI: 60.3 | Vol: 3.3x | Swing Score: 65.4 |
+| **3. ICN.BK** | ฿2.16 | **3,200** หุ้น | ฿6,912.00 | ฿2.10 (-2.8%) | ฿2.26 (Swing Target) | RSI: 63.4 | Vol: 2.3x | Swing Score: 63.0 |
+| **4. APH** | ฿79.62 | **100** หุ้น | ฿7,962.00 | ฿75.50 (-5.2%) | ฿87.75 (2.0R) | CANSLIM Score: 62.5 | 52w Dist: -11.5% |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: GROREIT.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GROREIT.yaml
+# Order Template 1: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "GROREIT.BK"
+symbol: "CENTEL.BK"
 market: "TH"
-shares: 700
-entry_price: 9.60
-stop_price: 9.35
-target_price: 10.00
+shares: 100
+entry_price: 47.00
+stop_price: 45.00
+target_price: 50.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: VIH.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_VIH.yaml
+# Order Template 2: CREDIT.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CREDIT.yaml
 action: buy
-symbol: "VIH.BK"
-market: "TH"
-shares: 700
-entry_price: 9.15
-stop_price: 8.85
-target_price: 9.70
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 3: TIDLOR.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TIDLOR.yaml
-action: buy
-symbol: "TIDLOR.BK"
-market: "TH"
-shares: 300
-entry_price: 19.20
-stop_price: 18.20
-target_price: 21.20
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: AMATA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_AMATA.yaml
-action: buy
-symbol: "AMATA.BK"
+symbol: "CREDIT.BK"
 market: "TH"
 shares: 200
-entry_price: 26.50
-stop_price: 25.00
-target_price: 29.50
+entry_price: 23.80
+stop_price: 23.00
+target_price: 25.00
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 3: ICN.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_ICN.yaml
+action: buy
+symbol: "ICN.BK"
+market: "TH"
+shares: 3200
+entry_price: 2.16
+stop_price: 2.10
+target_price: 2.26
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 4: APH
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APH.yaml
+action: buy
+symbol: "APH"
+market: "TH"
+shares: 100
+entry_price: 79.62
+stop_price: 75.50
+target_price: 87.75
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
