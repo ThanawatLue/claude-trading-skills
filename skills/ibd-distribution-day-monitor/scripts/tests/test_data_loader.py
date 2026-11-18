@@ -103,3 +103,36 @@ class TestFetchOHLCVMocked:
         history, audit = fetch_ohlcv(mock_client, "QQQ", days=80)
         assert history == []
         assert "no_data_returned" in audit["audit_flags"]
+
+
+def test_ibd_monitor_falls_back_to_yf_when_fmp_returns_none(tmp_path, monkeypatch):
+    """ibd_monitor must fall back to YFClient when FMP canary or symbol returns None (e.g. HTTP 403)."""
+    import json
+    from unittest.mock import patch
+
+    import ibd_monitor
+
+    monkeypatch.setenv("FMP_API_KEY", "test_key")
+
+    mock_fmp = MagicMock()
+    mock_fmp.rate_limit_reached = False
+    mock_fmp.get_historical_prices.return_value = None  # Simulates 403 legacy endpoint failure
+
+    dates = [f"2026-09-{(i % 28) + 1:02d}" for i in range(60)]
+    mock_yf = MagicMock()
+    mock_yf.get_historical_prices.return_value = {
+        "historical": [_row(d, 500.0 + idx * 0.1) for idx, d in enumerate(reversed(dates))]
+    }
+
+    with (
+        patch.object(ibd_monitor, "build_fmp_client", return_value=mock_fmp),
+        patch.object(ibd_monitor, "build_yf_client", return_value=mock_yf),
+    ):
+        rc = ibd_monitor.main(["--symbols", "THD", "--market", "TH", "--output-dir", str(tmp_path)])
+
+    assert rc == 0
+    reports = list(tmp_path.glob("ibd_distribution_day_monitor_*.json"))
+    assert len(reports) == 1
+    payload = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert payload["audit"]["data_source"] == "yfinance"
+    assert payload["metadata"]["market"] == "TH"

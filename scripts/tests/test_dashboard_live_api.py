@@ -166,3 +166,98 @@ def test_arena_overview_endpoint(monkeypatch) -> None:
     assert "dna" in data["jules"]
     assert data["jules"]["dna"]["generation"] >= 1
     assert len(data["jules"]["dna"]["rules"]) >= 1
+
+
+def test_build_exposure_cmd_th_includes_local_uptrend_regime_and_sector(
+    monkeypatch, tmp_path
+) -> None:
+    reports = tmp_path / "reports"
+    root = tmp_path
+    reports.mkdir()
+
+    th_mb = reports / "thai_market_breadth_2026-11-18_080000.json"
+    th_mb.write_text('{"metadata": {"market": "TH"}, "composite_score": 40}', encoding="utf-8")
+    th_sec = reports / "thai_sector_heatmap_2026-11-18_080000.json"
+    th_sec.write_text('{"metadata": {"market": "TH"}, "sectors": []}', encoding="utf-8")
+    set50_mb = root / "market_breadth_2026-11-18_080000.json"
+    set50_mb.write_text(
+        '{"metadata": {"market": "TH"}, "composite": {"composite_score": 52}}', encoding="utf-8"
+    )
+    # Also create a US-only uptrend file that TH must NOT touch
+    us_up = reports / "uptrend_analysis_2026-11-18_080000.json"
+    us_up.write_text('{"uptrend_score": 80}', encoding="utf-8")
+
+    monkeypatch.setattr(dashboard_app, "REPORTS_DIR", str(reports))
+    monkeypatch.setattr(dashboard_app, "ROOT_DIR", str(root))
+
+    cmd = dashboard_app.build_exposure_cmd(str(th_mb), "TH")
+    assert "--uptrend" in cmd
+    assert str(th_mb) == cmd[cmd.index("--uptrend") + 1]
+    assert "--sector" in cmd
+    assert str(th_sec) == cmd[cmd.index("--sector") + 1]
+    assert "--regime" in cmd
+    assert str(set50_mb) == cmd[cmd.index("--regime") + 1]
+    assert str(us_up) not in cmd
+
+
+def test_build_exposure_cmd_us_includes_regime_ftd_and_sector(monkeypatch, tmp_path) -> None:
+    reports = tmp_path / "reports"
+    root = tmp_path
+    reports.mkdir()
+
+    us_mb = root / "market_breadth_2026-11-18_080000.json"
+    us_mb.write_text(
+        '{"metadata": {"market": "US"}, "composite": {"composite_score": 55}}', encoding="utf-8"
+    )
+    us_up = reports / "uptrend_analysis_2026-11-18_080000.json"
+    us_up.write_text('{"uptrend_score": 45}', encoding="utf-8")
+    reg = reports / "macro_regime_2026-11-18_080000.json"
+    reg.write_text(
+        '{"metadata": {"market": "US"}, "regime": {"current_regime": "broadening"}}',
+        encoding="utf-8",
+    )
+    ftd = reports / "ftd_detector_US_2026-11-18_080000.json"
+    ftd.write_text(
+        '{"metadata": {"market": "US"}, "market_state": {"combined_state": "FTD_CONFIRMED"}}',
+        encoding="utf-8",
+    )
+    ibd = reports / "ibd_distribution_day_monitor_US_2026-11-18_080000.json"
+    ibd.write_text(
+        '{"metadata": {"market": "US"}, "market_distribution_state": {"overall_risk_level": "CAUTION"}}',
+        encoding="utf-8",
+    )
+    sec = reports / "sector_rotation_2026-11-18.json"
+    sec.write_text('{"groups": {"score": 54}}', encoding="utf-8")
+
+    monkeypatch.setattr(dashboard_app, "REPORTS_DIR", str(reports))
+    monkeypatch.setattr(dashboard_app, "ROOT_DIR", str(root))
+
+    cmd = dashboard_app.build_exposure_cmd(str(us_mb), "US")
+    for flag, expected in [
+        ("--uptrend", us_up),
+        ("--regime", reg),
+        ("--top-risk", ibd),
+        ("--ftd", ftd),
+        ("--sector", sec),
+    ]:
+        assert flag in cmd
+        assert str(expected) == cmd[cmd.index(flag) + 1]
+
+
+def test_cleanup_old_files_preserves_both_th_and_us_postures(monkeypatch, tmp_path) -> None:
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    monkeypatch.setattr(dashboard_app, "REPORTS_DIR", str(reports))
+    monkeypatch.setattr(dashboard_app, "ROOT_DIR", str(tmp_path))
+
+    # One US posture and three newer TH postures
+    us_file = reports / "exposure_posture_US_2026-11-17_134000.json"
+    us_file.write_text('{"market": "US"}', encoding="utf-8")
+    for hr in ("10", "11", "12"):
+        f = reports / f"exposure_posture_TH_2026-11-18_{hr}0000.json"
+        f.write_text('{"market": "TH"}', encoding="utf-8")
+
+    dashboard_app.cleanup_old_files(keep_count=1)
+    assert us_file.exists()
+    th_remaining = list(reports.glob("exposure_posture_TH_*.json"))
+    assert len(th_remaining) == 1

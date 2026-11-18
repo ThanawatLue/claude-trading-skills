@@ -122,6 +122,7 @@ class FMPClient:
         self.cache = {}
         self.last_call_time = 0
         self.rate_limit_reached = False
+        self.auth_restricted = False
         self.retry_count = 0
         self.max_retries = 1
         self.api_calls_made = 0
@@ -165,6 +166,8 @@ class FMPClient:
 
                 if response.status_code == 429:
                     self.rate_limit_reached = True
+                elif response.status_code in (401, 403):
+                    self.auth_restricted = True
                 return None
             else:
                 if not quiet:

@@ -193,3 +193,23 @@ def test_evaluate_fingerprint_block_thresholds() -> None:
     )
     assert blocked is False
     assert reason is None
+
+
+def test_load_regime_recommendation_filters_by_nested_metadata_market(tmp_path: Path) -> None:
+    import os
+
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    th_p = reports / "exposure_posture_2026-11-17_100000.json"
+    us_p = reports / "exposure_posture_2026-11-17_134000.json"
+    th_p.write_text(
+        '{"metadata": {"market": "TH"}, "recommendation": "REDUCE_ONLY"}', encoding="utf-8"
+    )
+    us_p.write_text(
+        '{"metadata": {"market": "US"}, "recommendation": "CASH_PRIORITY"}', encoding="utf-8"
+    )
+    os.utime(th_p, (1000, 1000))
+    os.utime(us_p, (2000, 2000))
+
+    assert auto_paper_gates.load_regime_recommendation(reports, "TH") == "REDUCE_ONLY"
+    assert auto_paper_gates.load_regime_recommendation(reports, "US") == "CASH_PRIORITY"

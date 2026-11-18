@@ -37,6 +37,7 @@ from fmp_client import FMPClient
 from post_ftd_monitor import assess_post_ftd_health
 from rally_tracker import get_market_state
 from report_generator import generate_json_report, generate_markdown_report
+from yf_client import YFClient
 
 
 def parse_arguments():
@@ -44,7 +45,18 @@ def parse_arguments():
         description="FTD Detector - Follow-Through Day Bottom Confirmation"
     )
     parser.add_argument(
+        "--market",
+        choices=["US", "TH"],
+        default="US",
+        help="Market context (US: S&P500/QQQ, TH: THD proxy)",
+    )
+    parser.add_argument(
         "--api-key", help="FMP API key (defaults to FMP_API_KEY environment variable)"
+    )
+    parser.add_argument(
+        "--use-yf",
+        action="store_true",
+        help="Use Yahoo Finance directly instead of FMP API",
     )
     parser.add_argument(
         "--output-dir",
@@ -54,67 +66,99 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def _fetch_hist_with_fallback(client, symbol: str, days: int = 80):
+    data = client.get_historical_prices(symbol, days=days)
+    restricted = bool(
+        getattr(client, "rate_limit_reached", False) or getattr(client, "auth_restricted", False)
+    )
+    if (not data or not data.get("historical")) and restricted:
+        yf_client = YFClient()
+        data = yf_client.get_historical_prices(symbol, days=days)
+        return data, yf_client
+    return data, None
+
+
 def main():
     args = parse_arguments()
+    market = getattr(args, "market", "US").upper()
+    primary_sym = "THD" if market == "TH" else "^GSPC"
+    secondary_sym = None if market == "TH" else "QQQ"
 
     print("=" * 70)
-    print("FTD Detector - Follow-Through Day Bottom Confirmation")
-    print("O'Neil Rally Attempt + FTD State Machine (Dual Index)")
+    print(f"FTD Detector ({market}) - Follow-Through Day Bottom Confirmation")
+    print("O'Neil Rally Attempt + FTD State Machine")
     print("=" * 70)
     print()
 
-    # Initialize FMP client
-    try:
-        client = FMPClient(api_key=args.api_key)
-        print("FMP API client initialized")
-    except ValueError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
+    # Initialize FMP client with Yahoo Finance fallback
+    if getattr(args, "use_yf", False):
+        client = YFClient()
+        print("Using Yahoo Finance client (--use-yf)")
+        data_source = "Yahoo Finance"
+    else:
+        try:
+            client = FMPClient(api_key=args.api_key)
+            print("FMP API client initialized")
+            data_source = "FMP API"
+        except ValueError:
+            client = YFClient()
+            print("Using Yahoo Finance client (FMP API key not set)")
+            data_source = "Yahoo Finance"
 
     # ========================================================================
-    # Step 1: Fetch Market Data (4 API calls)
+    # Step 1: Fetch Market Data
     # ========================================================================
     print()
     print("Step 1: Fetching Market Data")
     print("-" * 70)
 
-    # S&P 500 history (60 trading days)
-    print("  Fetching S&P 500 history...", end=" ", flush=True)
-    sp500_history_data = client.get_historical_prices("^GSPC", days=80)
+    # Primary index history
+    print(f"  Fetching {primary_sym} history...", end=" ", flush=True)
+    sp500_history_data, switched_yf = _fetch_hist_with_fallback(client, primary_sym, days=80)
+    if switched_yf is not None:
+        client = switched_yf
+        data_source = "FMP API + Yahoo Finance fallback"
     sp500_history = sp500_history_data.get("historical", []) if sp500_history_data else []
     if sp500_history:
         print(f"OK ({len(sp500_history)} days)")
     else:
         print("FAILED")
-        print("ERROR: Cannot proceed without S&P 500 data", file=sys.stderr)
+        print(f"ERROR: Cannot proceed without {primary_sym} data", file=sys.stderr)
         sys.exit(1)
 
-    # NASDAQ/QQQ history (60 trading days)
-    print("  Fetching NASDAQ (QQQ) history...", end=" ", flush=True)
-    qqq_history_data = client.get_historical_prices("QQQ", days=80)
-    qqq_history = qqq_history_data.get("historical", []) if qqq_history_data else []
-    if qqq_history:
-        print(f"OK ({len(qqq_history)} days)")
-    else:
-        print("WARN - NASDAQ data unavailable, using S&P 500 only")
+    # Secondary index history (NASDAQ/QQQ for US)
+    qqq_history = []
+    if secondary_sym:
+        print(f"  Fetching {secondary_sym} history...", end=" ", flush=True)
+        qqq_history_data, switched_yf2 = _fetch_hist_with_fallback(client, secondary_sym, days=80)
+        if switched_yf2 is not None:
+            client = switched_yf2
+            data_source = "FMP API + Yahoo Finance fallback"
+        qqq_history = qqq_history_data.get("historical", []) if qqq_history_data else []
+        if qqq_history:
+            print(f"OK ({len(qqq_history)} days)")
+        else:
+            print(f"WARN - {secondary_sym} data unavailable, using primary only")
 
-    # S&P 500 quote (for current price)
-    print("  Fetching S&P 500 quote...", end=" ", flush=True)
-    sp500_quote_list = client.get_quote("^GSPC")
+    # Primary quote
+    print(f"  Fetching {primary_sym} quote...", end=" ", flush=True)
+    sp500_quote_list = client.get_quote(primary_sym)
     sp500_quote = sp500_quote_list[0] if sp500_quote_list else None
     if sp500_quote:
         print(f"OK (${sp500_quote.get('price', 0):.2f})")
     else:
         print("WARN - Using historical close as current price")
 
-    # QQQ quote
-    print("  Fetching QQQ quote...", end=" ", flush=True)
-    qqq_quote_list = client.get_quote("QQQ")
-    qqq_quote = qqq_quote_list[0] if qqq_quote_list else None
-    if qqq_quote:
-        print(f"OK (${qqq_quote.get('price', 0):.2f})")
-    else:
-        print("WARN - Using historical close as current price")
+    # Secondary quote
+    qqq_quote = None
+    if secondary_sym:
+        print(f"  Fetching {secondary_sym} quote...", end=" ", flush=True)
+        qqq_quote_list = client.get_quote(secondary_sym)
+        qqq_quote = qqq_quote_list[0] if qqq_quote_list else None
+        if qqq_quote:
+            print(f"OK (${qqq_quote.get('price', 0):.2f})")
+        else:
+            print("WARN - Using historical close as current price")
 
     print()
 
@@ -202,6 +246,8 @@ def main():
     analysis = {
         "metadata": {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "market": market,
+            "data_source": data_source,
             "api_calls": client.get_api_stats(),
             "index_prices": {
                 "sp500": sp500_quote.get("price", 0)
@@ -225,9 +271,10 @@ def main():
         "power_trend": market_state.get("power_trend", {}),
     }
 
+    os.makedirs(args.output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    json_file = os.path.join(args.output_dir, f"ftd_detector_{timestamp}.json")
-    md_file = os.path.join(args.output_dir, f"ftd_detector_{timestamp}.md")
+    json_file = os.path.join(args.output_dir, f"ftd_detector_{market}_{timestamp}.json")
+    md_file = os.path.join(args.output_dir, f"ftd_detector_{market}_{timestamp}.md")
 
     generate_json_report(analysis, json_file)
     generate_markdown_report(analysis, md_file)

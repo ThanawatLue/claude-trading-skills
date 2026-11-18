@@ -145,42 +145,60 @@ def get_us_screened_candidates(limit: int = 15) -> list[dict[str, Any]]:
     return candidates[:limit]
 
 
-def get_latest_canslim_candidates() -> list[dict[str, Any]]:
-    """Extract top candidates from the latest CANSLIM report if available."""
-    candidates = []
-    canslim_files = sorted(glob.glob(str(REPORTS_DIR / "canslim_screener_*.json")))
+def get_latest_canslim_candidates(market: str = "TH") -> list[dict[str, Any]]:
+    """Extract top candidates from the latest CANSLIM report matching `market`."""
+    candidates: list[dict[str, Any]] = []
+    market_clean = market.upper()
+    canslim_files = sorted(glob.glob(str(REPORTS_DIR / "canslim_screener_*.json")), reverse=True)
     if not canslim_files:
         return candidates
 
-    latest_file = Path(canslim_files[-1])
-    try:
-        with open(latest_file, encoding="utf-8") as f:
-            data = json.load(f)
-            results = data.get("results", [])
-            for r in results[:10]:
-                sym = r.get("symbol", "")
-                if not sym:
-                    continue
-                candidates.append(
-                    {
-                        "symbol": sym,
-                        "company_name": r.get("company_name", sym),
-                        "sector": r.get("sector", "N/A"),
-                        "price": float(r.get("price") or 0.0),
-                        "score": float(r.get("composite_score") or 0.0),
-                        "source": "CANSLIM Screener",
-                        "highlights": f"CANSLIM Score: {r.get('composite_score', 0):.1f} | 52w Dist: {r.get('n_component', {}).get('distance_from_high_pct', 0):.1f}%",
-                        "raw_features": r,
-                    }
-                )
-    except Exception as e:
-        logger.warning("Failed to parse CANSLIM file %s: %s", latest_file.name, e)
+    for file_str in canslim_files:
+        latest_file = Path(file_str)
+        try:
+            with open(latest_file, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.warning("Failed to parse CANSLIM file %s: %s", latest_file.name, e)
+            continue
+
+        meta = data.get("metadata") or {}
+        file_market = str(
+            (meta.get("screening_options") or {}).get("market") or meta.get("market") or ""
+        ).upper()
+        results = data.get("results", [])
+        if not file_market and results:
+            file_market = (
+                "TH" if any(str(r.get("symbol", "")).endswith(".BK") for r in results) else "US"
+            )
+        if file_market != market_clean:
+            continue
+
+        for r in results[:10]:
+            sym = str(r.get("symbol") or "").strip()
+            if not sym:
+                continue
+            if market_clean == "TH" and not sym.upper().endswith(".BK"):
+                continue
+            candidates.append(
+                {
+                    "symbol": sym,
+                    "company_name": r.get("company_name", sym),
+                    "sector": r.get("sector", "N/A"),
+                    "price": float(r.get("price") or 0.0),
+                    "score": float(r.get("composite_score") or 0.0),
+                    "source": "CANSLIM Screener",
+                    "highlights": f"CANSLIM Score: {r.get('composite_score', 0):.1f} | 52w Dist: {r.get('n_component', {}).get('distance_from_high_pct', 0):.1f}%",
+                    "raw_features": r,
+                }
+            )
+        break
 
     return candidates
 
 
 def get_latest_thai_swing_candidates() -> list[dict[str, Any]]:
-    """Extract top candidates from the latest Thai Swing Screener report if available."""
+    """Extract top momentum and dip-buy candidates from the latest Thai Swing Screener report."""
     candidates = []
     swing_files = sorted(glob.glob(str(REPORTS_DIR / "thai_swing_*.json")))
     if not swing_files:
@@ -190,8 +208,8 @@ def get_latest_thai_swing_candidates() -> list[dict[str, Any]]:
     try:
         with open(latest_file, encoding="utf-8") as f:
             data = json.load(f)
-            items = data.get("momentum", []) + data.get("dip_buy", [])
-            for r in items[:10]:
+            items = list(data.get("momentum", [])[:10]) + list(data.get("dip_buy", [])[:10])
+            for r in items:
                 sym = r.get("symbol", "")
                 if not sym:
                     continue
@@ -466,7 +484,7 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
         raw_pool = get_us_screened_candidates(limit=25) + intraday_cands
     else:
         thai_swing = get_latest_thai_swing_candidates()
-        canslim = get_latest_canslim_candidates()
+        canslim = get_latest_canslim_candidates(market=market_clean)
         vol_leaders = get_volume_anomaly_candidates()
         raw_pool = thai_swing + canslim + vol_leaders + intraday_cands
 
@@ -583,8 +601,24 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
         if sector and sector not in ("N/A", "Volume Surge", "Unknown"):
             selected_sectors.add(sector)
 
-        if len(top_candidates) >= 4:
+        if len(top_candidates) >= 6:
             break
+
+    # Ensure Pilot DIP_BUY candidates are retained if available in the pool
+    has_dip = any(
+        "DIP" in str(c.get("source", "")).upper() or "PULLBACK" in str(c.get("source", "")).upper()
+        for c in top_candidates
+    )
+    if not has_dip:
+        picked_syms = {c["symbol"] for c in top_candidates}
+        for cand in combined_candidates:
+            src_u = str(cand.get("source", "")).upper()
+            if ("DIP" in src_u or "PULLBACK" in src_u) and cand["symbol"] not in picked_syms:
+                if len(top_candidates) >= 6:
+                    top_candidates[-1] = cand
+                else:
+                    top_candidates.append(cand)
+                break
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     curr_sym = "$" if market_clean == "US" else "฿"

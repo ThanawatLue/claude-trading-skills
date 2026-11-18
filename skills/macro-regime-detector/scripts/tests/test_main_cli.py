@@ -47,3 +47,45 @@ def test_output_dir_created_when_missing(tmp_path, monkeypatch):
         macro_regime_detector.main()
 
     assert new_dir.exists()
+
+
+def test_falls_back_to_yf_when_no_api_key_or_fmp_empty(tmp_path, monkeypatch):
+    """Falls back cleanly to YFClient when FMP_API_KEY is absent or FMP returns empty."""
+    monkeypatch.delenv("FMP_API_KEY", raising=False)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["macro_regime_detector.py", "--output-dir", str(tmp_path)],
+    )
+
+    _fake_comp = {
+        "score": 60,
+        "signal": "Healthy",
+        "data_available": True,
+        "direction": "up",
+        "roc_3m": 1.0,
+        "roc_12m": 5.0,
+        "crossover": {"type": "none", "bars_ago": None},
+        "momentum_qualifier": "",
+    }
+    mock_yf = MagicMock()
+    mock_yf.get_historical_prices.return_value = {
+        "historical": [{"date": "2026-11-16", "close": 500.0}]
+    }
+    mock_yf.get_treasury_rates.return_value = None
+    mock_yf.get_api_stats.return_value = {"api_calls_made": 0, "cache_entries": 9}
+
+    with (
+        patch("macro_regime_detector.YFClient", return_value=mock_yf),
+        patch("macro_regime_detector.calculate_concentration", return_value=_fake_comp),
+        patch("macro_regime_detector.calculate_yield_curve", return_value=_fake_comp),
+        patch("macro_regime_detector.calculate_credit_conditions", return_value=_fake_comp),
+        patch("macro_regime_detector.calculate_size_factor", return_value=_fake_comp),
+        patch("macro_regime_detector.calculate_equity_bond", return_value=_fake_comp),
+        patch("macro_regime_detector.calculate_sector_rotation", return_value=_fake_comp),
+    ):
+        macro_regime_detector.main()
+
+    reports = list(tmp_path.glob("macro_regime_*.json"))
+    assert len(reports) == 1
+    mock_yf.get_historical_prices.assert_called()

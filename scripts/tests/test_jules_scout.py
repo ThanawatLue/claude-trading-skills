@@ -77,6 +77,91 @@ class TestJulesScout(unittest.TestCase):
             if intraday_file.exists():
                 intraday_file.unlink()
 
+    def test_canslim_candidates_filtered_strictly_by_market(self):
+        import json
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            th_f = reports / "canslim_screener_2026-11-17_100000.json"
+            us_f = reports / "canslim_screener_2026-11-17_133000.json"
+            th_f.write_text(
+                json.dumps(
+                    {
+                        "metadata": {"screening_options": {"market": "TH"}},
+                        "results": [
+                            {
+                                "symbol": "TIDLOR.BK",
+                                "company_name": "Tidlor",
+                                "sector": "Finance",
+                                "price": 19.2,
+                                "composite_score": 68.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            us_f.write_text(
+                json.dumps(
+                    {
+                        "metadata": {"screening_options": {"market": "US"}},
+                        "results": [
+                            {
+                                "symbol": "APH",
+                                "company_name": "Amphenol",
+                                "sector": "Electronic Technology",
+                                "price": 78.2,
+                                "composite_score": 72.0,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(js, "REPORTS_DIR", reports):
+                th_cands = js.get_latest_canslim_candidates(market="TH")
+                self.assertEqual([c["symbol"] for c in th_cands], ["TIDLOR.BK"])
+
+    def test_thai_swing_preserves_dip_buy_when_momentum_has_12_stocks(self):
+        import json
+        import tempfile
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            swing_f = reports / "thai_swing_2026-11-17_100000.json"
+            momentum = [
+                {
+                    "symbol": f"MOM{i}.BK",
+                    "name": f"Mom{i}",
+                    "sector": "Finance",
+                    "strategy": "MOMENTUM",
+                    "price": 10.0,
+                    "score": 80.0 - i,
+                }
+                for i in range(12)
+            ]
+            dip_buy = [
+                {
+                    "symbol": "PLANB.BK",
+                    "name": "Plan B",
+                    "sector": "Commercial Services",
+                    "strategy": "DIP_BUY",
+                    "price": 7.5,
+                    "score": 87.7,
+                }
+            ]
+            swing_f.write_text(
+                json.dumps({"momentum": momentum, "dip_buy": dip_buy}),
+                encoding="utf-8",
+            )
+            with patch.object(js, "REPORTS_DIR", reports):
+                cands = js.get_latest_thai_swing_candidates()
+                syms = [c["symbol"] for c in cands]
+                self.assertIn("PLANB.BK", syms)
+
 
 if __name__ == "__main__":
     unittest.main()

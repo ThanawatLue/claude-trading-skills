@@ -37,6 +37,13 @@ REGIME_SCORES = {
     "transitional": 50,
     "inflationary": 40,
     "contraction": 20,
+    "strong bull": 80,
+    "healthy uptrend": 65,
+    "bullish": 75,
+    "neutral": 50,
+    "mixed / corrective": 42,
+    "bear regime": 20,
+    "bearish": 20,
 }
 
 
@@ -87,6 +94,11 @@ def extract_uptrend_score(data: Optional[dict]) -> Optional[int]:
         return None
     if "uptrend_score" in data:
         return int(data["uptrend_score"])
+    if isinstance(data.get("breadth"), dict) and "pct_above_sma50" in data["breadth"]:
+        b = data["breadth"]
+        p50 = float(b["pct_above_sma50"])
+        p200 = float(b["pct_above_sma200"]) if b.get("pct_above_sma200") is not None else p50
+        return max(0, min(100, int(round(0.6 * p50 + 0.4 * p200))))
     if "composite" in data and isinstance(data["composite"], dict):
         c = data["composite"]
         if "composite_score" in c:
@@ -107,17 +119,30 @@ def extract_uptrend_score(data: Optional[dict]) -> Optional[int]:
 
 
 def extract_regime_score(data: Optional[dict]) -> Optional[int]:
-    """Extract regime score from macro-regime-detector output."""
+    """Extract regime score from macro-regime-detector or breadth-regime output."""
     if data is None:
         return None
     if "regime_score" in data:
         return int(data["regime_score"])
-    if "regime" in data:
-        regime = data["regime"].lower().strip()
+    reg = data.get("regime")
+    if isinstance(reg, dict):
+        curr = reg.get("current_regime") or reg.get("regime_label")
+        if curr:
+            return REGIME_SCORES.get(str(curr).lower().strip(), 50)
+    if isinstance(reg, str) and reg.strip():
+        return REGIME_SCORES.get(reg.lower().strip(), 50)
+    if "current_regime" in data and data["current_regime"]:
+        regime = str(data["current_regime"]).lower().strip()
         return REGIME_SCORES.get(regime, 50)
-    if "current_regime" in data:
-        regime = data["current_regime"].lower().strip()
-        return REGIME_SCORES.get(regime, 50)
+    comp = data.get("composite")
+    if isinstance(comp, dict):
+        score = (
+            comp.get("composite_score")
+            if comp.get("composite_score") is not None
+            else comp.get("score")
+        )
+        if score is not None:
+            return max(0, min(100, int(float(score))))
     return None
 
 
@@ -125,10 +150,18 @@ def extract_regime_name(data: Optional[dict]) -> str:
     """Extract regime name from data."""
     if data is None:
         return "Unknown"
-    if "regime" in data:
-        return data["regime"].capitalize()
-    if "current_regime" in data:
-        return data["current_regime"].capitalize()
+    reg = data.get("regime")
+    if isinstance(reg, dict):
+        curr = reg.get("regime_label") or reg.get("current_regime")
+        if curr:
+            return str(curr).capitalize()
+    if isinstance(reg, str) and reg.strip():
+        return reg.capitalize()
+    if "current_regime" in data and data["current_regime"]:
+        return str(data["current_regime"]).capitalize()
+    comp = data.get("composite")
+    if isinstance(comp, dict) and comp.get("zone"):
+        return str(comp["zone"]).capitalize()
     return "Unknown"
 
 
@@ -138,6 +171,21 @@ def extract_top_risk_score(data: Optional[dict]) -> Optional[int]:
         return None
     if "top_risk_score" in data:
         return int(data["top_risk_score"])
+    mds = data.get("market_distribution_state")
+    if isinstance(mds, dict):
+        risk_map = {"NORMAL": 90, "CAUTION": 65, "HIGH": 35, "SEVERE": 15}
+        level = str(mds.get("overall_risk_level") or "").upper()
+        if level in risk_map:
+            return risk_map[level]
+        idx_res = mds.get("index_results") or []
+        d25_vals = [
+            int(r["d25_count"])
+            for r in idx_res
+            if isinstance(r, dict) and r.get("d25_count") is not None
+        ]
+        if d25_vals:
+            days = max(d25_vals)
+            return 90 if days <= 2 else (65 if days <= 4 else (40 if days <= 6 else 15))
     if "composite" in data and isinstance(data["composite"], dict):
         c = data["composite"]
         score = c.get("composite_score") or c.get("score")
@@ -161,11 +209,29 @@ def extract_top_risk_score(data: Optional[dict]) -> Optional[int]:
 
 
 def extract_ftd_score(data: Optional[dict]) -> Optional[int]:
-    """Extract FTD score (inverted - high FTD = low score)."""
+    """Extract FTD score from FTD detector output or legacy anomaly payload."""
     if data is None:
         return None
     if "ftd_score" in data:
         return int(data["ftd_score"])
+    ms = data.get("market_state")
+    if isinstance(ms, dict):
+        state = str(ms.get("combined_state") or "").upper()
+        qs = (data.get("quality_score") or {}).get("total_score")
+        if state == "FTD_CONFIRMED":
+            if qs is not None and float(qs) > 0:
+                return max(60, min(100, int(round(float(qs)))))
+            return 80
+        state_map = {
+            "FTD_WINDOW": 60,
+            "RALLY_ATTEMPT": 50,
+            "NO_SIGNAL": 50,
+            "CORRECTION": 30,
+            "RALLY_FAILED": 25,
+            "FTD_INVALIDATED": 20,
+        }
+        if state in state_map:
+            return state_map[state]
     if "anomaly_level" in data:
         level = data["anomaly_level"].lower()
         mapping = {"none": 90, "low": 80, "moderate": 55, "elevated": 35, "critical": 15}
@@ -187,11 +253,36 @@ def extract_theme_score(data: Optional[dict]) -> Optional[int]:
 
 
 def extract_sector_score(data: Optional[dict]) -> Optional[int]:
-    """Extract sector condition score."""
+    """Extract sector condition score from sector analyst, heatmap, or summary."""
     if data is None:
         return None
     if "sector_score" in data:
         return int(data["sector_score"])
+    sectors = data.get("sectors")
+    if isinstance(sectors, list) and sectors:
+        mom_scores = [
+            float(s["momentum_score"])
+            for s in sectors
+            if isinstance(s, dict) and s.get("momentum_score") is not None
+        ]
+        if mom_scores:
+            sorted_m = sorted(mom_scores)
+            n = len(sorted_m)
+            med_mom = sorted_m[n // 2] if n % 2 else (sorted_m[n // 2 - 1] + sorted_m[n // 2]) / 2.0
+            pos_ratio = sum(1 for m in mom_scores if m > 0) / n
+            score = 50.0 + med_mom * 2.0 + (pos_ratio - 0.5) * 30.0
+            return max(10, min(95, int(round(score))))
+    groups = data.get("groups")
+    if isinstance(groups, dict) and groups.get("score") is not None:
+        group_score = float(groups["score"])
+        trends = data.get("trends")
+        if isinstance(trends, dict):
+            up = int(trends.get("uptrend_count") or 0)
+            down = int(trends.get("downtrend_count") or 0)
+            if up + down > 0:
+                up_pct = (up / (up + down)) * 100.0
+                return max(0, min(100, int(round(0.6 * group_score + 0.4 * up_pct))))
+        return max(0, min(100, int(round(group_score))))
     if "dispersion" in data and "leadership" in data:
         disp = data["dispersion"]
         lead = data["leadership"].lower()
@@ -339,6 +430,30 @@ def determine_bias(
             return "VALUE"
         if lead in ["utilities", "staples", "healthcare"]:
             return "DEFENSIVE"
+
+    if sector_data and isinstance(sector_data.get("sectors"), list) and sector_data["sectors"]:
+        top_names = " ".join(
+            str(s.get("sector") or "").lower()
+            for s in sector_data["sectors"][:2]
+            if isinstance(s, dict)
+        )
+        if any(
+            k in top_names
+            for k in ("tech", "electronic", "communication", "consumer discretionary")
+        ):
+            return "GROWTH"
+        if any(k in top_names for k in ("financ", "energy", "material", "industrial", "mineral")):
+            return "VALUE"
+        if any(k in top_names for k in ("utilit", "staple", "health", "non-durables")):
+            return "DEFENSIVE"
+
+    if sector_data and isinstance(sector_data.get("groups"), dict):
+        diff = sector_data["groups"].get("difference")
+        if diff is not None:
+            if float(diff) > 0.05:
+                return "GROWTH"
+            if float(diff) < -0.05:
+                return "DEFENSIVE"
 
     # Institutional flow
     if institutional_data and "sector_flows" in institutional_data:
@@ -592,6 +707,7 @@ def main():
 
     result = {
         "schema_version": "1.0",
+        "market": market,
         "metadata": {"generated_at": now.isoformat(), "market": market},
         "generated_at": now.isoformat(),
         "exposure_ceiling_pct": exposure_ceiling,
@@ -612,8 +728,8 @@ def main():
     # Generate timestamp for filenames
     timestamp = now.strftime("%Y-%m-%d_%H%M%S")
 
-    # Write JSON
-    json_path = args.output_dir / f"exposure_posture_{timestamp}.json"
+    # Write JSON (market-tagged so TH and US files never collide)
+    json_path = args.output_dir / f"exposure_posture_{market}_{timestamp}.json"
     with open(json_path, "w") as f:
         json.dump(result, f, indent=2)
     print(f"JSON report: {json_path}")
@@ -621,7 +737,7 @@ def main():
     # Write markdown unless --json-only
     if not args.json_only:
         md_content = generate_markdown_report(result)
-        md_path = args.output_dir / f"exposure_posture_{timestamp}.md"
+        md_path = args.output_dir / f"exposure_posture_{market}_{timestamp}.md"
         with open(md_path, "w") as f:
             f.write(md_content)
         print(f"Markdown report: {md_path}")

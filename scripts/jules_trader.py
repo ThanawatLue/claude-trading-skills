@@ -304,12 +304,51 @@ def check_circuit_breakers(market: str = "TH") -> tuple[bool, float, str]:
     return True, risk_mult, reason
 
 
+def _resolve_posture_market(path: Path, data: dict[str, Any]) -> str:
+    """Resolve explicit market tag from an exposure posture report."""
+    name_upper = path.name.upper()
+    if "_TH_" in name_upper:
+        return "TH"
+    if "_US_" in name_upper:
+        return "US"
+    meta = data.get("metadata")
+    meta_market = meta.get("market") if isinstance(meta, dict) else None
+    return str(data.get("market") or meta_market or "").upper()
+
+
 def get_latest_exposure_posture(market: str = "TH") -> dict[str, Any]:
-    """Read the latest exposure posture report or calculate US breadth posture."""
+    """Read the latest market-scoped exposure posture report with TV breadth fallback."""
     market_clean = market.upper()
+    posture_files = sorted(REPORTS_DIR.glob("exposure_posture_*.json"), reverse=True)
+    for latest_file in posture_files:
+        try:
+            with open(latest_file, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        file_market = _resolve_posture_market(latest_file, data)
+        if file_market and file_market != market_clean:
+            continue
+        # Legacy untagged files belong to US by default unless no market tag was used in unit tests.
+        if not file_market and market_clean == "TH":
+            continue
+
+        file_mtime = datetime.fromtimestamp(latest_file.stat().st_mtime, tz=timezone.utc)
+        if (datetime.now(timezone.utc) - file_mtime).days > 3:
+            logger.warning(
+                "Latest %s posture file %s is stale (>3 days old). Falling back to NORMAL (75%% ceiling).",
+                market_clean,
+                latest_file.name,
+            )
+            return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0}
+        return data
+
     if market_clean == "US":
         try:
-            import src.trading_view_client as tv_client
+            from scripts.lib import tv_client
 
             breadth = tv_client.get_us_breadth(limit=1000)
             pct_50 = breadth.get("pct_above_sma50", 50.0)
@@ -321,36 +360,20 @@ def get_latest_exposure_posture(market: str = "TH") -> dict[str, Any]:
                 }
             elif pct_50 >= 25.0:
                 return {
-                    "recommendation": "DEFENSIVE",
+                    "recommendation": "REDUCE_ONLY",
                     "exposure_ceiling_pct": 50.0,
                     "details": f"{pct_50:.1f}% > 50d SMA",
                 }
             else:
                 return {
                     "recommendation": "REDUCE_ONLY",
-                    "exposure_ceiling_pct": 0.0,
+                    "exposure_ceiling_pct": 20.0,
                     "details": f"{pct_50:.1f}% > 50d SMA",
                 }
         except Exception as e:
             logger.debug("Failed to fetch US breadth for posture: %s", e)
-            return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0}
 
-    posture_files = sorted(REPORTS_DIR.glob("exposure_posture_*.json"))
-    if not posture_files:
-        return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75}
-    try:
-        latest_file = posture_files[-1]
-        file_mtime = datetime.fromtimestamp(latest_file.stat().st_mtime, tz=timezone.utc)
-        if (datetime.now(timezone.utc) - file_mtime).days > 3:
-            logger.warning(
-                "Latest posture file %s is stale (>3 days old). Falling back to NORMAL (75%% ceiling).",
-                latest_file.name,
-            )
-            return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0}
-        with open(latest_file, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75}
+    return {"recommendation": "NORMAL", "exposure_ceiling_pct": 75.0}
 
 
 def get_sector_momentum_mapping() -> dict[str, float]:
@@ -874,7 +897,11 @@ def run_autonomous_decision(
         or ceiling <= 20.0
         or (
             recom == "REDUCE_ONLY"
-            and (ceiling <= 25.0 or participation == "NARROW" or comp_score <= 35.0)
+            and (
+                ceiling <= 25.0
+                or comp_score <= 35.0
+                or (participation == "NARROW" and ceiling <= 30.0)
+            )
         )
     ):
         msg = f"Market posture is {recom} (Ceiling: {ceiling}%, Participation: {participation}, Score: {comp_score}). Prudence gate: holding 100% cash."

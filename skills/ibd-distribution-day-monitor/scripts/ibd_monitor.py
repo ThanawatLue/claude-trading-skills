@@ -52,6 +52,7 @@ DEFAULT_CONFIG_PATH = HERE.parent / "config" / "default.yaml"
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--symbols", default=None, help="Comma-separated, e.g. QQQ,SPY")
+    p.add_argument("--market", choices=["US", "TH"], default="US", help="Market context (US or TH)")
     p.add_argument("--lookback-days", type=int, default=None)
     p.add_argument("--instrument", default=None, help="TQQQ or QQQ")
     p.add_argument("--current-exposure", type=int, default=None)
@@ -270,6 +271,7 @@ def build_payload(
     overall_risk: str,
     portfolio_action: dict,
     aggregate_audit: dict,
+    market: str = "US",
 ) -> dict:
     """Assemble the final JSON payload."""
     primary = next((r.symbol for r in index_results if r.symbol == "QQQ"), None)
@@ -277,6 +279,10 @@ def build_payload(
         primary = index_results[0].symbol
 
     return {
+        "metadata": {
+            "market": market.upper(),
+            "generated_at": aggregate_audit.get("generated_at"),
+        },
         "market_distribution_state": {
             "as_of": aggregate_audit.get("as_of_resolved"),
             "generated_at": aggregate_audit.get("generated_at"),
@@ -340,23 +346,28 @@ def main(argv: list[str] | None = None) -> int:
             {"symbol": s, "benchmark_name": f"{s} proxy"} for s in config["symbols_override"]
         ]
 
+    market = getattr(args, "market", "US").upper()
+
     # Data client — yfinance by default; FMP when --api-key or FMP_API_KEY is set
     api_key = resolve_api_key(args.api_key, config)
+    using_yf = False
     if api_key:
         client = build_fmp_client(api_key=api_key)
 
-        # Test if API key is exhausted or invalid
-        client.get_historical_prices("^GSPC", 1)
-        if getattr(client, "rate_limit_reached", False):
+        # Test if API key is exhausted, restricted (403), or invalid
+        canary = client.get_historical_prices("^GSPC", 1)
+        if getattr(client, "rate_limit_reached", False) or not canary:
             print(
-                "⚠️  FMP API rate limit reached or key invalid. Falling back to Yahoo Finance.",
+                "⚠️  FMP API unavailable/rate-limited. Falling back to Yahoo Finance.",
                 file=sys.stderr,
             )
             client = build_yf_client()
+            using_yf = True
         else:
             print("Using FMP API client.")
     else:
         client = build_yf_client()
+        using_yf = True
         print("Using Yahoo Finance client (no API key required).")
 
     rule = _build_rule(config)
@@ -373,6 +384,14 @@ def main(argv: list[str] | None = None) -> int:
         symbol = entry["symbol"]
         benchmark = entry.get("benchmark_name") or f"{symbol} Proxy"
         history, fetch_audit = fetch_ohlcv(client, symbol, days=lookback + 5)
+        if not history and not using_yf:
+            print(
+                f"⚠️  FMP failed for {symbol}; falling back to Yahoo Finance.",
+                file=sys.stderr,
+            )
+            client = build_yf_client()
+            using_yf = True
+            history, fetch_audit = fetch_ohlcv(client, symbol, days=lookback + 5)
         aggregate_audit_flags.extend(fetch_audit.get("audit_flags", []))
         skipped_sessions_all.extend(fetch_audit.get("skipped_sessions", []))
 
@@ -415,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
 
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     aggregate_audit = {
-        "data_source": "yfinance" if not api_key else "fmp",
+        "data_source": "yfinance" if using_yf else "fmp",
         "rule_version": RULE_VERSION,
         "as_of_resolved": as_of_resolved,
         "lookback_days": lookback,
@@ -440,13 +459,14 @@ def main(argv: list[str] | None = None) -> int:
         overall_risk=overall_risk,
         portfolio_action=asdict(portfolio_action_obj),
         aggregate_audit=aggregate_audit,
+        market=market,
     )
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    json_path = output_dir / f"{REPORT_PREFIX}_{timestamp}.json"
-    md_path = output_dir / f"{REPORT_PREFIX}_{timestamp}.md"
+    json_path = output_dir / f"{REPORT_PREFIX}_{market}_{timestamp}.json"
+    md_path = output_dir / f"{REPORT_PREFIX}_{market}_{timestamp}.md"
     write_json(payload, json_path)
     write_markdown(payload, md_path)
     print(f"Wrote {json_path}")

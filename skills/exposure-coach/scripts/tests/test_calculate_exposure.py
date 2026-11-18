@@ -12,7 +12,10 @@ from calculate_exposure import (
     determine_participation,
     determine_recommendation,
     extract_breadth_score,
+    extract_ftd_score,
+    extract_regime_name,
     extract_regime_score,
+    extract_sector_score,
     extract_top_risk_score,
     extract_uptrend_score,
     generate_markdown_report,
@@ -479,3 +482,114 @@ class TestIntegration:
             assert data["exposure_ceiling_pct"] < 50
         finally:
             sys.argv = original_argv
+
+
+class TestUpstreamSkillSchemas:
+    """Tests ensuring extractors handle real schemas from repo skills."""
+
+    def test_extract_uptrend_from_tv_breadth_schema(self):
+        data = {"breadth": {"pct_above_sma50": 24.56, "pct_above_sma200": 48.33}}
+        # Weighted 0.6 * 24.56 + 0.4 * 48.33 = 34.068 -> 34
+        assert extract_uptrend_score(data) == 34
+
+    def test_extract_regime_from_macro_detector_nested_dict(self):
+        data = {
+            "regime": {"current_regime": "broadening", "regime_label": "Broadening"},
+            "composite": {"composite_score": 68.5},
+        }
+        assert extract_regime_score(data) == 80
+        assert extract_regime_name(data) == "Broadening"
+
+    def test_extract_regime_from_thai_set50_breadth_composite(self):
+        data = {
+            "composite": {"composite_score": 51.8, "zone": "Neutral"},
+            "metadata": {"market": "TH"},
+        }
+        assert extract_regime_score(data) == 51
+        assert extract_regime_name(data) == "Neutral"
+
+    def test_extract_top_risk_from_ibd_monitor_schema(self):
+        data_high = {
+            "market_distribution_state": {
+                "overall_risk_level": "HIGH",
+                "index_results": [{"symbol": "QQQ", "d25_count": 5}],
+            }
+        }
+        assert extract_top_risk_score(data_high) == 35
+
+        data_normal = {
+            "market_distribution_state": {
+                "overall_risk_level": "NORMAL",
+                "index_results": [{"symbol": "QQQ", "d25_count": 1}],
+            }
+        }
+        assert extract_top_risk_score(data_normal) == 90
+
+    def test_extract_ftd_from_ftd_detector_schema(self):
+        confirmed = {
+            "market_state": {"combined_state": "FTD_CONFIRMED"},
+            "quality_score": {"total_score": 85},
+        }
+        assert extract_ftd_score(confirmed) == 85
+
+        invalidated = {
+            "market_state": {"combined_state": "FTD_INVALIDATED"},
+            "quality_score": {"total_score": 0},
+        }
+        assert extract_ftd_score(invalidated) == 20
+
+        correction = {
+            "market_state": {"combined_state": "CORRECTION"},
+            "quality_score": {"total_score": 0},
+        }
+        assert extract_ftd_score(correction) == 30
+
+    def test_extract_sector_and_bias_from_heatmap_schema(self):
+        heatmap = {
+            "sectors": [
+                {"sector": "Electronic Technology", "momentum_score": 14.0},
+                {"sector": "Technology Services", "momentum_score": 10.0},
+                {"sector": "Finance", "momentum_score": 4.0},
+                {"sector": "Utilities", "momentum_score": -2.0},
+            ]
+        }
+        score = extract_sector_score(heatmap)
+        assert score is not None
+        assert 55 <= score <= 95
+        assert determine_bias("Unknown", None, heatmap, None) == "GROWTH"
+
+    def test_extract_sector_from_sector_rotation_schema(self):
+        rot = {
+            "groups": {"score": 54, "difference": 0.0092, "regime": "balanced"},
+            "trends": {"uptrend_count": 2, "downtrend_count": 9},
+        }
+        score = extract_sector_score(rot)
+        assert score is not None
+        assert 30 <= score <= 55
+
+    def test_output_filename_is_market_tagged(self, tmp_path):
+        import sys
+
+        from calculate_exposure import main
+
+        breadth_file = tmp_path / "breadth_th.json"
+        breadth_file.write_text(json.dumps({"composite_score": 55}))
+        output_dir = tmp_path / "reports"
+
+        orig = sys.argv
+        sys.argv = [
+            "calculate_exposure.py",
+            "--market",
+            "TH",
+            "--breadth",
+            str(breadth_file),
+            "--output-dir",
+            str(output_dir),
+            "--json-only",
+        ]
+        try:
+            assert main() == 0
+            th_files = list(output_dir.glob("exposure_posture_TH_*.json"))
+            assert len(th_files) == 1
+        finally:
+            sys.argv = orig

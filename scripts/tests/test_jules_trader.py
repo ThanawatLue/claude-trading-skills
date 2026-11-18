@@ -620,6 +620,82 @@ class TestJulesTrader(unittest.TestCase):
         self.assertEqual(order_data["decision_trace"]["decision"], "open")
         self.assertTrue(order_data["decision_trace"]["gates"]["passed"])
 
+    def test_get_latest_exposure_posture_filters_strictly_by_market(self):
+        """TH must not read US posture files and US must read US posture files when present."""
+        import os
+
+        reports = self.test_dir / "reports"
+        reports.mkdir(parents=True, exist_ok=True)
+        th_file = reports / "exposure_posture_TH_2026-11-17_100000.json"
+        us_file = reports / "exposure_posture_US_2026-11-17_134000.json"
+        th_file.write_text(
+            json.dumps(
+                {
+                    "metadata": {"market": "TH"},
+                    "recommendation": "NEW_ENTRY_ALLOWED",
+                    "exposure_ceiling_pct": 65,
+                }
+            ),
+            encoding="utf-8",
+        )
+        us_file.write_text(
+            json.dumps(
+                {
+                    "metadata": {"market": "US"},
+                    "recommendation": "CASH_PRIORITY",
+                    "exposure_ceiling_pct": 10,
+                }
+            ),
+            encoding="utf-8",
+        )
+        os.utime(th_file, None)
+        os.utime(us_file, None)
+
+        with patch.object(jt, "REPORTS_DIR", reports):
+            th_posture = jt.get_latest_exposure_posture(market="TH")
+            us_posture = jt.get_latest_exposure_posture(market="US")
+
+        self.assertEqual(th_posture["recommendation"], "NEW_ENTRY_ALLOWED")
+        self.assertEqual(th_posture["exposure_ceiling_pct"], 65)
+        self.assertEqual(us_posture["recommendation"], "CASH_PRIORITY")
+        self.assertEqual(us_posture["exposure_ceiling_pct"], 10)
+
+    def test_prudence_gate_allows_pilot_dip_buy_when_reduce_only_ceiling_above_30_even_if_narrow(
+        self,
+    ):
+        """REDUCE_ONLY with ceiling > 30% and score > 35 should allow Pilot DIP_BUY despite NARROW participation."""
+        mission = {
+            "market": "TH",
+            "candidates": [
+                {
+                    "symbol": "PLANB.BK",
+                    "price": 7.50,
+                    "stop": 7.15,
+                    "target": 8.20,
+                    "sector": "Commercial Services",
+                    "source": "Thai Swing (DIP_BUY)",
+                    "score": 87.7,
+                }
+            ],
+        }
+        self.test_mission_file.write_text(json.dumps(mission), encoding="utf-8")
+
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={
+                "recommendation": "REDUCE_ONLY",
+                "exposure_ceiling_pct": 38.0,
+                "participation": "NARROW",
+                "composite_score": 41.2,
+                "inputs_provided": ["breadth", "uptrend", "regime", "sector"],
+            },
+        ):
+            res = jt.run_autonomous_decision(force=True, market="TH")
+
+        self.assertEqual(res["status"], "ORDER_STAGED")
+        self.assertEqual(res["symbol"], "PLANB.BK")
+
 
 if __name__ == "__main__":
     unittest.main()

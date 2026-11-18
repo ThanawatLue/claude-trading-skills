@@ -240,8 +240,10 @@ def load_regime_recommendation(
             for p in files
             if market_u in p.name.upper() or _json_market(p) in {market_u, market_u[:2]}
         ]
-        if market_files:
-            files = market_files
+        if not market_files:
+            # Allow untagged legacy files only, never a file explicitly tagged for another market
+            market_files = [p for p in files if not _json_market(p)]
+        files = market_files
     if not files:
         return None
     try:
@@ -260,5 +262,7 @@ def _json_market(path: Path) -> str:
     except (OSError, json.JSONDecodeError):
         return ""
     if isinstance(data, dict):
-        return str(data.get("market") or "").upper()
+        meta = data.get("metadata")
+        meta_market = meta.get("market") if isinstance(meta, dict) else None
+        return str(data.get("market") or meta_market or "").upper()
     return ""

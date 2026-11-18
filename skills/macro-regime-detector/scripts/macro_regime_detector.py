@@ -49,6 +49,7 @@ from calculators.yield_curve_calculator import calculate_yield_curve
 from fmp_client import FMPClient
 from report_generator import generate_json_report, generate_markdown_report
 from scorer import calculate_composite_score, check_regime_consistency, classify_regime
+from yf_client import YFClient
 
 # ETF symbols needed for analysis
 REQUIRED_ETFS = ["RSP", "SPY", "IWM", "TLT", "SHY", "HYG", "LQD", "XLY", "XLP"]
@@ -61,6 +62,11 @@ def parse_arguments():
     )
     parser.add_argument(
         "--api-key", help="FMP API key (defaults to FMP_API_KEY environment variable)"
+    )
+    parser.add_argument(
+        "--use-yf",
+        action="store_true",
+        help="Use Yahoo Finance directly instead of FMP API",
     )
     parser.add_argument(
         "--output-dir",
@@ -85,31 +91,54 @@ def main():
     print("=" * 70)
     print()
 
-    # Initialize FMP client
-    try:
-        client = FMPClient(api_key=args.api_key)
-        print("FMP API client initialized")
-    except ValueError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
+    # Initialize FMP client with Yahoo Finance fallback
+    yf_client = None
+    if getattr(args, "use_yf", False):
+        client = YFClient()
+        yf_client = client
+        print("Using Yahoo Finance client (--use-yf)")
+        data_source = "Yahoo Finance"
+    else:
+        try:
+            client = FMPClient(api_key=args.api_key)
+            print("FMP API client initialized")
+            data_source = "FMP API"
+        except ValueError:
+            client = YFClient()
+            yf_client = client
+            print("Using Yahoo Finance client (FMP API key not set)")
+            data_source = "Yahoo Finance"
 
     # ================================================================
-    # Step 1: Fetch Market Data (9 ETFs + Treasury rates = 10 API calls)
+    # Step 1: Fetch Market Data (9 ETFs + Treasury rates)
     # ================================================================
     print()
     print("Step 1/4: Fetching Market Data")
     print("-" * 70)
 
     historical = {}
+    used_yf = yf_client is not None
     for etf in REQUIRED_ETFS:
         print(f"  Fetching {etf} ({args.days} days)...", end=" ", flush=True)
         data = client.get_historical_prices(etf, days=args.days)
-        if data and "historical" in data:
+        restricted = bool(
+            getattr(client, "rate_limit_reached", False)
+            or getattr(client, "auth_restricted", False)
+        )
+        if (not data or not data.get("historical")) and yf_client is None and restricted:
+            yf_client = YFClient()
+            data = yf_client.get_historical_prices(etf, days=args.days)
+            used_yf = True
+            client = yf_client
+        if data and "historical" in data and data["historical"]:
             historical[etf] = data["historical"]
             print(f"OK ({len(historical[etf])} bars)")
         else:
             print("FAILED")
             historical[etf] = []
+
+    if used_yf and data_source == "FMP API":
+        data_source = "FMP API + Yahoo Finance fallback"
 
     # Critical check: need at least SPY
     if not historical.get("SPY"):
@@ -118,7 +147,9 @@ def main():
 
     # Fetch treasury rates
     print("  Fetching Treasury rates...", end=" ", flush=True)
-    treasury_rates = client.get_treasury_rates(days=args.days)
+    treasury_rates = (
+        client.get_treasury_rates(days=args.days) if hasattr(client, "get_treasury_rates") else None
+    )
     if treasury_rates:
         print(f"OK ({len(treasury_rates)} entries)")
     else:
@@ -237,7 +268,8 @@ def main():
     analysis = {
         "metadata": {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "data_source": "FMP API",
+            "market": "US",
+            "data_source": data_source,
             "history_days": args.days,
             "api_calls": client.get_api_stats(),
             "etfs_analyzed": REQUIRED_ETFS,

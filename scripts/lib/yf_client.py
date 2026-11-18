@@ -53,7 +53,11 @@ def _yf_download(symbol: str, days: int) -> pd.DataFrame:
     if _CACHE_OK and _cache:
         behind = _cache.days_behind(symbol)
         if behind <= 1:
-            bars = _cache.get_bars(symbol, days)
+            bars = [
+                b
+                for b in _cache.get_bars(symbol, days)
+                if b.get("close") is not None and b.get("close") == b.get("close")
+            ]
             if len(bars) >= days // 2:
                 df = pd.DataFrame(bars)
                 df["Date"] = pd.to_datetime(df["date"])
@@ -83,21 +87,29 @@ def _yf_download(symbol: str, days: int) -> pd.DataFrame:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [c[0] for c in df.columns]
 
+    if not df.empty and "Close" in df.columns:
+        df = df.dropna(subset=["Close"])
+
     # Save to cache
     if _CACHE_OK and _cache and not df.empty:
         bars = []
         for dt, row in df.iterrows():
+            close_val = row.get("Close")
+            if pd.isna(close_val):
+                continue
+            vol_val = row.get("Volume", 0)
             bars.append(
                 {
                     "date": dt.strftime("%Y-%m-%d"),
-                    "open": float(row.get("Open", 0)),
-                    "high": float(row.get("High", 0)),
-                    "low": float(row.get("Low", 0)),
-                    "close": float(row.get("Close", 0)),
-                    "volume": int(row.get("Volume", 0)),
+                    "open": float(close_val if pd.isna(row.get("Open")) else row.get("Open")),
+                    "high": float(close_val if pd.isna(row.get("High")) else row.get("High")),
+                    "low": float(close_val if pd.isna(row.get("Low")) else row.get("Low")),
+                    "close": float(close_val),
+                    "volume": 0 if pd.isna(vol_val) else int(vol_val),
                 }
             )
-        _cache.upsert_bars(symbol, bars)
+        if bars:
+            _cache.upsert_bars(symbol, bars)
 
     return df.tail(days)
 
@@ -245,17 +257,24 @@ class YFClient:
 
             historical = []
             for dt, row in df.iloc[::-1].iterrows():  # newest first
+                close_val = row.get("Close")
+                if pd.isna(close_val):
+                    continue
+                open_val = row.get("Open")
+                high_val = row.get("High")
+                low_val = row.get("Low")
+                vol_val = row.get("Volume")
                 historical.append(
                     {
                         "date": dt.strftime("%Y-%m-%d"),
-                        "open": round(float(row.get("Open", 0)), 4),
-                        "high": round(float(row.get("High", 0)), 4),
-                        "low": round(float(row.get("Low", 0)), 4),
-                        "close": round(float(row.get("Close", 0)), 4),
-                        "volume": int(row.get("Volume", 0)),
+                        "open": round(float(close_val if pd.isna(open_val) else open_val), 4),
+                        "high": round(float(close_val if pd.isna(high_val) else high_val), 4),
+                        "low": round(float(close_val if pd.isna(low_val) else low_val), 4),
+                        "close": round(float(close_val), 4),
+                        "volume": 0 if pd.isna(vol_val) else int(vol_val),
                     }
                 )
-            return {"historical": historical}
+            return {"historical": historical} if historical else None
 
         except Exception:
             return None

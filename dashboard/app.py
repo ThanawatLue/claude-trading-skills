@@ -374,18 +374,35 @@ def _merge_live_snapshot(stored: dict, fresh: dict) -> dict:
 def cleanup_old_files(keep_count: int = 2):
     """Keep only the latest keep_count files matching each analysis output pattern."""
     patterns = [
-        # Root directory patterns
-        os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"),
-        os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.md"),
+        # Root directory patterns (multi-market files kept with 2x buffer)
         os.path.join(ROOT_DIR, "canslim_screener_*.json"),
         os.path.join(ROOT_DIR, "canslim_screener_*.md"),
         # Reports directory patterns
         os.path.join(REPORTS_DIR, "vcp_screener_*.json"),
         os.path.join(REPORTS_DIR, "vcp_screener_*.md"),
-        os.path.join(REPORTS_DIR, "exposure_posture_*.json"),
-        os.path.join(REPORTS_DIR, "exposure_posture_*.md"),
-        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"),
-        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.md"),
+        # Keep TH and US postures, FTD, and IBD reports isolated during cleanup
+        os.path.join(REPORTS_DIR, "exposure_posture_TH_*.json"),
+        os.path.join(REPORTS_DIR, "exposure_posture_TH_*.md"),
+        os.path.join(REPORTS_DIR, "exposure_posture_US_*.json"),
+        os.path.join(REPORTS_DIR, "exposure_posture_US_*.md"),
+        os.path.join(REPORTS_DIR, "exposure_posture_20[0-9][0-9]-*.json"),
+        os.path.join(REPORTS_DIR, "exposure_posture_20[0-9][0-9]-*.md"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_TH_*.json"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_TH_*.md"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_US_*.json"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_US_*.md"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_20[0-9][0-9]-*.json"),
+        os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_20[0-9][0-9]-*.md"),
+        os.path.join(REPORTS_DIR, "ftd_detector_TH_*.json"),
+        os.path.join(REPORTS_DIR, "ftd_detector_TH_*.md"),
+        os.path.join(REPORTS_DIR, "ftd_detector_US_*.json"),
+        os.path.join(REPORTS_DIR, "ftd_detector_US_*.md"),
+        os.path.join(REPORTS_DIR, "ftd_detector_20[0-9][0-9]-*.json"),
+        os.path.join(REPORTS_DIR, "ftd_detector_20[0-9][0-9]-*.md"),
+        os.path.join(REPORTS_DIR, "macro_regime_*.json"),
+        os.path.join(REPORTS_DIR, "macro_regime_*.md"),
+        os.path.join(REPORTS_DIR, "sector_rotation_*.json"),
+        os.path.join(REPORTS_DIR, "sector_rotation_*.md"),
         os.path.join(REPORTS_DIR, "earnings_trade_*.json"),
         os.path.join(REPORTS_DIR, "earnings_trade_*.md"),
         os.path.join(REPORTS_DIR, "breakout_trade_plan_*.json"),
@@ -426,6 +443,20 @@ def cleanup_old_files(keep_count: int = 2):
                 except Exception as e:
                     print(f"Error removing {f}: {e}", file=sys.stderr)
 
+    # Preserve both TH and US root market_breadth files across frequent TH scans
+    for ext in ("json", "md"):
+        mb_files = sorted(
+            glob.glob(os.path.join(ROOT_DIR, f"market_breadth_20[0-9][0-9]-*.{ext}")),
+            reverse=True,
+        )
+        max_mb = max(keep_count * 2, keep_count)
+        if len(mb_files) > max_mb:
+            for f in mb_files[max_mb:]:
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    print(f"Error removing {f}: {e}", file=sys.stderr)
+
 
 def resolve_latest_exposure_breadth(market: str) -> str | None:
     """Resolve market-local breadth JSON for exposure-coach --breadth."""
@@ -455,22 +486,54 @@ def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
         market,
         "--breadth",
         latest_mb,
+        "--output-dir",
+        REPORTS_DIR,
     ]
 
-    if market == "US":
-        latest_uptrend = latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json"))
-        if latest_uptrend:
-            cmd.extend(["--uptrend", latest_uptrend])
+    if market == "TH":
+        latest_th_tv = latest_file_any(os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"))
+        if latest_th_tv:
+            cmd.extend(["--uptrend", latest_th_tv])
 
-        latest_top = latest_file_any(os.path.join(REPORTS_DIR, "market_top_*.json"))
-        if latest_top:
-            cmd.extend(["--top-risk", latest_top])
-        else:
-            latest_ibd = latest_file_any(
-                os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json")
-            )
-            if latest_ibd:
-                cmd.extend(["--top-risk", latest_ibd])
+        latest_set50 = latest_file(
+            os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), "TH"
+        )
+        if latest_set50:
+            cmd.extend(["--regime", latest_set50])
+
+        latest_th_sector = latest_file_any(os.path.join(REPORTS_DIR, "thai_sector_heatmap_*.json"))
+        if latest_th_sector:
+            cmd.extend(["--sector", latest_th_sector])
+        return cmd
+
+    latest_uptrend = latest_file_any(os.path.join(REPORTS_DIR, "uptrend_analysis_*.json"))
+    if latest_uptrend:
+        cmd.extend(["--uptrend", latest_uptrend])
+
+    latest_regime = latest_file_any(os.path.join(REPORTS_DIR, "macro_regime_*.json"))
+    if latest_regime:
+        cmd.extend(["--regime", latest_regime])
+
+    latest_top = latest_file_any(os.path.join(REPORTS_DIR, "market_top_*.json"))
+    if latest_top:
+        cmd.extend(["--top-risk", latest_top])
+    else:
+        latest_ibd = latest_file(
+            os.path.join(REPORTS_DIR, "ibd_distribution_day_monitor_*.json"), "US"
+        )
+        if latest_ibd:
+            cmd.extend(["--top-risk", latest_ibd])
+
+    latest_ftd = latest_file(os.path.join(REPORTS_DIR, "ftd_detector_*.json"), "US")
+    if latest_ftd:
+        cmd.extend(["--ftd", latest_ftd])
+
+    latest_sector = latest_file_any(os.path.join(REPORTS_DIR, "sector_rotation_*.json"))
+    if not latest_sector:
+        latest_sector = latest_file_any(os.path.join(REPORTS_DIR, "us_sector_heatmap_*.json"))
+    if latest_sector:
+        cmd.extend(["--sector", latest_sector])
+
     return cmd
 
 
@@ -644,9 +707,13 @@ def api_jobs_latest():
     market = request.args.get("market")
     if market:
         market = normalize_market(market)
-    if not job_name or any(
-        ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
-        for ch in job_name
+    if (
+        not job_name
+        or any(
+            ch
+            not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"  # pragma: allowlist secret
+            for ch in job_name
+        )
     ):
         return jsonify({"error": "invalid job name"}), 400
     latest = JobRunStore(DB_PATH).latest(job_name, market)
@@ -684,61 +751,10 @@ def api_runs():
     return jsonify({"market": market, "runs": runs})
 
 
-@app.route("/api/run")
-def api_run():
-    """Re-run analysis scripts for a specific market, then snapshot to DB."""
-    market = normalize_market(request.args.get("market", "US"))
-    account_size = request.args.get("account_size", "50000")
-    risk_pct = request.args.get("risk_pct", "0.5")
-    target_r = request.args.get("target_r", "2.0")
-
-    log = []
-
-    def _run(cmd, timeout=300, extra_env=None):
-        import time
-
-        start_t = time.time()
-        env = {**_SUBPROCESS_ENV, **(extra_env or {})}
-        try:
-            r = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                cwd=BASE_DIR,
-                timeout=timeout,
-                env=env,
-            )
-            elapsed = round(time.time() - start_t, 1)
-            return {
-                "cmd": os.path.basename(cmd[1]),
-                "ok": r.returncode == 0,
-                "out": r.stdout[-1000:],
-                "err": r.stderr[-1500:],
-                "elapsed": elapsed,
-            }
-        except subprocess.TimeoutExpired:
-            elapsed = round(time.time() - start_t, 1)
-            return {
-                "cmd": os.path.basename(cmd[1]),
-                "ok": False,
-                "out": "",
-                "err": f"Timeout after {timeout}s",
-                "elapsed": elapsed,
-            }
-        except Exception as e:
-            elapsed = round(time.time() - start_t, 1)
-            return {
-                "cmd": os.path.basename(cmd[1]),
-                "ok": False,
-                "out": "",
-                "err": str(e),
-                "elapsed": elapsed,
-            }
-
-    # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
-    primary_tasks = [
+def _build_primary_tasks(market: str) -> list[tuple[list[str], int, dict | None]]:
+    """Build Phase 1 parallel scanner tasks for the requested market."""
+    market = normalize_market(market)
+    primary_tasks: list[tuple[list[str], int, dict | None]] = [
         # 1. Market Breadth Analyzer
         (
             [
@@ -803,10 +819,7 @@ def api_run():
             300,
             None,
         ),
-    ]
-
-    # 5. CANSLIM Screener (supports both US and TH markets)
-    primary_tasks.append(
+        # 5. CANSLIM Screener (supports both US and TH markets)
         (
             [
                 sys.executable,
@@ -824,8 +837,8 @@ def api_run():
             ],
             600,
             None,
-        )
-    )
+        ),
+    ]
 
     if market == "US":
         primary_tasks.extend(
@@ -841,13 +854,72 @@ def api_run():
                             "scripts",
                             "ibd_monitor.py",
                         ),
+                        "--market",
+                        "US",
                         "--output-dir",
                         REPORTS_DIR,
                     ],
                     60,
                     None,
                 ),
-                # 7. Earnings Trade Analyzer (US only)
+                # 7. Macro Regime Detector (US, yfinance zero-quota)
+                (
+                    [
+                        sys.executable,
+                        os.path.join(
+                            BASE_DIR,
+                            "skills",
+                            "macro-regime-detector",
+                            "scripts",
+                            "macro_regime_detector.py",
+                        ),
+                        "--use-yf",
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    120,
+                    None,
+                ),
+                # 8. Follow-Through Day Detector (US, yfinance zero-quota)
+                (
+                    [
+                        sys.executable,
+                        os.path.join(
+                            BASE_DIR,
+                            "skills",
+                            "ftd-detector",
+                            "scripts",
+                            "ftd_detector.py",
+                        ),
+                        "--market",
+                        "US",
+                        "--use-yf",
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    60,
+                    None,
+                ),
+                # 9. Sector Rotation Analyst (US public CSV, zero-quota)
+                (
+                    [
+                        sys.executable,
+                        os.path.join(
+                            BASE_DIR,
+                            "skills",
+                            "sector-analyst",
+                            "scripts",
+                            "analyze_sector_rotation.py",
+                        ),
+                        "--json",
+                        "--save",
+                        "--output-dir",
+                        REPORTS_DIR,
+                    ],
+                    60,
+                    None,
+                ),
+                # 10. Earnings Trade Analyzer (US only)
                 (
                     [
                         sys.executable,
@@ -868,7 +940,7 @@ def api_run():
                     600,
                     None,
                 ),
-                # 8-11. TV-powered US skills (parallel, no API key required)
+                # 11-14. TV-powered US skills (parallel, no API key required)
                 (
                     [
                         sys.executable,
@@ -937,7 +1009,6 @@ def api_run():
         )
 
     if market == "TH":
-        # 6. Thai Swing Screener (TH only) — in vcp-screener skill
         thai_swing_script = os.path.join(
             BASE_DIR, "skills", "vcp-screener", "scripts", "screen_thai_swing.py"
         )
@@ -945,7 +1016,6 @@ def api_run():
             primary_tasks.append(
                 ([sys.executable, thai_swing_script, "--output-dir", REPORTS_DIR], 180, None)
             )
-        # 7-10. TV-powered Thai skills (parallel, no API key required)
         tv_th_skills = [
             ("thai-sector-heatmap", "generate_heatmap.py"),
             ("thai-breadth-analyzer", "analyze_thai_breadth.py"),
@@ -958,6 +1028,65 @@ def api_run():
                 primary_tasks.append(
                     ([sys.executable, script_path, "--output-dir", REPORTS_DIR], 120, None)
                 )
+
+    return primary_tasks
+
+
+@app.route("/api/run")
+def api_run():
+    """Re-run analysis scripts for a specific market, then snapshot to DB."""
+    market = normalize_market(request.args.get("market", "US"))
+    account_size = request.args.get("account_size", "50000")
+    risk_pct = request.args.get("risk_pct", "0.5")
+    target_r = request.args.get("target_r", "2.0")
+
+    log = []
+
+    def _run(cmd, timeout=300, extra_env=None):
+        import time
+
+        start_t = time.time()
+        env = {**_SUBPROCESS_ENV, **(extra_env or {})}
+        try:
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=BASE_DIR,
+                timeout=timeout,
+                env=env,
+            )
+            elapsed = round(time.time() - start_t, 1)
+            return {
+                "cmd": os.path.basename(cmd[1]),
+                "ok": r.returncode == 0,
+                "out": r.stdout[-1000:],
+                "err": r.stderr[-1500:],
+                "elapsed": elapsed,
+            }
+        except subprocess.TimeoutExpired:
+            elapsed = round(time.time() - start_t, 1)
+            return {
+                "cmd": os.path.basename(cmd[1]),
+                "ok": False,
+                "out": "",
+                "err": f"Timeout after {timeout}s",
+                "elapsed": elapsed,
+            }
+        except Exception as e:
+            elapsed = round(time.time() - start_t, 1)
+            return {
+                "cmd": os.path.basename(cmd[1]),
+                "ok": False,
+                "out": "",
+                "err": str(e),
+                "elapsed": elapsed,
+            }
+
+    # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
+    primary_tasks = _build_primary_tasks(market)
 
     print(
         f"Starting Phase 1 parallel execution with {len(primary_tasks)} independent scanners...",
@@ -1139,226 +1268,7 @@ def api_run_stream():
                 }
 
         # ── Phase 1: Heavy Primary Scanners (Parallel Execution) ──────────────────────
-        primary_tasks = [
-            # 1. Market Breadth Analyzer
-            (
-                [
-                    sys.executable,
-                    os.path.join(
-                        BASE_DIR,
-                        "skills",
-                        "market-breadth-analyzer",
-                        "scripts",
-                        "market_breadth_analyzer.py",
-                    ),
-                    "--market",
-                    market,
-                ],
-                300,
-                None,
-            ),
-            # 2. VCP Screener
-            (
-                [
-                    sys.executable,
-                    os.path.join(BASE_DIR, "skills", "vcp-screener", "scripts", "screen_vcp.py"),
-                    "--market",
-                    market,
-                    "--max-candidates",
-                    "100",
-                    "--top",
-                    "100",
-                ],
-                600,
-                None,
-            ),
-            # 3. Uptrend Analyzer
-            (
-                [
-                    sys.executable,
-                    os.path.join(
-                        BASE_DIR, "skills", "uptrend-analyzer", "scripts", "uptrend_analyzer.py"
-                    ),
-                    "--output-dir",
-                    REPORTS_DIR,
-                ],
-                120,
-                None,
-            ),
-            # 4. Downtrend Duration Analyzer
-            (
-                [
-                    sys.executable,
-                    os.path.join(
-                        BASE_DIR,
-                        "skills",
-                        "downtrend-duration-analyzer",
-                        "scripts",
-                        "analyze_downtrends.py",
-                    ),
-                    "--max-stocks",
-                    "30",
-                    "--output-dir",
-                    REPORTS_DIR,
-                ],
-                300,
-                None,
-            ),
-        ]
-
-        # 5. CANSLIM Screener
-        primary_tasks.append(
-            (
-                [
-                    sys.executable,
-                    os.path.join(
-                        BASE_DIR, "skills", "canslim-screener", "scripts", "screen_canslim.py"
-                    ),
-                    "--market",
-                    market,
-                    "--max-candidates",
-                    "40",
-                    "--top",
-                    "40",
-                    "--output-dir",
-                    REPORTS_DIR,
-                ],
-                600,
-                None,
-            )
-        )
-
-        if market == "US":
-            primary_tasks.extend(
-                [
-                    # 6. IBD Distribution Day Monitor (US only)
-                    (
-                        [
-                            sys.executable,
-                            os.path.join(
-                                BASE_DIR,
-                                "skills",
-                                "ibd-distribution-day-monitor",
-                                "scripts",
-                                "ibd_monitor.py",
-                            ),
-                            "--output-dir",
-                            REPORTS_DIR,
-                        ],
-                        60,
-                        None,
-                    ),
-                    # 7. Earnings Trade Analyzer (US only)
-                    (
-                        [
-                            sys.executable,
-                            os.path.join(
-                                BASE_DIR,
-                                "skills",
-                                "earnings-trade-analyzer",
-                                "scripts",
-                                "analyze_earnings_trades.py",
-                            ),
-                            "--output-dir",
-                            REPORTS_DIR,
-                            "--max-api-calls",
-                            "30",
-                            "--top",
-                            "20",
-                        ],
-                        600,
-                        None,
-                    ),
-                    # 8-11. TV-powered US skills (parallel, no API key required)
-                    (
-                        [
-                            sys.executable,
-                            os.path.join(
-                                BASE_DIR,
-                                "skills",
-                                "us-sector-heatmap",
-                                "scripts",
-                                "generate_us_heatmap.py",
-                            ),
-                            "--output-dir",
-                            REPORTS_DIR,
-                        ],
-                        120,
-                        None,
-                    ),
-                    (
-                        [
-                            sys.executable,
-                            os.path.join(
-                                BASE_DIR,
-                                "skills",
-                                "us-breadth-analyzer-tv",
-                                "scripts",
-                                "analyze_us_breadth_tv.py",
-                            ),
-                            "--output-dir",
-                            REPORTS_DIR,
-                        ],
-                        120,
-                        None,
-                    ),
-                    (
-                        [
-                            sys.executable,
-                            os.path.join(
-                                BASE_DIR,
-                                "skills",
-                                "us-watchlist-builder",
-                                "scripts",
-                                "build_us_watchlists.py",
-                            ),
-                            "--output-dir",
-                            REPORTS_DIR,
-                        ],
-                        120,
-                        None,
-                    ),
-                    (
-                        [
-                            sys.executable,
-                            os.path.join(
-                                BASE_DIR,
-                                "skills",
-                                "us-dividend-screener",
-                                "scripts",
-                                "screen_us_dividends.py",
-                            ),
-                            "--output-dir",
-                            REPORTS_DIR,
-                        ],
-                        120,
-                        None,
-                    ),
-                ]
-            )
-
-        if market == "TH":
-            # 6. Thai Swing Screener (TH only)
-            thai_swing_script = os.path.join(
-                BASE_DIR, "skills", "vcp-screener", "scripts", "screen_thai_swing.py"
-            )
-            if os.path.exists(thai_swing_script):
-                primary_tasks.append(
-                    ([sys.executable, thai_swing_script, "--output-dir", REPORTS_DIR], 180, None)
-                )
-            # 7-10. TV-powered Thai skills
-            tv_th_skills = [
-                ("thai-sector-heatmap", "generate_heatmap.py"),
-                ("thai-breadth-analyzer", "analyze_thai_breadth.py"),
-                ("thai-watchlist-builder", "build_watchlists.py"),
-                ("thai-dividend-screener", "screen_thai_dividends.py"),
-            ]
-            for skill_name, script_name in tv_th_skills:
-                script_path = os.path.join(BASE_DIR, "skills", skill_name, "scripts", script_name)
-                if os.path.exists(script_path):
-                    primary_tasks.append(
-                        ([sys.executable, script_path, "--output-dir", REPORTS_DIR], 120, None)
-                    )
+        primary_tasks = _build_primary_tasks(market)
 
         # Count dependent tasks to get total
         total_tasks = len(primary_tasks) + 3  # Exposure, breakout planner, signal pipeline
