@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-17 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-18 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -26,10 +26,10 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. MFEC.BK** | ฿6.26 | **1,100** หุ้น | ฿6,886.00 | ฿6.05 (-3.4%) | ฿6.60 (Swing Target) | RSI: 58.5 | Vol: 3.0x | Swing Score: 71.6 |
-| **2. APH** | ฿78.23 | **100** หุ้น | ฿7,823.00 | ฿74.25 (-5.1%) | ฿86.00 (2.0R) | CANSLIM Score: 62.5 | 52w Dist: -13.0% |
-| **3. LANNA.BK** | ฿15.00 | **400** หุ้น | ฿6,000.00 | ฿14.50 (-3.3%) | ฿15.80 (Swing Target) | RSI: 66.3 | Vol: 3.2x | Swing Score: 61.3 |
-| **4. ICN.BK** | ฿2.24 | **3,100** หุ้น | ฿6,944.00 | ฿2.16 (-3.6%) | ฿2.36 (Swing Target) | RSI: 72.0 | Vol: 3.3x | Swing Score: 60.3 |
+| **1. PLANB.BK** | ฿7.94 | **800** หุ้น | ฿6,352.00 | ฿7.70 (-3.0%) | ฿8.40 (Swing Target) | RSI: 44.0 | Vol: 1.4x | Swing Score: 87.7 |
+| **2. SCGD.BK** | ฿5.84 | **1,100** หุ้น | ฿6,424.00 | ฿5.65 (-3.3%) | ฿6.15 (Swing Target) | RSI: 58.2 | Vol: 3.5x | Swing Score: 75.9 |
+| **3. IRPC.BK** | ฿2.88 | **2,400** หุ้น | ฿6,912.00 | ฿2.72 (-5.6%) | ฿3.20 (2.0R) | High Volume: 92,247,300 shares @ ฿2.88 |
+| **4. GUNKUL.BK** | ฿3.84 | **1,800** หุ้น | ฿6,912.00 | ฿3.64 (-5.2%) | ฿4.24 (2.0R) | High Volume: 69,250,300 shares @ ฿3.84 |
 
 ---
 
@@ -46,53 +46,53 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: MFEC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_MFEC.yaml
+# Order Template 1: PLANB.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PLANB.yaml
 action: buy
-symbol: "MFEC.BK"
+symbol: "PLANB.BK"
+market: "TH"
+shares: 800
+entry_price: 7.94
+stop_price: 7.70
+target_price: 8.40
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 2: SCGD.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SCGD.yaml
+action: buy
+symbol: "SCGD.BK"
 market: "TH"
 shares: 1100
-entry_price: 6.26
-stop_price: 6.05
-target_price: 6.60
+entry_price: 5.84
+stop_price: 5.65
+target_price: 6.15
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: APH
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_APH.yaml
+# Order Template 3: IRPC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_IRPC.yaml
 action: buy
-symbol: "APH"
+symbol: "IRPC.BK"
 market: "TH"
-shares: 100
-entry_price: 78.23
-stop_price: 74.25
-target_price: 86.00
+shares: 2400
+entry_price: 2.88
+stop_price: 2.72
+target_price: 3.20
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: LANNA.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_LANNA.yaml
+# Order Template 4: GUNKUL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GUNKUL.yaml
 action: buy
-symbol: "LANNA.BK"
+symbol: "GUNKUL.BK"
 market: "TH"
-shares: 400
-entry_price: 15.00
-stop_price: 14.50
-target_price: 15.80
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: ICN.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_ICN.yaml
-action: buy
-symbol: "ICN.BK"
-market: "TH"
-shares: 3100
-entry_price: 2.24
-stop_price: 2.16
-target_price: 2.36
+shares: 1800
+entry_price: 3.84
+stop_price: 3.64
+target_price: 4.24
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
