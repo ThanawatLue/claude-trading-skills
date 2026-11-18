@@ -593,3 +593,39 @@ class TestUpstreamSkillSchemas:
             assert len(th_files) == 1
         finally:
             sys.argv = orig
+
+    def test_th_derives_uptrend_from_tv_breadth_without_uptrend_flag(self, tmp_path):
+        import sys
+
+        from calculate_exposure import main
+
+        breadth_file = tmp_path / "thai_market_breadth.json"
+        breadth_file.write_text(
+            json.dumps(
+                {
+                    "composite_score": 32.67,
+                    "breadth": {"pct_above_sma50": 24.56, "pct_above_sma200": 48.33},
+                }
+            )
+        )
+        output_dir = tmp_path / "reports"
+
+        orig = sys.argv
+        sys.argv = [
+            "calculate_exposure.py",
+            "--market",
+            "TH",
+            "--breadth",
+            str(breadth_file),
+            "--output-dir",
+            str(output_dir),
+            "--json-only",
+        ]
+        try:
+            assert main() == 0
+            th_file = list(output_dir.glob("exposure_posture_TH_*.json"))[0]
+            data = json.loads(th_file.read_text(encoding="utf-8"))
+            assert data["component_scores"]["breadth_score"] == 32
+            assert data["component_scores"]["uptrend_score"] == 34
+        finally:
+            sys.argv = orig

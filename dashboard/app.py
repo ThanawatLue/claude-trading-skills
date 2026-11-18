@@ -491,10 +491,6 @@ def build_exposure_cmd(latest_mb: str, market: str) -> list[str]:
     ]
 
     if market == "TH":
-        latest_th_tv = latest_file_any(os.path.join(REPORTS_DIR, "thai_market_breadth_*.json"))
-        if latest_th_tv:
-            cmd.extend(["--uptrend", latest_th_tv])
-
         latest_set50 = latest_file(
             os.path.join(ROOT_DIR, "market_breadth_20[0-9][0-9]-*.json"), "TH"
         )

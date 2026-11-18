@@ -168,7 +168,7 @@ def test_arena_overview_endpoint(monkeypatch) -> None:
     assert len(data["jules"]["dna"]["rules"]) >= 1
 
 
-def test_build_exposure_cmd_th_includes_local_uptrend_regime_and_sector(
+def test_build_exposure_cmd_th_includes_local_regime_and_sector_without_uptrend(
     monkeypatch, tmp_path
 ) -> None:
     reports = tmp_path / "reports"
@@ -191,8 +191,8 @@ def test_build_exposure_cmd_th_includes_local_uptrend_regime_and_sector(
     monkeypatch.setattr(dashboard_app, "ROOT_DIR", str(root))
 
     cmd = dashboard_app.build_exposure_cmd(str(th_mb), "TH")
-    assert "--uptrend" in cmd
-    assert str(th_mb) == cmd[cmd.index("--uptrend") + 1]
+    assert "--uptrend" not in cmd
+    assert "--top-risk" not in cmd
     assert "--sector" in cmd
     assert str(th_sec) == cmd[cmd.index("--sector") + 1]
     assert "--regime" in cmd

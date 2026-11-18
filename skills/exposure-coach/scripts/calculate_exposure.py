@@ -679,6 +679,16 @@ def main():
         "institutional": extract_institutional_score(institutional_data),
     }
 
+    # Derive local TH uptrend participation directly from TV breadth when --uptrend is omitted
+    if (
+        scores["uptrend"] is None
+        and args.market == "TH"
+        and isinstance(breadth_data, dict)
+        and isinstance(breadth_data.get("breadth"), dict)
+        and "pct_above_sma50" in breadth_data["breadth"]
+    ):
+        scores["uptrend"] = extract_uptrend_score(breadth_data)
+
     # Use explicitly passed market arg (defaults to "US")
     market = args.market
 
