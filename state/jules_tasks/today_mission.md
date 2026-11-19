@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-18 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-19 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -22,14 +22,16 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 ---
 
 ## 🔍 รายชื่อหุ้นเป้าหมายวันนี้ (Top Scouted Candidates)
-ระบบ VM Scout คัดกรองหุ้นสวิงโมเมนตัมและงบการเงินมาให้พิจารณา 4 ตัว:
+ระบบ VM Scout คัดกรองหุ้นสวิงโมเมนตัมและงบการเงินมาให้พิจารณา 6 ตัว:
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. PLANB.BK** | ฿7.94 | **800** หุ้น | ฿6,352.00 | ฿7.70 (-3.0%) | ฿8.40 (Swing Target) | RSI: 44.0 | Vol: 1.4x | Swing Score: 87.7 |
-| **2. SCGD.BK** | ฿5.84 | **1,100** หุ้น | ฿6,424.00 | ฿5.65 (-3.3%) | ฿6.15 (Swing Target) | RSI: 58.2 | Vol: 3.5x | Swing Score: 75.9 |
-| **3. IRPC.BK** | ฿2.88 | **2,400** หุ้น | ฿6,912.00 | ฿2.72 (-5.6%) | ฿3.20 (2.0R) | High Volume: 92,247,300 shares @ ฿2.88 |
-| **4. GUNKUL.BK** | ฿3.84 | **1,800** หุ้น | ฿6,912.00 | ฿3.64 (-5.2%) | ฿4.24 (2.0R) | High Volume: 69,250,300 shares @ ฿3.84 |
+| **1. CENTEL.BK** | ฿44.70 | **100** หุ้น | ฿4,470.00 | ฿42.25 (-5.5%) | ฿49.50 (2.0R) | CANSLIM Score: 73.8 | 52w Dist: -5.9% |
+| **2. BEM.BK** | ฿6.54 | **1,000** หุ้น | ฿6,540.00 | ฿6.30 (-3.7%) | ฿6.90 (Swing Target) | RSI: 62.6 | Vol: 3.0x | Swing Score: 63.6 |
+| **3. BJC.BK** | ฿20.30 | **300** หุ้น | ฿6,090.00 | ฿19.60 (-3.4%) | ฿21.50 (Swing Target) | RSI: 61.8 | Vol: 1.6x | Swing Score: 62.4 |
+| **4. TU.BK** | ฿12.90 | **500** หุ้น | ฿6,450.00 | ฿12.50 (-3.1%) | ฿13.60 (Swing Target) | RSI: 47.2 | Vol: 1.1x | Swing Score: 60.9 |
+| **5. SCGD.BK** | ฿5.82 | **1,200** หุ้น | ฿6,984.00 | ฿5.65 (-2.9%) | ฿6.10 (Swing Target) | RSI: 56.8 | Vol: 2.2x | Swing Score: 60.7 |
+| **6. OSP.BK** | ฿18.95 | **300** หุ้น | ฿5,685.00 | ฿18.00 (-5.0%) | ฿20.80 (2.0R) | CANSLIM Score: 60.7 | 52w Dist: -5.2% |
 
 ---
 
@@ -46,53 +48,79 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: PLANB.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PLANB.yaml
+# Order Template 1: CENTEL.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
-symbol: "PLANB.BK"
+symbol: "CENTEL.BK"
 market: "TH"
-shares: 800
-entry_price: 7.94
-stop_price: 7.70
-target_price: 8.40
+shares: 100
+entry_price: 44.70
+stop_price: 42.25
+target_price: 49.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: SCGD.BK
+# Order Template 2: BEM.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BEM.yaml
+action: buy
+symbol: "BEM.BK"
+market: "TH"
+shares: 1000
+entry_price: 6.54
+stop_price: 6.30
+target_price: 6.90
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 3: BJC.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BJC.yaml
+action: buy
+symbol: "BJC.BK"
+market: "TH"
+shares: 300
+entry_price: 20.30
+stop_price: 19.60
+target_price: 21.50
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 4: TU.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TU.yaml
+action: buy
+symbol: "TU.BK"
+market: "TH"
+shares: 500
+entry_price: 12.90
+stop_price: 12.50
+target_price: 13.60
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 5: SCGD.BK
 # หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SCGD.yaml
 action: buy
 symbol: "SCGD.BK"
 market: "TH"
-shares: 1100
-entry_price: 5.84
+shares: 1200
+entry_price: 5.82
 stop_price: 5.65
-target_price: 6.15
+target_price: 6.10
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: IRPC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_IRPC.yaml
+# Order Template 6: OSP.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_OSP.yaml
 action: buy
-symbol: "IRPC.BK"
+symbol: "OSP.BK"
 market: "TH"
-shares: 2400
-entry_price: 2.88
-stop_price: 2.72
-target_price: 3.20
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: GUNKUL.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_GUNKUL.yaml
-action: buy
-symbol: "GUNKUL.BK"
-market: "TH"
-shares: 1800
-entry_price: 3.84
-stop_price: 3.64
-target_price: 4.24
+shares: 300
+entry_price: 18.95
+stop_price: 18.00
+target_price: 20.80
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
