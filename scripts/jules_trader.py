@@ -15,7 +15,7 @@ import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
-from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -111,13 +111,57 @@ def set_tick_size(price: float) -> Decimal:
 
 def round_to_set_tick(price: float, direction: str = "down") -> float:
     """Discretize price to a valid SET board-lot tick boundary.
-    'up' for ceiling (entry triggers), 'down' for floor (stop & limit target)."""
+
+    Supports 'nearest'/'round', 'floor'/'down' (stops & limit targets), and 'ceil'/'up' (entry triggers).
+    """
     if price <= 0:
         return 0.0
     val = Decimal(str(round(price, 4)))
     tick = set_tick_size(float(val))
-    rounding = ROUND_CEILING if direction == "up" else ROUND_FLOOR
+    d_clean = direction.lower()
+    if d_clean in ("up", "ceil", "ceiling"):
+        rounding = ROUND_CEILING
+    elif d_clean in ("down", "floor"):
+        rounding = ROUND_FLOOR
+    elif d_clean in ("nearest", "round"):
+        rounding = ROUND_HALF_UP
+    else:
+        raise ValueError(f"Invalid rounding direction: {direction}")
     return float((val / tick).to_integral_value(rounding=rounding) * tick)
+
+
+def step_set_ticks(price: float, ticks: int) -> float:
+    """Step price up or down by N valid SET ticks across price bracket boundaries."""
+    if price <= 0:
+        return 0.0
+    current = Decimal(str(round_to_set_tick(price, "nearest")))
+    direction = 1 if ticks >= 0 else -1
+
+    for _ in range(abs(ticks)):
+        if direction > 0:
+            tick = set_tick_size(float(current))
+            current += tick
+        else:
+            probe = current - Decimal("0.001")
+            tick = set_tick_size(float(max(probe, Decimal("0.01"))))
+            current -= tick
+
+    return float(max(current, Decimal("0.01")).quantize(Decimal("0.01")))
+
+
+def compute_breakeven_stop_th(
+    entry_price: float, stop_price: float, buffer_r: float = 0.05
+) -> float:
+    """Compute breakeven stop level ensuring it is quantized and >= entry + 1 SET tick."""
+    risk_per_share = entry_price - stop_price
+    if risk_per_share <= 0:
+        return round_to_set_tick(entry_price, "ceil")
+
+    raw_be = entry_price + (buffer_r * risk_per_share)
+    min_be_one_tick = step_set_ticks(entry_price, +1)
+    target_be = max(raw_be, min_be_one_tick)
+
+    return round_to_set_tick(target_be, "ceil")
 
 
 def calculate_order_expiry(now_dt: datetime, market: str = "TH") -> datetime:
@@ -627,7 +671,7 @@ def evaluate_and_select_trade(
         # Target Calculation: For TH DIP_BUY, tactical 1.5R swing target; for US/momentum, T1=1.5R, T2=2.5R
         if market_clean == "TH" and is_dip:
             t1_price = round_to_set_tick(entry_tick + (risk_dist * 1.5), "down")
-            final_target = max(t1_price, target_tick)
+            final_target = round_to_set_tick(max(t1_price, target_tick), "down")
             t2_price = final_target
         elif market_clean == "US":
             t1_price = round(entry_tick + (risk_dist * 1.5), 2)
@@ -636,7 +680,7 @@ def evaluate_and_select_trade(
         else:
             t1_price = round_to_set_tick(entry_tick + (risk_dist * 1.5), "down")
             t2_price = round_to_set_tick(entry_tick + (risk_dist * 2.5), "down")
-            final_target = max(t2_price, target_tick)
+            final_target = round_to_set_tick(max(t2_price, target_tick), "down")
 
         reward_dist = final_target - entry_tick
         rr_ratio = reward_dist / risk_dist if risk_dist > 0 else 0.0
@@ -977,7 +1021,7 @@ def run_autonomous_decision(
         "thesis": (
             f"Autonomous conviction buy: {winner['candidate'].get('highlights', '')} | "
             f"R/R: {winner['rr_ratio']:.2f}R | Sector/Cluster: {winner.get('cluster') or winner['sector']} | "
-            f"Plan: Scale-out 50% at T1 ({curr_sym}{winner.get('t1_price', 0):.2f}, 1.5R), shift stop to BE, trail runner to T2 ({curr_sym}{winner.get('t2_price', 0):.2f}, 2.5R)"
+            f"Plan: Scale-out 33% at T1 ({curr_sym}{winner.get('t1_price', 0):.2f}, 1.5R), shift stop to BE, trail runner to T2 ({curr_sym}{winner.get('t2_price', 0):.2f}, 2.5R)"
         ),
     }
     if winner.get("decision_trace"):

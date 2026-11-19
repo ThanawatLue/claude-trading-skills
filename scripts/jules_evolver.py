@@ -91,9 +91,9 @@ def load_dna(market: str = "TH", memory_dir: Path | None = None) -> dict[str, An
             "Always verify positive revenue acceleration or sector momentum before entering.",
             "Avoid entering high-beta earnings plays immediately prior to binary release.",
             "Enforce minimum stop width floor >= 4.5% to protect against intraday noise whipouts.",
-            "Two-Tier Scale-Out: Scale-out 50% at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
-            "Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R.",
-            "Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R.",
+            "Two-Tier Scale-Out: Scale-out 33% at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
+            "Runner Trail to T2: Let remaining 67% ride to T2 (2.5R) with trailing ratchet active after 2.0R.",
+            "Velocity Stall: Auto-exit stagnant trades after 7 days if peak MFE < 0.3R.",
         ]
         strengths = [
             "Discretionary US catalyst detection",
@@ -105,9 +105,9 @@ def load_dna(market: str = "TH", memory_dir: Path | None = None) -> dict[str, An
             "Always verify positive Q2/Q3 net profit growth before entering.",
             "Avoid stocks trading within 5 days of XD dividend record date.",
             "Enforce minimum stop width floor >= 4.5% to eliminate commission drag and noise whipouts.",
-            "Two-Tier Scale-Out: Take 50% profit at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
-            "Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R.",
-            "Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R.",
+            "Two-Tier Scale-Out: Take 33% profit at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).",
+            "Runner Trail to T2: Let remaining 67% ride to T2 (2.5R) with trailing ratchet active after 2.0R.",
+            "Velocity Stall: Auto-exit stagnant trades after 7 days if peak MFE < 0.3R.",
         ]
         strengths = ["Discretionary catalyst detection", "Strict 30,000 THB cash management"]
 

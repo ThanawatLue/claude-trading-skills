@@ -522,6 +522,33 @@ class TestPaperTrade(unittest.TestCase):
             self.assertAlmostEqual(row["stop_price"], 100.5)
             self.assertTrue(d["decision_trace"]["scale_out"]["completed"])
 
+    def test_scale_out_position_th_single_board_lot_protects_shares(self):
+        """Verify TH position of 100 shares protects single board lot (no odd lots) and quantizes breakeven stop."""
+        with patch("paper_trade._now_iso", return_value="2026-07-01T09:00:00+00:00"):
+            pos = paper_trade.open_position(
+                symbol="CENTEL.BK",
+                market="TH",
+                shares=100,
+                entry=44.75,
+                stop=42.25,
+                target=51.0,
+                source="jules_ai",
+            )
+        # Call scale_out_position at 48.50 (T1 1.5R)
+        with patch("paper_trade._now_iso", return_value="2026-07-02T09:00:00+00:00"):
+            res = paper_trade.scale_out_position(pos["id"], price=48.50, fraction=0.33)
+        self.assertEqual(res["action"], "scaled_out")
+        self.assertEqual(res["shares_closed"], 0)
+        self.assertEqual(res["remaining_shares"], 100)
+        # 0.05R = 0.125, but 1 SET tick from 44.75 is 0.25 -> new_stop must be 45.00
+        self.assertAlmostEqual(res["new_stop"], 45.00)
+
+        with paper_trade._db() as conn:
+            row = conn.execute("SELECT * FROM paper_trade WHERE id=?", (pos["id"],)).fetchone()
+            d = paper_trade._row_to_dict(row)
+            self.assertAlmostEqual(row["stop_price"], 45.00)
+            self.assertTrue(d["decision_trace"]["scale_out"]["single_share_protected"])
+
     def test_update_marks_scale_out_and_breakeven_stop(self):
         rules = {
             "thai-swing-momentum": {
@@ -588,7 +615,9 @@ class TestPaperTrade(unittest.TestCase):
 
             # Day 1: volume collapses to 200,000 (0.2x < 0.4x), price is 98.0 (R = -0.2 < 0), MFE was 0
             with patch("update_marks._now_iso", return_value="2026-07-02T09:00:00+00:00"):
-                with patch("update_marks._fetch_quote", return_value={"price": 98.0, "volume": 200_000.0}):
+                with patch(
+                    "update_marks._fetch_quote", return_value={"price": 98.0, "volume": 200_000.0}
+                ):
                     with patch("update_marks._fetch_price", return_value=98.0):
                         res = update_marks.update_all()
 
@@ -601,10 +630,22 @@ class TestPaperTrade(unittest.TestCase):
     def test_portfolio_isolation(self):
         # Open 1 quant position and 1 jules position
         q = paper_trade.open_position(
-            symbol="CPALL.BK", market="TH", shares=100, entry=60.0, stop=57.0, target=66.0, portfolio="quant"
+            symbol="CPALL.BK",
+            market="TH",
+            shares=100,
+            entry=60.0,
+            stop=57.0,
+            target=66.0,
+            portfolio="quant",
         )
         j = paper_trade.open_position(
-            symbol="BDMS.BK", market="TH", shares=100, entry=28.0, stop=26.0, target=32.0, portfolio="jules"
+            symbol="BDMS.BK",
+            market="TH",
+            shares=100,
+            entry=28.0,
+            stop=26.0,
+            target=32.0,
+            portfolio="jules",
         )
 
         self.assertEqual(q["portfolio"], "quant")
@@ -637,4 +678,3 @@ class TestPaperTrade(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

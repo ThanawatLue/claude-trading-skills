@@ -108,10 +108,10 @@ class TestJulesRatchetAndResistance(unittest.TestCase):
         self.assertEqual(res1[0]["action"], "marked")
         self.assertIn("scale_out", res1[0])
         pos_after_t1 = paper_trade.list_positions(status_filter="open")[0]
-        # Stop should now be ratcheted to breakeven (10.0 + 0.05*1.0 = 10.05)
-        self.assertAlmostEqual(pos_after_t1["stop_price"], 10.05)
+        # Stop should now be ratcheted to breakeven quantized to SET tick (>= entry + 1 tick: 10.0 + 0.10 = 10.10)
+        self.assertAlmostEqual(pos_after_t1["stop_price"], 10.10)
 
-        # Step 2: Price dumps back to 9.80 (below ratcheted stop 10.05)
+        # Step 2: Price dumps back to 9.80 (below ratcheted stop 10.10)
         with patch("update_marks._now_iso", return_value="2026-09-15T10:00:00+00:00"):
             with patch("update_marks._fetch_price", return_value=9.80):
                 res2 = update_marks.update_all()
@@ -119,7 +119,7 @@ class TestJulesRatchetAndResistance(unittest.TestCase):
         self.assertEqual(res2[0]["action"], "auto_closed_ratchet")
         closed_pos = paper_trade.list_positions(status_filter="closed")[0]
         self.assertEqual(closed_pos["status"], "closed_ratchet")
-        self.assertAlmostEqual(closed_pos["exit_price"], 10.05)
+        self.assertAlmostEqual(closed_pos["exit_price"], 10.10)
         # Net PnL is positive because 50% scale-out was banked at 1.5R!
         self.assertGreater(closed_pos["realized_pnl"], 100.0)
 

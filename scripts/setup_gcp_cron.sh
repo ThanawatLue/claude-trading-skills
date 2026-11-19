@@ -36,8 +36,10 @@ CRON_US_MARKS="30 14 * * 1-5 $MARKS_CMD"
 # Jules AI Autonomous Fund TH schedules (UTC times for ICT Bangkok hours):
 # 08:30 ICT -> 01:30 UTC: Morning Scout & Daily Mission Publisher
 CRON_JULES_SCOUT="30 1 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_morning_scout.sh TH"
-# 09:40 ICT -> 02:40 UTC: Autonomous Decision Maker & Order Staging
+# 09:40 ICT -> 02:40 UTC: Autonomous Decision Maker & Order Staging (Pre-Market)
 CRON_JULES_DECIDE="40 2 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_auto_decision.sh TH"
+# 10:08 ICT & 14:40 ICT -> 03:08 & 07:40 UTC: Intraday Auto Decision Maker (fresh post-open market posture)
+CRON_JULES_DECIDE_INTRADAY="8 3,7 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_auto_decision.sh TH"
 # 10:15-16:45 ICT -> 03:15-09:45 UTC: Check and execute pending orders (skip 10:00 ATO auction)
 CRON_JULES_ORDERS="15,30,45 3-9 * * 1-5 cd \"$PROJECT_ROOT\" && bash scripts/run_gcp_order_processor.sh TH"
 # 10:45 ICT -> 03:45 UTC: Intraday ORB Breakout & Volume Surge Scanner
@@ -128,6 +130,8 @@ awk '
     echo "$CRON_JULES_SCOUT"
     echo "# Jules AI Autonomous Fund TH: Decision Maker (09:40 ICT)"
     echo "$CRON_JULES_DECIDE"
+    echo "# Jules AI Autonomous Fund TH: Intraday Decision Cycles (10:08 & 14:40 ICT)"
+    echo "$CRON_JULES_DECIDE_INTRADAY"
     echo "# Jules AI Autonomous Fund TH: Order Processor (10:15-16:45 ICT)"
     echo "$CRON_JULES_ORDERS"
     echo "# Jules AI Autonomous Fund TH: Intraday ORB Breakout Scanner (10:45 ICT)"

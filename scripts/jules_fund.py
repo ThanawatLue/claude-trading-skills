@@ -268,7 +268,7 @@ def execute_buy(
         "entry_rule": "jules_two_tier_momentum",
         "use_scale_out": True,
         "scale_out_r": 1.5,
-        "scale_out_fraction": 0.5,
+        "scale_out_fraction": float(base_trace.get("scale_out_fraction", 0.33)),
         "ratchet_tiers": [
             [2.0, 1.0],
         ],

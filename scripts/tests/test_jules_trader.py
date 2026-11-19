@@ -696,6 +696,35 @@ class TestJulesTrader(unittest.TestCase):
         self.assertEqual(res["status"], "ORDER_STAGED")
         self.assertEqual(res["symbol"], "PLANB.BK")
 
+    def test_round_to_set_tick_all_modes(self):
+        """Verify SET tick rounding for nearest, floor, ceil, and legacy up/down."""
+        # Price 44.75 is in 25-100 bracket (tick = 0.25)
+        self.assertEqual(jt.round_to_set_tick(44.73, "nearest"), 44.75)
+        self.assertEqual(jt.round_to_set_tick(44.73, "floor"), 44.50)
+        self.assertEqual(jt.round_to_set_tick(44.73, "ceil"), 44.75)
+        self.assertEqual(jt.round_to_set_tick(44.73, "down"), 44.50)
+        self.assertEqual(jt.round_to_set_tick(44.73, "up"), 44.75)
+
+    def test_step_set_ticks_boundary_transitions(self):
+        """Verify stepping SET ticks up and down across bracket boundaries."""
+        # 24.90 (tick 0.10) + 1 tick -> 25.00 (tick 0.25) + 1 tick -> 25.25
+        self.assertEqual(jt.step_set_ticks(24.90, +1), 25.00)
+        self.assertEqual(jt.step_set_ticks(24.90, +2), 25.25)
+        # 25.25 - 1 tick -> 25.00 - 1 tick -> 24.90
+        self.assertEqual(jt.step_set_ticks(25.25, -1), 25.00)
+        self.assertEqual(jt.step_set_ticks(25.25, -2), 24.90)
+
+    def test_compute_breakeven_stop_th(self):
+        """Verify TH breakeven stop is quantized and guarantees >= entry + 1 SET tick."""
+        # CENTEL.BK: entry 44.75, stop 42.25. 0.05R = 0.125 (smaller than tick 0.25)
+        # Should be quantized up to entry + 1 tick = 45.00
+        be_stop = jt.compute_breakeven_stop_th(44.75, 42.25, buffer_r=0.05)
+        self.assertEqual(be_stop, 45.00)
+        # Wide risk: entry 10.00, stop 5.00. 0.05R = 0.25 (tick for 10 is 0.10)
+        # Entry + 0.25 = 10.25 -> quantized ceil = 10.30
+        be_wide = jt.compute_breakeven_stop_th(10.00, 5.00, buffer_r=0.05)
+        self.assertEqual(be_wide, 10.30)
+
 
 if __name__ == "__main__":
     unittest.main()

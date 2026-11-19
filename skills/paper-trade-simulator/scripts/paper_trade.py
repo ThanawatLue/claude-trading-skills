@@ -124,7 +124,9 @@ def _db():
     conn = connect_sqlite(DB_PATH, timeout=30.0, check_same_thread=False)
     try:
         apply_migrations(conn, "paper_trade", {1: SCHEMA})
-        existing = {row["name"] for row in conn.execute("PRAGMA table_info(paper_trade)").fetchall()}
+        existing = {
+            row["name"] for row in conn.execute("PRAGMA table_info(paper_trade)").fetchall()
+        }
         migrations = {
             "gross_realized_pnl": "REAL",
             "transaction_cost_bps": "REAL NOT NULL DEFAULT 0",
@@ -517,17 +519,20 @@ def scale_out_position(
         market_val = row["market"] if "market" in row.keys() else "TH"
         port_val = row["portfolio"] if "portfolio" in row.keys() else "quant"
 
-        if shares <= 1:
+        if shares <= 1 or (market_val == "TH" and shares < 200):
             shares_closed = 0
             entry_cost_part = 0.0
             exit_cost_part = 0.0
             t1_net_pnl = 0.0
             is_single_share = True
         else:
-            shares_closed = int(shares * fraction)
-            if market_val == "TH" and shares >= 200:
-                shares_closed = max(100, (shares_closed // 100) * 100)
-            shares_closed = min(shares - 1, max(1, shares_closed))
+            if market_val == "TH":
+                raw_sell = int(shares * fraction)
+                shares_closed = max(100, (raw_sell // 100) * 100)
+                shares_closed = min(shares - 100, shares_closed)
+            else:
+                shares_closed = int(shares * fraction)
+                shares_closed = min(shares - 1, max(1, shares_closed))
             is_single_share = False
 
             cost_bps = float(row["transaction_cost_bps"] or 0.0)
@@ -537,7 +542,9 @@ def scale_out_position(
 
                 proceeds = price * shares_closed
                 sec_fee = (
-                    max(0.01, math.ceil(proceeds * 0.0000278 * 100) / 100.0) if proceeds > 0 else 0.0
+                    max(0.01, math.ceil(proceeds * 0.0000278 * 100) / 100.0)
+                    if proceeds > 0
+                    else 0.0
                 )
                 taf_fee = (
                     min(8.30, max(0.01, round(shares_closed * 0.000166, 2)))
@@ -551,16 +558,32 @@ def scale_out_position(
                 exit_cost_part = price * shares_closed * (cost_bps / 10000.0)
 
             gross_part = (
-                (price - entry) * shares_closed if side == "long" else (entry - price) * shares_closed
+                (price - entry) * shares_closed
+                if side == "long"
+                else (entry - price) * shares_closed
             )
             t1_net_pnl = gross_part - entry_cost_part - exit_cost_part
 
         # Move stop to breakeven (+0.05R buffer)
-        new_stop = (
-            round(entry + (risk_per_share * 0.05), 4)
-            if side == "long"
-            else round(entry - (risk_per_share * 0.05), 4)
-        )
+        if market_val == "TH":
+            try:
+                import scripts.jules_trader as jt
+
+                new_stop = jt.compute_breakeven_stop_th(
+                    entry, float(row["stop_price"]), buffer_r=0.05
+                )
+            except Exception:
+                new_stop = (
+                    round(entry + (risk_per_share * 0.05), 4)
+                    if side == "long"
+                    else round(entry - (risk_per_share * 0.05), 4)
+                )
+        else:
+            new_stop = (
+                round(entry + (risk_per_share * 0.05), 4)
+                if side == "long"
+                else round(entry - (risk_per_share * 0.05), 4)
+            )
         current_stop = float(row["stop_price"])
         if side == "long":
             final_stop = max(current_stop, new_stop)
@@ -582,9 +605,7 @@ def scale_out_position(
 
         merged_notes = row["journal_text"] or ""
         if is_single_share:
-            scale_note = (
-                f"[SCALE-OUT {now}] single share held - stop moved to BE @ {final_stop:.2f} (protected runner)"
-            )
+            scale_note = f"[SCALE-OUT {now}] single share held - stop moved to BE @ {final_stop:.2f} (protected runner)"
         else:
             scale_note = (
                 f"[SCALE-OUT {now}] closed {shares_closed}/{shares} @ {price:.2f} "
@@ -598,7 +619,14 @@ def scale_out_position(
             """UPDATE paper_trade
                SET stop_price=?, exit_cost=COALESCE(exit_cost, 0.0) + ?, decision_trace_json=?, journal_text=?, last_updated=?
                WHERE id=?""",
-            (final_stop, exit_cost_part, json.dumps(trace, ensure_ascii=False), merged_notes, now, trade_id),
+            (
+                final_stop,
+                exit_cost_part,
+                json.dumps(trace, ensure_ascii=False),
+                merged_notes,
+                now,
+                trade_id,
+            ),
         )
 
         return {
