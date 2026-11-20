@@ -1,5 +1,5 @@
 # 🎯 Jules AI Fund (TH): Daily Mission & Research Briefing
-**วันที่:** 2026-11-19 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
+**วันที่:** 2026-11-20 | **สถานะพอร์ต:** ว่าง 4/4 ไม้ | **เงินทุนเริ่มต้น:** ฿30,000.00 THB
 
 ---
 
@@ -11,9 +11,9 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 - 📜 Two-Tier Scale-Out Engine: Take 50% profit at T1 (1.5R) and move stop to Breakeven (+0.05R buffer).
 - 📜 Runner Trail to T2: Let remaining 50% ride to T2 (2.5R) with trailing ratchet active after 2.0R (lock 1.0R).
 - 📜 Velocity Stall: Auto-exit stagnant trades after 4 days if peak MFE < 0.3R.
-- 🛡️ **Two-Tier Scale-Out Engine:** แบ่งขายทำกำไร 50% ที่เป้า T1 (+1.5R) และเลื่อน Stop Loss ขึ้นมาที่ทุน (Breakeven +0.05R buffer) ทันที เพื่อล็อกกำไรและตัดความเสี่ยง!
-- 🏃 **Runner Trail to T2:** ปล่อย 50% ที่เหลือวิ่งไปเป้า T2 (+2.5R) โดยเริ่ม Ratchet ปกป้องกำไรเมื่อถึง +2.0R (ล็อก +1.0R)
-- ⏱️ **Velocity Stall Exit:** หากถือครบ 4 วันทำการแล้วราคาไม่ไปไหน (MFE < 0.3R) ระบบจะคัดทิ้งทันทีเพื่อรักษาความคุ้มค่าของเงินทุน
+- 🛡️ **Two-Tier Scale-Out Engine:** แบ่งขายทำกำไร 33% ที่เป้า T1 (+1.5R) และเลื่อน Stop Loss ขึ้นมาที่ทุน (Breakeven + 1 Tick buffer) ทันทีเพื่อล็อกกำไร (สำหรับพอร์ต 100 หุ้นในตลาดไทย ให้เลื่อน Stop บังทุนเพื่อรันทั้งไม้)
+- 🏃 **Runner Trail to T2:** ปล่อย 67% ที่เหลือวิ่งไปเป้า T2 (+2.5R) โดยเริ่ม Ratchet ปกป้องกำไรเมื่อถึง +2.0R (ล็อก +1.0R)
+- ⏱️ **Velocity Stall Exit:** หากถือครบ 7 วันทำการแล้วราคาไม่ไปไหน (MFE < 0.3R) ระบบจะคัดทิ้งทันทีเพื่อรักษาความคุ้มค่าของเงินทุน
 - 🎯 **Resistance-Aware Exits:** หากมีแนวต้านยอดเดิมขวางอยู่ก่อนเป้าหมาย ให้ตั้งเป้าขายทำกำไรที่แนวต้านร่วมกับเจ้ามือทันที
 
 ### ⚠️ ข้อผิดพลาดในอดีตที่ห้ามทำซ้ำ:
@@ -26,12 +26,12 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 | Ticker | ราคาล่าสุด | จำนวนซื้อแนะนำ | วงเงินประมาณ | จุด Stop Loss | เป้าทำกำไร (Resistance-Aware) | สรุปประเด็นเด่น |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **1. CENTEL.BK** | ฿44.70 | **100** หุ้น | ฿4,470.00 | ฿42.25 (-5.5%) | ฿49.50 (2.0R) | CANSLIM Score: 73.8 | 52w Dist: -5.9% |
-| **2. BEM.BK** | ฿6.54 | **1,000** หุ้น | ฿6,540.00 | ฿6.30 (-3.7%) | ฿6.90 (Swing Target) | RSI: 62.6 | Vol: 3.0x | Swing Score: 63.6 |
-| **3. BJC.BK** | ฿20.30 | **300** หุ้น | ฿6,090.00 | ฿19.60 (-3.4%) | ฿21.50 (Swing Target) | RSI: 61.8 | Vol: 1.6x | Swing Score: 62.4 |
-| **4. TU.BK** | ฿12.90 | **500** หุ้น | ฿6,450.00 | ฿12.50 (-3.1%) | ฿13.60 (Swing Target) | RSI: 47.2 | Vol: 1.1x | Swing Score: 60.9 |
-| **5. SCGD.BK** | ฿5.82 | **1,200** หุ้น | ฿6,984.00 | ฿5.65 (-2.9%) | ฿6.10 (Swing Target) | RSI: 56.8 | Vol: 2.2x | Swing Score: 60.7 |
-| **6. OSP.BK** | ฿18.95 | **300** หุ้น | ฿5,685.00 | ฿18.00 (-5.0%) | ฿20.80 (2.0R) | CANSLIM Score: 60.7 | 52w Dist: -5.2% |
+| **1. PLANB.BK** | ฿7.72 | **900** หุ้น | ฿6,948.00 | ฿7.15 (-7.4%) | ฿8.80 (Swing Target) | RSI: 42.8 | Vol: 1.4x | Swing Score: 82.2 |
+| **2. CENTEL.BK** | ฿45.00 | **100** หุ้น | ฿4,500.00 | ฿42.75 (-5.0%) | ฿49.50 (2.0R) | CANSLIM Score: 74.6 | 52w Dist: -5.3% |
+| **3. CPN.BK** | ฿64.50 | **100** หุ้น | ฿6,450.00 | ฿62.50 (-3.1%) | ฿68.25 (Swing Target) | RSI: 46.9 | Vol: 1.7x | Swing Score: 73.9 |
+| **4. OSP.BK** | ฿19.10 | **300** หุ้น | ฿5,730.00 | ฿18.10 (-5.2%) | ฿21.10 (2.0R) | CANSLIM Score: 63.7 | 52w Dist: -4.5% |
+| **5. TTB.BK** | ฿2.68 | **2,600** หุ้น | ฿6,968.00 | ฿2.54 (-5.2%) | ฿2.96 (2.0R) | High Volume: 248,154,500 shares @ ฿2.68 |
+| **6. BDMS.BK** | ฿20.45 | **300** หุ้น | ฿6,135.00 | ฿19.40 (-5.1%) | ฿22.50 (2.0R) | High Volume: 119,121,800 shares @ ฿20.45 |
 
 ---
 
@@ -48,79 +48,79 @@ Jules ต้องใช้กฎที่เรียนรู้มาใน�
 
 ## 📝 คำสั่งซื้อสำเร็จรูป (Order Templates)
 ```yaml
-# Order Template 1: CENTEL.BK
+# Order Template 1: PLANB.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_PLANB.yaml
+action: buy
+symbol: "PLANB.BK"
+market: "TH"
+shares: 900
+entry_price: 7.72
+stop_price: 7.15
+target_price: 8.80
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 2: CENTEL.BK
 # หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CENTEL.yaml
 action: buy
 symbol: "CENTEL.BK"
 market: "TH"
 shares: 100
-entry_price: 44.70
-stop_price: 42.25
+entry_price: 45.00
+stop_price: 42.75
 target_price: 49.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 2: BEM.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BEM.yaml
+# Order Template 3: CPN.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_CPN.yaml
 action: buy
-symbol: "BEM.BK"
+symbol: "CPN.BK"
 market: "TH"
-shares: 1000
-entry_price: 6.54
-stop_price: 6.30
-target_price: 6.90
+shares: 100
+entry_price: 64.50
+stop_price: 62.50
+target_price: 68.25
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
 
 ```yaml
-# Order Template 3: BJC.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BJC.yaml
-action: buy
-symbol: "BJC.BK"
-market: "TH"
-shares: 300
-entry_price: 20.30
-stop_price: 19.60
-target_price: 21.50
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 4: TU.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TU.yaml
-action: buy
-symbol: "TU.BK"
-market: "TH"
-shares: 500
-entry_price: 12.90
-stop_price: 12.50
-target_price: 13.60
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 5: SCGD.BK
-# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_SCGD.yaml
-action: buy
-symbol: "SCGD.BK"
-market: "TH"
-shares: 1200
-entry_price: 5.82
-stop_price: 5.65
-target_price: 6.10
-thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
-```
-
-```yaml
-# Order Template 6: OSP.BK
+# Order Template 4: OSP.BK
 # หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_OSP.yaml
 action: buy
 symbol: "OSP.BK"
 market: "TH"
 shares: 300
-entry_price: 18.95
-stop_price: 18.00
-target_price: 20.80
+entry_price: 19.10
+stop_price: 18.10
+target_price: 21.10
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 5: TTB.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_TTB.yaml
+action: buy
+symbol: "TTB.BK"
+market: "TH"
+shares: 2600
+entry_price: 2.68
+stop_price: 2.54
+target_price: 2.96
+thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
+```
+
+```yaml
+# Order Template 6: BDMS.BK
+# หากอนุมัติ ให้บันทึกเป็นไฟล์: state/jules_orders/buy_BDMS.yaml
+action: buy
+symbol: "BDMS.BK"
+market: "TH"
+shares: 300
+entry_price: 20.45
+stop_price: 19.40
+target_price: 22.50
 thesis: "วิเคราะห์โมเดลธุรกิจ: [ใส่เหตุผลสั้นๆ ที่นี่] | Catalyst: [ใส่ปัจจัยเร่ง] | แผน: Scale-out 50% ที่ T1 (1.5R), ขยับ Stop บังทุน, ปล่อยรันเนอร์ไป T2 (2.5R)"
 ```
