@@ -570,6 +570,26 @@ def get_symbol_history_context(
     }
 
 
+def is_qualifying_reduce_only_setup(cand: dict[str, Any]) -> bool:
+    """Allow DIP_BUY/PULLBACK setups and controlled High-RS CANSLIM VDU pullbacks in REDUCE_ONLY."""
+    source_u = str(cand.get("source") or "").upper()
+    if "DIP" in source_u or "PULLBACK" in source_u:
+        return True
+    if "CANSLIM" in source_u and float(cand.get("score") or 0.0) >= 70.0:
+        raw = cand.get("raw_features") or cand.get("payload") or {}
+        n_comp = raw.get("n_component") if isinstance(raw, dict) else None
+        if isinstance(n_comp, dict) and not n_comp.get("breakout_detected"):
+            dist = n_comp.get("distance_from_high_pct")
+            vol_ratio = n_comp.get("volume_ratio")
+            try:
+                if dist is not None and -15.0 <= float(dist) <= -2.0:
+                    if vol_ratio is None or float(vol_ratio) <= 1.15:
+                        return True
+            except (TypeError, ValueError):
+                pass
+    return False
+
+
 def evaluate_and_select_trade(
     candidates: list[dict[str, Any]],
     open_positions: list[dict[str, Any]],
@@ -602,7 +622,7 @@ def evaluate_and_select_trade(
         sector = cand.get("sector", "N/A")
         cluster = cand.get("cluster")
         source_name = str(cand.get("source") or "")
-        is_dip = "DIP" in source_name.upper() or "PULLBACK" in source_name.upper()
+        is_dip = is_qualifying_reduce_only_setup(cand)
 
         if allow_only_dip_buy and not is_dip:
             logger.info(
@@ -737,8 +757,36 @@ def evaluate_and_select_trade(
                     logger.info("Candidate %s rejected: %s", sym, msg)
                     rejection_reasons.append(msg)
                     continue
+                if "MOMENTUM" in source_name.upper() and not is_dip and rsi_float < 50.0:
+                    msg = f"{sym} (RSI {rsi_float:.1f} < 50.0 weak momentum)"
+                    logger.info("Candidate %s rejected: %s", sym, msg)
+                    rejection_reasons.append(msg)
+                    continue
             except (ValueError, TypeError):
                 pass
+
+        # Momentum Volume Quality Gate (prevent low-volume fakeouts like RCL.BK 0.8x)
+        if "MOMENTUM" in source_name.upper() and not is_dip:
+            vol_ratio_val = None
+            vol_val = cand.get("volume")
+            avg_vol_val = cand.get("avg_volume")
+            try:
+                if vol_val is not None and avg_vol_val is not None and float(avg_vol_val) > 0:
+                    vol_ratio_val = float(vol_val) / float(avg_vol_val)
+            except (ValueError, TypeError):
+                vol_ratio_val = None
+            if vol_ratio_val is None:
+                m_vol = re.search(r"Vol:\s*([\d.]+)x", str(cand.get("highlights", "")))
+                if m_vol:
+                    try:
+                        vol_ratio_val = float(m_vol.group(1))
+                    except ValueError:
+                        vol_ratio_val = None
+            if vol_ratio_val is not None and vol_ratio_val < 0.95:
+                msg = f"{sym} (Vol {vol_ratio_val:.2f}x < 0.95x insufficient breakout volume)"
+                logger.info("Candidate %s rejected: %s", sym, msg)
+                rejection_reasons.append(msg)
+                continue
 
         # Quant Decision Engine & Bayesian Edge Gate
         trace = None
@@ -763,7 +811,7 @@ def evaluate_and_select_trade(
                 if k in cand and k not in payload_data and cand[k] is not None:
                     payload_data[k] = cand[k]
 
-            min_conf = 0.65 if allow_only_dip_buy else 0.60
+            min_conf = 0.60
             eval_context = {
                 "symbol": sym,
                 "market": market_clean,
@@ -874,10 +922,10 @@ def run_autonomous_decision(
 
     init_decision_ledger()
 
-    # 1. Idempotency Check
+    # 1. Idempotency Check (prevent duplicate order staging while allowing intraday cycles if prior pass held cash)
     if not force:
         existing = check_existing_decision(today_str, market=market_clean)
-        if existing:
+        if existing and existing.get("status") in ("ORDER_STAGED", "BLOCKED_CIRCUIT"):
             logger.info(
                 "Decision for %s (%s) already recorded: %s (%s). Skipping run.",
                 today_str,

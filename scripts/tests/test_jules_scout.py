@@ -162,6 +162,94 @@ class TestJulesScout(unittest.TestCase):
                 syms = [c["symbol"] for c in cands]
                 self.assertIn("PLANB.BK", syms)
 
+    def test_generate_today_mission_retains_confirmed_dip_buy_over_falling_knife(self):
+        import tempfile
+        from unittest.mock import patch
+
+        import pandas as pd
+
+        closes = [10.0 + i * 0.05 for i in range(60)]
+        bars_df = pd.DataFrame(
+            {
+                "Open": closes,
+                "High": [c * 1.01 for c in closes],
+                "Low": [c * 0.99 for c in closes],
+                "Close": closes,
+                "Volume": [1_000_000] * 60,
+            }
+        )
+
+        thai_swing = [
+            {
+                "symbol": "KNIFE.BK",
+                "company_name": "Knife",
+                "sector": "Tech",
+                "price": 10.0,
+                "score": 88.0,
+                "source": "Thai Swing (DIP_BUY)",
+                "highlights": "RSI: 38.0",
+                "perf_1m": -11.5,  # Falling knife: perf_1m <= -4.0
+            },
+            {
+                "symbol": "GOODDIP.BK",
+                "company_name": "GoodDip",
+                "sector": "Media",
+                "price": 12.0,
+                "score": 68.0,
+                "source": "Thai Swing (DIP_BUY)",
+                "highlights": "RSI: 46.0",
+                "perf_1m": -1.5,  # Confirmed mild pullback: perf_1m > -4.0
+            },
+        ]
+        canslim = [
+            {
+                "symbol": f"CAN{i}.BK",
+                "company_name": f"Can{i}",
+                "sector": f"Sector{i}",
+                "price": 20.0 + i,
+                "score": 85.0 - i,
+                "source": "CANSLIM Screener",
+                "highlights": "CANSLIM Score: 80.0",
+            }
+            for i in range(6)
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            mission_md = tmp_dir / "today_mission.md"
+            mission_json = tmp_dir / "today_mission.json"
+            orders_dir = tmp_dir / "orders"
+            orders_dir.mkdir()
+            with (
+                patch.object(
+                    js,
+                    "get_mission_paths",
+                    return_value=(tmp_dir, orders_dir, mission_md, mission_json),
+                ),
+                patch.object(js.je, "load_dna", return_value={"generation": 4, "rules": []}),
+                patch.object(js.paper_trade, "list_positions", return_value=[]),
+                patch.object(js, "get_latest_thai_swing_candidates", return_value=thai_swing),
+                patch.object(js, "get_latest_canslim_candidates", return_value=canslim),
+                patch.object(js, "get_volume_anomaly_candidates", return_value=[]),
+                patch.object(js, "get_latest_intraday_candidates", return_value=[]),
+                patch.object(js, "_get_stock_history_bars", return_value=bars_df),
+                patch(
+                    "scripts.market_intelligence_filter.evaluate_stock_intelligence",
+                    side_effect=ImportError,
+                ),
+            ):
+                mission = js.generate_today_mission(market="TH")
+
+        top = mission["candidates"]
+        syms = [c["symbol"] for c in top]
+        self.assertIn("GOODDIP.BK", syms)
+        # CANSLIM candidate should have enriched sma20, sma50, perf_1m, perf_3m from bars_df
+        can0 = next(c for c in top if c["symbol"] == "CAN0.BK")
+        self.assertIsNotNone(can0.get("sma20"))
+        self.assertIsNotNone(can0.get("sma50"))
+        self.assertIsNotNone(can0.get("perf_1m"))
+        self.assertIsNotNone(can0.get("perf_3m"))
+
 
 if __name__ == "__main__":
     unittest.main()

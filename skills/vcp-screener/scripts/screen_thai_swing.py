@@ -161,7 +161,21 @@ def score_dip_buy(s: dict) -> float:
         rs_bonus = min(6.0, (perf_3m - 5.0) * 0.3)
         raw_score = min(100.0, raw_score + rs_bonus)
 
-    return round(max(0.0, raw_score - spread_penalty), 1)
+    # Penalize severe short-term falling knives and overly extended drops below SMA20
+    knife_penalty = 0.0
+    if s.get("perf_1m") is not None:
+        try:
+            perf_1m = float(s["perf_1m"])
+            if perf_1m < -4.0:
+                knife_penalty += min(25.0, abs(perf_1m + 4.0) * 3.0)
+        except (ValueError, TypeError):
+            pass
+    if sma20 > 0:
+        sma20_gap_pct = (price / sma20 - 1.0) * 100.0
+        if sma20_gap_pct < -6.0:
+            knife_penalty += min(15.0, abs(sma20_gap_pct + 6.0) * 2.5)
+
+    return round(max(0.0, raw_score - spread_penalty - knife_penalty), 1)
 
 
 def score_momentum(s: dict) -> float:

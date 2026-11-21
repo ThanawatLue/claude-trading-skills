@@ -675,6 +675,34 @@ class TestPaperTrade(unittest.TestCase):
         self.assertEqual(jules_stats["wins"], 1)
         self.assertAlmostEqual(jules_stats["total_realized_pnl"], 200.0)
 
+    def test_update_all_closes_delisted_zombie_position_after_max_hold_days(self):
+        """Stale/unquotable positions past max_hold_days and >=5d stale mark should auto-close."""
+        with patch("paper_trade._now_iso", return_value="2026-10-06T14:00:00+00:00"):
+            pos = paper_trade.open_position(
+                symbol="ZOMBIE_WBD",
+                market="US",
+                shares=7,
+                entry=30.95,
+                stop=29.56,
+                target=34.42,
+                source="jules_ai",
+                portfolio="jules",
+            )
+
+        with (
+            patch("update_marks._now_iso", return_value="2026-11-21T00:00:00+00:00"),
+            patch("update_marks._fetch_price", return_value=None),
+        ):
+            results = update_marks.update_all()
+
+        closed_res = [r for r in results if r["id"] == pos["id"]]
+        self.assertEqual(len(closed_res), 1)
+        self.assertEqual(closed_res[0]["action"], "auto_closed_time")
+        closed = paper_trade.list_positions(status_filter="closed", portfolio="jules")
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0]["symbol"], "ZOMBIE_WBD")
+        self.assertAlmostEqual(closed[0]["exit_price"], 30.95)
+
 
 if __name__ == "__main__":
     unittest.main()

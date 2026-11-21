@@ -124,3 +124,35 @@ def test_extract_features_dip_buy_reversal_score_bounce_floor() -> None:
     )
     assert features_knife["reversal_score"] is not None
     assert features_knife["reversal_score"] < 0.20
+
+
+def test_extract_features_canslim_component_confirmation() -> None:
+    features = extract_features(
+        {
+            "price": 45.0,
+            "c_component": {"score": 90},
+            "n_component": {
+                "current_volume": 1_918_083,
+                "avg_volume": 2_771_090,
+                "volume_ratio": 0.69,
+                "distance_from_high_pct": -5.3,
+                "breakout_detected": False,
+            },
+            "s_component": {"up_down_ratio": 1.09},
+            "l_component": {
+                "rs_3m_return": 11.36,
+                "stock_52w_performance": 23.61,
+                "rs_rank_estimate": 81,
+            },
+        }
+    )
+
+    assert features["volume"] == 1_918_083
+    assert features["avg_volume"] == 2_771_090
+    assert features["volume_ratio"] is not None and abs(features["volume_ratio"] - 0.6922) < 0.01
+    assert features["perf_3m"] == 11.36
+    assert features["pullback_score"] is not None and features["pullback_score"] >= 0.90
+    assert features["support_score"] is not None
+    assert features["trend_score"] is not None and features["trend_score"] > 0.60
+    assert features["reversal_score"] is not None and features["reversal_score"] > 0.80
+    assert features["confirmation_score"] is not None and features["confirmation_score"] >= 0.65

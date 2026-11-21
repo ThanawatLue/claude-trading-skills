@@ -52,13 +52,24 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
     sma20 = _first(raw, "sma20", "sma_20")
     sma50 = _first(raw, "sma50", "sma_50")
     sma200 = _first(raw, "sma200", "sma_200")
+    n_comp = raw.get("n_component") if isinstance(raw.get("n_component"), dict) else {}
+    s_comp = raw.get("s_component") if isinstance(raw.get("s_component"), dict) else {}
+    l_comp = raw.get("l_component") if isinstance(raw.get("l_component"), dict) else {}
+    c_comp = raw.get("c_component") if isinstance(raw.get("c_component"), dict) else {}
+
     volume = _first(raw, "volume")
+    if volume is None:
+        volume = _first(n_comp, "current_volume")
     avg_volume = _first(raw, "avg_volume", "avgVolume", "average_volume")
+    if avg_volume is None:
+        avg_volume = _first(n_comp, "avg_volume")
     entry = _first(plan, "entry") or _first(raw, "entry_price", "entry") or price
     stop = _first(plan, "stop") or _first(raw, "stop_price", "stop")
     target = _first(plan, "target") or _first(raw, "target_price", "target")
 
     volume_ratio = volume / avg_volume if volume and avg_volume and avg_volume > 0 else None
+    if volume_ratio is None:
+        volume_ratio = _first(n_comp, "volume_ratio")
     sma50_distance_pct = (price / sma50 - 1) * 100 if price and sma50 else None
     sma20_gap_pct = (price / sma20 - 1) * 100 if price and sma20 else None
     sma200_distance_pct = (price / sma200 - 1) * 100 if price and sma200 else None
@@ -77,6 +88,8 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
     # as weak confirmation for a dip-buy entry.
     perf_1m = _first(raw, "perf_1m", "performance_1m")
     perf_3m = _first(raw, "perf_3m", "performance_3m")
+    if perf_3m is None:
+        perf_3m = _first(l_comp, "rs_3m_return", "stock_52w_performance")
     reversal_score = _normalise_range(perf_1m, -5.0, 5.0)
     support_score = _normalise_range(sma50_distance_pct, 0.5, 5.0)
     pullback_score = (
@@ -104,6 +117,24 @@ def extract_features(payload: dict[str, Any] | None) -> dict[str, float | None]:
         x for x in (reversal_score, support_score, pullback_score, trend_score) if x is not None
     ]
     confirmation_score = sum(components) / len(components) if components else None
+
+    if confirmation_score is None and (n_comp or l_comp):
+        dist_high = _first(n_comp, "distance_from_high_pct")
+        ud_ratio = _first(s_comp, "up_down_ratio")
+        rs_rank = _first(l_comp, "rs_rank_percentile", "rs_rank_estimate")
+        c_score = _first(c_comp, "score")
+        if pullback_score is None and dist_high is not None:
+            pullback_score = _clip(1.0 - abs(dist_high + 6.0) / 10.0)
+        if support_score is None and ud_ratio is not None:
+            support_score = _normalise_range(ud_ratio, 0.85, 1.50)
+        if trend_score is None and rs_rank is not None:
+            trend_score = _normalise_range(rs_rank, 50.0, 95.0)
+        if reversal_score is None and c_score is not None:
+            reversal_score = _normalise_range(c_score, 50.0, 95.0)
+        components = [
+            x for x in (reversal_score, support_score, pullback_score, trend_score) if x is not None
+        ]
+        confirmation_score = sum(components) / len(components) if components else None
 
     return {
         "price": price,

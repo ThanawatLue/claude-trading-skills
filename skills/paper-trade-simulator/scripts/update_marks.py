@@ -111,7 +111,7 @@ DEFAULT_SOURCE_RULES = {
     "jules_ai": {
         "use_scale_out": True,
         "scale_out_r": 1.5,
-        "scale_out_fraction": 0.5,
+        "scale_out_fraction": 0.33,
         "take_profit_r": 2.5,
         "max_hold_days": 15,
         "time_stop_min_r": -0.5,
@@ -121,6 +121,8 @@ DEFAULT_SOURCE_RULES = {
         "early_fakeout_vol_ratio": 0.40,
         "early_fakeout_max_mfe_r": 0.20,
         "ratchet_tiers": [
+            [0.85, -0.35],
+            [1.15, 0.10],
             [2.0, 1.0],
         ],
     },
@@ -355,12 +357,27 @@ def update_one(
                 logger.debug("Scale out notification skipped: %s", notify_err)
 
     # Multi-tier MFE Ratchet or classic trail_after_r
+    is_th_market = (row["market"] == "TH" if "market" in row.keys() else False) or str(
+        row["symbol"]
+    ).upper().endswith(".BK")
     if ratchet_tiers and risk_per_share > 0:
         for tier in sorted(ratchet_tiers, key=lambda x: float(x[0])):
             trigger_r, lock_r = float(tier[0]), float(tier[1])
             if mfe_r >= trigger_r or r_mult >= trigger_r:
                 if side == "long":
                     candidate_stop = entry + (risk_per_share * lock_r)
+                    if is_th_market:
+                        try:
+                            sys.path.insert(0, str(PROJECT_ROOT))
+                            from scripts import jules_trader as jt
+
+                            candidate_stop = jt.round_to_set_tick(
+                                candidate_stop, "ceil" if lock_r >= 0 else "floor"
+                            )
+                            if 0.0 <= lock_r <= 0.10:
+                                candidate_stop = max(candidate_stop, jt.step_set_ticks(entry, +1))
+                        except Exception:
+                            pass
                     if candidate_stop > stop_price:
                         stop_price = candidate_stop
                 else:
@@ -743,6 +760,56 @@ def update_all() -> list[dict]:
     for row in opens:
         price = prices.get(row["symbol"])
         if price is None:
+            # Handle delisted / permanently unquotable zombie positions once past max_hold_days
+            now_dt = datetime.fromisoformat(_now_iso().replace("Z", "+00:00")).replace(tzinfo=None)
+            entry_dt = datetime.fromisoformat(str(row["entry_at"]).replace("Z", "+00:00")).replace(
+                tzinfo=None
+            )
+            last_upd_raw = row["last_updated"] or row["entry_at"]
+            last_upd_dt = datetime.fromisoformat(str(last_upd_raw).replace("Z", "+00:00")).replace(
+                tzinfo=None
+            )
+            days_since_entry = (now_dt - entry_dt).days
+            stale_mark_days = (now_dt - last_upd_dt).days
+            rule = _rule_for_source(row["source"], source_rules)
+            max_hold_days = int(rule.get("max_hold_days") or 15)
+            if days_since_entry >= max_hold_days and stale_mark_days >= 5:
+                fallback_price = float(row["last_price"] or row["entry_price"])
+                close_position(
+                    row["id"],
+                    fallback_price,
+                    status=STATUS_CLOSED_TIME,
+                    notes=(
+                        f"Auto-closed: delisted/stale quote freeze after {days_since_entry}d "
+                        f"(no quote for {stale_mark_days}d)"
+                    ),
+                )
+                stale_res = {
+                    "id": row["id"],
+                    "symbol": row["symbol"],
+                    "action": "auto_closed_time",
+                    "exit_price": fallback_price,
+                }
+                try:
+                    sys.path.insert(0, str(PROJECT_ROOT))
+                    from scripts import paper_memory_bridge
+
+                    with _db() as conn:
+                        stale_res["memory"] = paper_memory_bridge.sync_close(
+                            conn,
+                            paper_trade_id=int(row["id"]),
+                            exit_price=fallback_price,
+                            exit_date=_now_iso()[:10],
+                            paper_status=STATUS_CLOSED_TIME,
+                        )
+                except Exception as exc:  # pragma: no cover - never block marks
+                    stale_res["memory"] = {
+                        "ok": False,
+                        "skipped": True,
+                        "reason": f"bridge_error:{exc}",
+                    }
+                results.append(stale_res)
+                continue
             results.append({"id": row["id"], "symbol": row["symbol"], "action": "fetch_failed"})
             continue
         vol = volumes.get(row["symbol"])

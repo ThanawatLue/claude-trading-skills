@@ -122,6 +122,8 @@ def _get_latest_price(symbol: str, market: str = "TH") -> float:
         ticker = yf.Ticker(clean_sym)
         hist = ticker.history(period="5d")
         if not hist.empty and "Close" in hist.columns:
+            hist = hist.dropna(subset=["Close"])
+        if not hist.empty and "Close" in hist.columns:
             return float(hist["Close"].iloc[-1])
     except Exception as e:
         logger.warning("yfinance lookup failed for %s: %s", clean_sym, e)
@@ -269,9 +271,8 @@ def execute_buy(
         "use_scale_out": True,
         "scale_out_r": 1.5,
         "scale_out_fraction": float(base_trace.get("scale_out_fraction", 0.33)),
-        "ratchet_tiers": [
-            [2.0, 1.0],
-        ],
+        "ratchet_tiers": base_trace.get("ratchet_tiers")
+        or [[0.85, -0.35], [1.15, 0.10], [2.0, 1.0]],
     }
 
     trade = paper_trade.open_position(
@@ -404,12 +405,27 @@ def process_orders_queue(market: str = "TH") -> list[dict[str, Any]]:
                 except Exception as exp_err:
                     raise ValueError(f"TTL validation failed: {exp_err}")
 
-            # 2. Chase Limit Check for Buys: Reject if price has gapped up too far
+            # 2. Live Price Validation (Gap-Down / Opening Weakness + Upside Chase Limit)
             if action == "buy":
                 max_chase_pct = float(data.get("max_chase_pct", 0.010))
                 entry_ref = float(data.get("entry_price") or data.get("entry") or 0.0)
+                stop_ref = float(data.get("stop_price") or data.get("stop") or 0.0)
                 if entry_ref > 0:
                     curr_price = _get_latest_price(symbol, market=market_clean)
+                    if stop_ref > 0 and curr_price <= stop_ref:
+                        raise ValueError(
+                            f"Gap-down breakdown invalidated order: price {curr_symbol}{curr_price:.2f} "
+                            f"<= stop {curr_symbol}{stop_ref:.2f}"
+                        )
+                    if (
+                        stop_ref > 0
+                        and entry_ref > stop_ref
+                        and (entry_ref - curr_price) > 0.50 * (entry_ref - stop_ref)
+                    ):
+                        raise ValueError(
+                            f"Opening weakness invalidated order: price {curr_symbol}{curr_price:.2f} "
+                            f"dropped >50% toward stop {curr_symbol}{stop_ref:.2f}"
+                        )
                     if curr_price > entry_ref * (1.0 + max_chase_pct):
                         raise ValueError(
                             f"Chase limit exceeded: price {curr_symbol}{curr_price:.2f} is > {curr_symbol}{entry_ref * (1.0 + max_chase_pct):.2f} "

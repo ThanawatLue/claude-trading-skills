@@ -519,7 +519,7 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
         else:
             c["in_active_cluster"] = False
 
-        # 3. Check for Distribution Trap via Recency-Weighted U/D Ratio
+        # 3. Check for Distribution Trap via Recency-Weighted U/D Ratio & enrich missing bar metrics
         bars_df = _get_stock_history_bars(sym, market=market_clean)
         if not bars_df.empty:
             ud_res = ai.calculate_recency_weighted_ud_ratio(bars_df)
@@ -531,6 +531,20 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
                 )
                 continue
             c["ud_ratio"] = ud_res["ud_ratio"]
+
+            closes = bars_df["Close"].dropna()
+            if len(closes) >= 20 and c.get("sma20") is None:
+                c["sma20"] = round(float(closes.tail(20).mean()), 4)
+            if len(closes) >= 50 and c.get("sma50") is None:
+                c["sma50"] = round(float(closes.tail(50).mean()), 4)
+            if len(closes) >= 21 and c.get("perf_1m") is None:
+                base_1m = float(closes.iloc[-21])
+                if base_1m > 0:
+                    c["perf_1m"] = round((float(closes.iloc[-1]) / base_1m - 1.0) * 100.0, 2)
+            if len(closes) >= 40 and c.get("perf_3m") is None:
+                base_3m = float(closes.iloc[0])
+                if base_3m > 0:
+                    c["perf_3m"] = round((float(closes.iloc[-1]) / base_3m - 1.0) * 100.0, 2)
 
         # 4. Market Intelligence Disqualification Gate (News, Earnings, ADR, Overhead Supply)
         try:
@@ -604,21 +618,41 @@ def generate_today_mission(market: str = "TH") -> dict[str, Any]:
         if len(top_candidates) >= 6:
             break
 
-    # Ensure Pilot DIP_BUY candidates are retained if available in the pool
-    has_dip = any(
-        "DIP" in str(c.get("source", "")).upper() or "PULLBACK" in str(c.get("source", "")).upper()
-        for c in top_candidates
-    )
-    if not has_dip:
+    # Ensure confirmed Pilot DIP_BUY candidates (perf_1m > -4.0%) are retained if available
+    def _is_dip_src(cand: dict[str, Any]) -> bool:
+        src_u = str(cand.get("source", "")).upper()
+        return "DIP" in src_u or "PULLBACK" in src_u
+
+    def _is_confirmed_dip(cand: dict[str, Any]) -> bool:
+        if not _is_dip_src(cand):
+            return False
+        p1m = cand.get("perf_1m")
+        if p1m is not None:
+            try:
+                return float(p1m) > -4.0
+            except (TypeError, ValueError):
+                return True
+        return True
+
+    if not any(_is_confirmed_dip(c) for c in top_candidates):
         picked_syms = {c["symbol"] for c in top_candidates}
+        retained = False
         for cand in combined_candidates:
-            src_u = str(cand.get("source", "")).upper()
-            if ("DIP" in src_u or "PULLBACK" in src_u) and cand["symbol"] not in picked_syms:
+            if _is_confirmed_dip(cand) and cand["symbol"] not in picked_syms:
                 if len(top_candidates) >= 6:
                     top_candidates[-1] = cand
                 else:
                     top_candidates.append(cand)
+                retained = True
                 break
+        if not retained and not any(_is_dip_src(c) for c in top_candidates):
+            for cand in combined_candidates:
+                if _is_dip_src(cand) and cand["symbol"] not in picked_syms:
+                    if len(top_candidates) >= 6:
+                        top_candidates[-1] = cand
+                    else:
+                        top_candidates.append(cand)
+                    break
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     curr_sym = "$" if market_clean == "US" else "฿"

@@ -132,3 +132,27 @@ def test_build_plan_target_multipliers():
     plan_mom = build_plan(price=10.0, strategy="MOMENTUM", atr=0.5, recent_low=9.5)
     risk_mom = plan_mom["entry"] - plan_mom["stop"]
     assert round(plan_mom["target"], 2) == round(plan_mom["entry"] + 1.8 * risk_mom, 2)
+
+
+def test_score_dip_buy_penalizes_falling_knife_and_deep_sma20_gap():
+    healthy_pullback = {
+        "price": 7.72,
+        "rsi": 44.0,
+        "rsi_weekly": 58.0,
+        "sma20": 7.95,  # -2.89% gap (healthy pullback, not < -6%)
+        "sma50": 7.50,
+        "sma200": 7.00,
+        "volume": 1_200_000,
+        "avgVolume": 1_000_000,
+        "perf_1m": -1.5,
+        "perf_3m": 15.0,
+    }
+    falling_knife = dict(
+        healthy_pullback,
+        sma20=8.46,  # -8.75% gap (< -6.0%) -> extra penalty
+        perf_1m=-11.26,  # < -4.0% -> falling knife penalty
+    )
+    score_healthy = score_dip_buy(healthy_pullback)
+    score_knife = score_dip_buy(falling_knife)
+    assert score_healthy > score_knife
+    assert score_healthy - score_knife >= 25.0

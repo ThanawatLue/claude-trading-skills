@@ -140,6 +140,46 @@ class TestJulesTrader(unittest.TestCase):
             self.assertEqual(res2["status"], "ORDER_STAGED")
             self.assertEqual(res2["symbol"], "SPRC.BK")
 
+    def test_idempotency_allows_intraday_cycle_after_prior_hold_cash(self):
+        """Verify that a prior HOLD_CASH pass does not block an intraday cycle when posture improves."""
+        mission = {
+            "candidates": [
+                {
+                    "symbol": "SPRC.BK",
+                    "price": 13.40,
+                    "stop": 12.90,
+                    "target": 14.40,
+                    "sector": "Energy Minerals",
+                    "score": 75.0,
+                    "highlights": "Refinery momentum",
+                }
+            ]
+        }
+        self.test_mission_file.write_text(json.dumps(mission), encoding="utf-8")
+
+        # Pass 1: Early pre-market run held cash due to CASH_PRIORITY
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={"recommendation": "CASH_PRIORITY", "exposure_ceiling_pct": 10},
+        ):
+            res1 = jt.run_autonomous_decision(market="TH")
+            self.assertEqual(res1["status"], "HOLD_CASH")
+
+        # Pass 2: Intraday cycle (posture updated to NORMAL) -> allowed to stage order
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={"recommendation": "NORMAL", "exposure_ceiling_pct": 75},
+        ):
+            res2 = jt.run_autonomous_decision(market="TH")
+            self.assertEqual(res2["status"], "ORDER_STAGED")
+            self.assertEqual(res2["symbol"], "SPRC.BK")
+
+        # Pass 3: Once ORDER_STAGED, idempotency blocks duplicate orders
+        res3 = jt.run_autonomous_decision(market="TH")
+        self.assertEqual(res3["status"], "ORDER_STAGED")
+
     def test_circuit_breaker_consecutive_losses(self):
         """Verify that 3 consecutive closed losses halts trading."""
         # Insert 3 losing closed trades in paper_trade
@@ -724,6 +764,150 @@ class TestJulesTrader(unittest.TestCase):
         # Entry + 0.25 = 10.25 -> quantized ceil = 10.30
         be_wide = jt.compute_breakeven_stop_th(10.00, 5.00, buffer_r=0.05)
         self.assertEqual(be_wide, 10.30)
+
+    def test_reduce_only_allows_canslim_high_rs_vdu_pullback(self):
+        """REDUCE_ONLY allows high-RS CANSLIM VDU pullback but still rejects CANSLIM breakouts."""
+        canslim_breakout = {
+            "symbol": "BRK.BK",
+            "price": 45.0,
+            "stop": 42.5,
+            "target": 51.0,
+            "sector": "Consumer Cyclical",
+            "source": "CANSLIM Screener",
+            "score": 82.0,
+            "raw_features": {
+                "n_component": {
+                    "breakout_detected": True,
+                    "distance_from_high_pct": -0.5,
+                    "volume_ratio": 1.9,
+                }
+            },
+        }
+        canslim_vdu_pullback = {
+            "symbol": "CENTEL.BK",
+            "price": 45.0,
+            "stop": 42.5,
+            "target": 51.0,
+            "sector": "Consumer Cyclical",
+            "source": "CANSLIM Screener",
+            "score": 79.6,
+            "raw_features": {
+                "c_component": {"score": 90},
+                "n_component": {
+                    "breakout_detected": False,
+                    "distance_from_high_pct": -5.3,
+                    "volume_ratio": 0.69,
+                    "current_volume": 1_918_083,
+                    "avg_volume": 2_771_090,
+                },
+                "s_component": {"up_down_ratio": 1.09},
+                "l_component": {"rs_rank_percentile": 81, "rs_3m_return": 11.36},
+            },
+        }
+        mission = {"market": "TH", "candidates": [canslim_breakout, canslim_vdu_pullback]}
+        self.test_mission_file.write_text(json.dumps(mission), encoding="utf-8")
+
+        with patch.object(
+            jt,
+            "get_latest_exposure_posture",
+            return_value={
+                "recommendation": "REDUCE_ONLY",
+                "exposure_ceiling_pct": 31.0,
+                "participation": "NARROW",
+                "composite_score": 35.9,
+            },
+        ):
+            res = jt.run_autonomous_decision(force=True, market="TH")
+
+        self.assertEqual(res["status"], "ORDER_STAGED")
+        self.assertEqual(res["symbol"], "CENTEL.BK")
+
+    def test_momentum_weak_rsi_or_low_volume_rejected(self):
+        """Pure MOMENTUM setups with RSI < 50 or volume ratio < 0.95x must be rejected."""
+        weak_rsi = {
+            "symbol": "WEAKRSI.BK",
+            "price": 46.50,
+            "stop": 44.25,
+            "target": 52.00,
+            "sector": "Transportation",
+            "source": "Thai Swing (MOMENTUM)",
+            "score": 75.9,
+            "rsi": 47.3,
+            "volume": 1_500_000,
+            "avg_volume": 1_000_000,
+            "highlights": "RSI: 47.3 | Vol: 1.5x",
+        }
+        low_vol = {
+            "symbol": "LOWVOL.BK",
+            "price": 46.50,
+            "stop": 44.25,
+            "target": 52.00,
+            "sector": "Transportation",
+            "source": "Thai Swing (MOMENTUM)",
+            "score": 75.9,
+            "rsi": 55.0,
+            "volume": 800_000,
+            "avg_volume": 1_000_000,
+            "highlights": "RSI: 55.0 | Vol: 0.8x",
+        }
+        winner, reason = jt.evaluate_and_select_trade(
+            candidates=[weak_rsi, low_vol],
+            open_positions=[],
+            sector_mods={},
+            equity=30000.0,
+            cash=30000.0,
+            market="TH",
+            allow_only_dip_buy=False,
+        )
+        self.assertIsNone(winner)
+        self.assertIn("weak momentum", reason)
+        self.assertIn("insufficient breakout volume", reason)
+
+    def test_gap_down_breakdown_guard_quarantines_order(self):
+        """Orders where live price gaps down >50% toward stop or <= stop must be quarantined."""
+        import yaml
+
+        # Case 1: Live price dropped >50% of entry->stop risk (entry 10.00, stop 9.00, live 9.40)
+        order_weak = self.test_orders / "buy_WEAKOPEN.yaml"
+        order_weak.write_text(
+            yaml.safe_dump(
+                {
+                    "action": "buy",
+                    "symbol": "WEAKOPEN.BK",
+                    "shares": 100,
+                    "entry_price": 10.00,
+                    "stop_price": 9.00,
+                    "target_price": 12.00,
+                    "max_chase_pct": 0.01,
+                }
+            )
+        )
+        with patch.object(jf, "_get_latest_price", return_value=9.40):
+            res_weak = jf.process_orders_queue(market="TH")
+        self.assertEqual(res_weak[0]["status"], "error")
+        self.assertIn("Opening weakness invalidated order", res_weak[0]["error"])
+        self.assertFalse(order_weak.exists())
+
+        # Case 2: Live price gapped down <= stop_price (entry 10.00, stop 9.00, live 8.95)
+        order_gap = self.test_orders / "buy_GAPDOWN.yaml"
+        order_gap.write_text(
+            yaml.safe_dump(
+                {
+                    "action": "buy",
+                    "symbol": "GAPDOWN.BK",
+                    "shares": 100,
+                    "entry_price": 10.00,
+                    "stop_price": 9.00,
+                    "target_price": 12.00,
+                    "max_chase_pct": 0.01,
+                }
+            )
+        )
+        with patch.object(jf, "_get_latest_price", return_value=8.95):
+            res_gap = jf.process_orders_queue(market="TH")
+        self.assertEqual(res_gap[0]["status"], "error")
+        self.assertIn("Gap-down breakdown invalidated order", res_gap[0]["error"])
+        self.assertFalse(order_gap.exists())
 
 
 if __name__ == "__main__":

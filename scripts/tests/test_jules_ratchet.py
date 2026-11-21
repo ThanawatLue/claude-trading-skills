@@ -168,6 +168,31 @@ class TestJulesRatchetAndResistance(unittest.TestCase):
         self.assertAlmostEqual(levels["target"], 10.80)
         self.assertIn("Resistance Pivot", levels["target_note"])
 
+    def test_jules_ratchet_risk_halving_and_breakeven_tiers(self):
+        """Verify 3-tier asymmetric ratchet: [0.85, -0.35] and [1.15, 0.10] prevent round-trips."""
+        jf.execute_buy(
+            symbol="RATCH.BK",
+            shares=200,
+            entry=45.00,
+            stop=42.50,  # risk_per_share = 2.50
+            target=51.25,
+            thesis="Testing 3-tier asymmetric MFE protection",
+        )
+        # Step 1: Price reaches +0.90R (47.25) -> hits [0.85, -0.35] -> stop moves to 45.00 - 0.35*2.50 = 44.125 -> floor SET tick 44.00
+        with patch("update_marks._now_iso", return_value="2026-09-15T09:15:00+00:00"):
+            with patch("update_marks._fetch_price", return_value=47.25):
+                update_marks.update_all()
+        pos1 = paper_trade.list_positions(status_filter="open")[0]
+        self.assertGreater(pos1["stop_price"], 42.50)
+        self.assertLessEqual(pos1["stop_price"], 44.25)
+
+        # Step 2: Price reaches +1.20R (48.00) -> hits [1.15, 0.10] -> stop moves to BE+1 tick (>= 45.25)
+        with patch("update_marks._now_iso", return_value="2026-09-15T09:30:00+00:00"):
+            with patch("update_marks._fetch_price", return_value=48.00):
+                update_marks.update_all()
+        pos2 = paper_trade.list_positions(status_filter="open")[0]
+        self.assertGreaterEqual(pos2["stop_price"], 45.25)
+
 
 if __name__ == "__main__":
     unittest.main()
